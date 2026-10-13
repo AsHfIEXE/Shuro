@@ -283,10 +283,10 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -328,6 +328,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 8),
           ],
         ),
+      ),
       ),
     );
   }
@@ -387,10 +388,10 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -432,6 +433,7 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -440,10 +442,10 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -481,6 +483,7 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -489,39 +492,41 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Fade between songs', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Fade between songs', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            for (final seconds in const [0, 2, 4, 6])
-              ListTile(
-                leading: Icon(
-                  prefs.crossfadeSeconds == seconds ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: prefs.crossfadeSeconds == seconds ? kBrandColor : kMutedTextColor,
+              for (final seconds in const [0, 2, 4, 6])
+                ListTile(
+                  leading: Icon(
+                    prefs.crossfadeSeconds == seconds ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                    color: prefs.crossfadeSeconds == seconds ? kBrandColor : kMutedTextColor,
+                  ),
+                  title: Text(
+                    seconds == 0 ? 'Off' : '${seconds}s fade',
+                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    seconds == 0 ? 'Songs switch at full volume' : 'Each song fades out over its last ${seconds}s',
+                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                  ),
+                  onTap: () {
+                    prefs.setCrossfadeSeconds(seconds);
+                    Navigator.of(sheetContext).pop();
+                  },
                 ),
-                title: Text(
-                  seconds == 0 ? 'Off' : '${seconds}s fade',
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                subtitle: Text(
-                  seconds == 0 ? 'Songs switch at full volume' : 'Each song fades out over its last ${seconds}s',
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
-                ),
-                onTap: () {
-                  prefs.setCrossfadeSeconds(seconds);
-                  Navigator.of(sheetContext).pop();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -532,10 +537,10 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -562,6 +567,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 8),
           ],
         ),
+      ),
       ),
     );
   }
