@@ -116,7 +116,7 @@ class OfflineBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Colors.amber.withOpacity(0.12),
+      color: Colors.amber.withValues(alpha: 0.12),
       child: Row(
         children: [
           const Icon(Icons.cloud_off_rounded, color: Colors.amber, size: 16),
