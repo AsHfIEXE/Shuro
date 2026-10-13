@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'stream_proxy.dart';
+
 /// A disk cache for everything the app fetches over HTTP that is an *image* —
 /// cover art, artist pictures — layered transparently under all
 /// `NetworkImage`s via [HttpOverrides].
@@ -100,7 +102,12 @@ class CachingHttpOverrides extends HttpOverrides {
 class CachingHttpClient implements HttpClient {
   final HttpClient inner;
 
-  CachingHttpClient({required this.inner});
+  CachingHttpClient({required HttpClient inner}) : inner = inner {
+    // DoH-resolving connector on the underlying client: the proxy/image layer
+    // resolves names itself (system DNS first, public DoH as fallback), so
+    // cover art, API calls and streams all survive a broken device resolver.
+    inner.connectionFactory = connectResolvingDoh;
+  }
 
   @override
   bool autoUncompress = true;
@@ -204,7 +211,7 @@ class CachingHttpClient implements HttpClient {
           return _CacheHitRequest(targetUri: uri, payload: bytes);
         }
         final real = await inner.openUrl(method, uri);
-        return _TeeingRequest(real, uri, dir);
+        return _TeeingRequest(real, uri, dir, () => inner.openUrl(method, uri));
       } catch (_) {
         // Any cache-layer problem: straight network, as if this class
         // didn't exist.
@@ -358,7 +365,11 @@ class _TeeingRequest implements HttpClientRequest {
   final Uri targetUri;
   final Directory cacheDir;
 
-  _TeeingRequest(this.delegate, this.targetUri, this.cacheDir);
+  /// Re-creates the underlying request — used to retry transient
+  /// connection/DNS failures exactly once.
+  final Future<HttpClientRequest> Function() reopen;
+
+  _TeeingRequest(this.delegate, this.targetUri, this.cacheDir, this.reopen);
 
   @override
   bool get bufferOutput => delegate.bufferOutput;
@@ -443,7 +454,16 @@ class _TeeingRequest implements HttpClientRequest {
 
   @override
   Future<HttpClientResponse> close() async {
-    final response = await delegate.close();
+    HttpClientResponse response;
+    try {
+      response = await delegate.close();
+    } on SocketException {
+      // Transient resolution/connect failure (flaky resolvers drop DDNS
+      // lookups intermittently — measured on the owner's network). One
+      // retry, then let the error surface.
+      final retry = await reopen();
+      response = await retry.close();
+    }
     try {
       final contentType = response.headers.value(HttpHeaders.contentTypeHeader) ?? '';
       if (response.statusCode == 200 && contentType.startsWith('image/')) {

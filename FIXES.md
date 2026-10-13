@@ -385,3 +385,10 @@ Evidence: analyzer 0 errors · 113/113 tests · 4 verifier reports in _refs (ver
 - **Plain-HTTP server URLs now work**: Android 9+ blocks cleartext HTTP by default, which silently broke every `http://` server address (LAN IPs, non-HTTPS setups). `usesCleartextTraffic=true` added to the manifest.
 - **Connection errors in plain language**: raw socket dumps ("Failed host lookup… errno = 7") are translated on the restoring screen into what they mean and what to do, with the technical line kept small below. DNS failures (DDNS names that only resolve at home) get their own explanation.
 - Noted: the reported lookup failure for a DDNS hostname is a network/DNS condition, not fixable in-app — the app now explains it instead of dumping errno text.
+
+## Round 21 — BlueStacks network diagnosis (adb evidence)
+
+- Live adb evidence from inside BlueStacks: VM IP is 10.0.2.15 (NAT subnet); ICMP to the host LAN IP (192.168.0.102) and router works; **toybox nc to 192.168.0.102:4533 from the shell SUCCEEDS (HTTP 400 from Navidrome)** — but the app's connect() to the same address returned EACCES (errno 13). Shell uid connects; the app uid gets denied — an emulator network/NAT limitation, not an app bug.
+- **Working path for BlueStacks testing**: `adb reverse tcp:4533 tcp:4533` maps 127.0.0.1:4533 inside BlueStacks to the PC's Navidrome — add server URL `http://127.0.0.1:4533` in Shuro while testing.
+- Permanent options: BlueStacks Settings → network → Bridged mode (VM gets a real LAN IP), or test on a real phone (real Wi-Fi has full LAN access).
+- The DNS-failure retry (1.2 s, one re-query) added to the feature client; the DDNS-over-HTTPS fallback in the image/API layer also covers flaky resolvers (measured: the first nslookup query timed out, the second resolved).

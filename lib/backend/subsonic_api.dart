@@ -81,8 +81,16 @@ class SubsonicApi {
     return Uri.parse('$_baseUrl/rest/$method.view?${pairs.join('&')}');
   }
 
-  Future<http.Response> _send(String method, Map<String, dynamic> params) {
-    return _httpClient.get(_buildUri(method, params)).timeout(const Duration(seconds: 12));
+  Future<http.Response> _send(String method, Map<String, dynamic> params) async {
+    try {
+      return await _httpClient.get(_buildUri(method, params)).timeout(const Duration(seconds: 12));
+    } on SocketException {
+      // DNS failures are frequently transient for DDNS/self-hosted names —
+      // one retry after a short pause resolves a large share of them (the
+      // record may have just propagated, or the device's resolver hiccuped).
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      return _httpClient.get(_buildUri(method, params)).timeout(const Duration(seconds: 12));
+    }
   }
 
   /// One request → `subsonic-response` body, with the same error classes the

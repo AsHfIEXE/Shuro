@@ -86,7 +86,7 @@ String friendlyConnectionError(String? raw) {
   final error = raw ?? '';
   final lower = error.toLowerCase();
   if (lower.contains('failed host lookup') || lower.contains('no address associated') || lower.contains('unknownhost')) {
-    return 'That server address could not be found (DNS). Check the URL spelling — and note that some DDNS names only resolve inside your own network.';
+    return 'Your device could not look up that server name (DNS). DDNS names like yours often fail here while working in a browser: set this device DNS to 1.1.1.1 or 8.8.8.8, or use the local address (http://192.168.x.x:4533) while at home. — and note that some DDNS names only resolve inside your own network.';
   }
   if (lower.contains('connection refused')) {
     return 'The server refused the connection — is it running, and is the port correct?';
