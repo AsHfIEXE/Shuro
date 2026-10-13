@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'services/artist_artwork_service.dart';
 import 'services/download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
+import 'services/stream_proxy.dart';
 import 'state/app_state.dart';
 import 'state/appearance_settings.dart';
 import 'state/player_controller.dart';
@@ -25,6 +27,11 @@ Future<void> main() async {
   // win, since covers are most of the bytes. Guarded: any cache-layer failure
   // falls through to plain networking.
   HttpOverrides.global = CachingHttpOverrides();
+
+  // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
+  // forwarded with DoH-backed resolution, so playback survives device DNS
+  // failures for DDNS/server names.
+  unawaited(StreamProxy.start());
 
   // Deliberately non-fatal. This call is awaited before runApp, and it throws on
   // a platform whose manifest hasn't declared the audio service and

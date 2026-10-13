@@ -28,6 +28,7 @@ import 'state/app_state.dart';
 import 'state/player_controller.dart';
 import 'theme/app_theme.dart';
 import 'services/server_link.dart';
+import 'services/stream_proxy.dart';
 import 'widgets/app_logo.dart';
 import 'widgets/shuro_nav.dart';
 import 'widgets/mini_player.dart';
@@ -248,7 +249,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       player.audioSourceResolver = (song) {
         final local = downloads.locate(song.id);
         if (local != null) return local;
-        return appState.audioSourceFor(song);
+        // Remote streams go through the loopback proxy: its own resolution
+        // has a DNS-over-HTTPS fallback, so device DNS failures for DDNS
+        // names cannot break playback.
+        final remote = appState.audioSourceFor(song);
+        if (remote == null) return null;
+        return StreamProxy.wrap(remote);
       };
 
       // Settings → Playback: fade between songs, replay gain, speed, skip

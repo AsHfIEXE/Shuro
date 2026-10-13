@@ -118,7 +118,8 @@ class DownloadService extends ChangeNotifier {
 
   /// Streams [song] from [streamUrl] (built by the caller with original
   /// quality) into the download directory. Returns true when the file is
-  /// complete on disk.
+  /// complete on disk. The URL is routed through the loopback stream proxy so
+  /// device DNS failures cannot break it.
   Future<bool> start(Song song, String streamUrl) async {
     if (status[song.id]?.stage == DownloadStage.downloading) return false;
     status[song.id] = const DownloadStatus(stage: DownloadStage.downloading, progress: 0);
