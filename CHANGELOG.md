@@ -9,6 +9,16 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
+## [2.2.2] — 2026-10-14
+
+- DNS-failure retry: self-hosted/DDNS names that fail to resolve are retried
+  once after 1.2 s before surfacing an error (a large share of these are
+  transient resolver hiccups).
+- Connection errors now explain themselves — DNS failures point at device DNS
+  (browsers use DNS-over-HTTPS, which is why the same address works there) and
+  suggest 1.1.1.1 / 8.8.8.8 or the local address while at home.
+- Plain-HTTP server URLs supported (cleartext traffic enabled on Android 9+).
+
 ## [2.2.1] — 2026-10-14
 
 The first complete public release of the rewritten app: playback engine, server
