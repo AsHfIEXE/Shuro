@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../models/server_config.dart';
 import '../../models/song.dart';
 import '../../services/shuro_pulse.dart';
 import '../../state/app_state.dart';
@@ -28,20 +29,21 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 550), () {
-      if (mounted) setState(() => _loading = false);
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final player = context.watch<PlayerController>();
+
+    // The skeleton shows only while there is genuinely nothing to derive
+    // recommendations from yet — never a fake timer (a fixed 550 ms wait used
+    // to flash a skeleton even with a full library).
+    final loading = appState.connectionStatus == ConnectionStatus.connecting &&
+        appState.catalogSongs.isEmpty;
 
     final forYou = ShuroPulse.forYou(appState, limit: 12);
     final rediscover = ShuroPulse.rediscover(appState, limit: 10);
@@ -55,7 +57,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         bottom: false,
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 320),
-          child: _loading
+          child: loading
               ? const _DiscoverSkeleton(key: ValueKey('skeleton'))
               : !appState.hasAnyMusic
                   ? const EmptyStateView(

@@ -136,7 +136,7 @@ void showSongActionsSheet(BuildContext context, Song song) {
                       return;
                     }
                     showSuccessSnackBar(context, 'Downloading "${song.title}"…');
-                    final ok = await downloads.start(song, api.streamUrl(song.id));
+                    final ok = await downloads.start(song, api.downloadUrl(song.id));
                     if (!ok) showErrorSnackBar(context, 'Download failed.');
                   },
                 );

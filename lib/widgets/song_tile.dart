@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
+import '../services/download_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'artwork_thumb.dart';
@@ -31,7 +32,7 @@ class SongTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final download = context.select<AppState, DownloadStatus>((s) => s.downloadStatusFor(song.id));
+    final download = context.select<DownloadService, DownloadStatus>((s) => s.statusFor(song.id));
     final accent = song.gradientColors.last;
 
     return ListTile(

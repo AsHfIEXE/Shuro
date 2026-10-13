@@ -519,15 +519,11 @@ class _TeeingResponse extends Stream<List<int>> implements HttpClientResponse {
         onData?.call(chunk);
       },
       onError: (Object error, StackTrace stackTrace) {
-        try {
-          sink.close();
-        } catch (_) {}
+        unawaited(sink.close().catchError((_) {}));
         onError?.call(error, stackTrace);
       },
       onDone: () {
-        try {
-          sink.close();
-        } catch (_) {}
+        unawaited(sink.close().catchError((_) {}));
         onDone?.call();
       },
       cancelOnError: cancelOnError ?? false,

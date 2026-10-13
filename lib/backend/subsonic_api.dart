@@ -346,6 +346,11 @@ class SubsonicApi {
 
   String streamUrl(String songId) => _buildUri('stream', {'id': songId}).toString();
 
+  /// The Subsonic `download` endpoint: the ORIGINAL file bytes, never
+  /// transcoded — what offline downloads must use (the stream endpoint
+  /// honours quality settings; downloads must not get a lesser version).
+  String downloadUrl(String songId) => _buildUri('download', {'id': songId}).toString();
+
   void dispose() {
     _httpClient.close();
   }

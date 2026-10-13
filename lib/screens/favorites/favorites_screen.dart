@@ -64,7 +64,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     ? const EmptyStateView(icon: Icons.favorite_border_rounded, title: 'No favorite albums yet')
                     : GridView.builder(
                         padding: const EdgeInsets.all(20),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 20, crossAxisSpacing: 16, childAspectRatio: 0.72),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 210,
+                          mainAxisSpacing: 20,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: 0.78,
+                        ),
                         itemCount: favoriteAlbums.length,
                         itemBuilder: (context, i) {
                           final album = favoriteAlbums[i];
@@ -75,7 +80,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     ? const EmptyStateView(icon: Icons.favorite_border_rounded, title: 'No favorite artists yet')
                     : GridView.builder(
                         padding: const EdgeInsets.all(20),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 20, crossAxisSpacing: 12, childAspectRatio: 0.8),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 180,
+                          mainAxisSpacing: 20,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.82,
+                        ),
                         itemCount: favoriteArtists.length,
                         itemBuilder: (context, i) {
                           final artist = favoriteArtists[i];

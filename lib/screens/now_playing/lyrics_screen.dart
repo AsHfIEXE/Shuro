@@ -582,11 +582,14 @@ class _LyricsLineView extends StatelessWidget {
     // filtered bounds — without it the filter clips at the line box and every
     // blurred line gets sharp edges above and below (seen in landscape).
     final Widget painted = (!isCurrent && !dimmed)
-        ? ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2, tileMode: TileMode.decal),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-              child: content,
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2, tileMode: TileMode.decal),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                child: content,
+              ),
             ),
           )
         : Padding(

@@ -357,6 +357,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     _lastNotifiedSecond = -1;
     _lastError = null;
     _listenThresholdDone = false;
+    // The engine moved on by itself (auto-advance or a notification skip):
+    // the fade/volume/speed state must follow the new track, or the volume
+    // faded down for the previous crossfade sticks on everything after it.
+    _fadingOut = false;
+    unawaited(_applyPlaybackTweaks(song));
     onTrackStarted?.call(song);
     notifyListeners();
   }
@@ -387,9 +392,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   Future<void> _applyPlaybackTweaks(Song song) async {
     _fadingOut = false;
     try {
-      if (playbackSpeed != 1.0) {
-        await _audioPlayer.setSpeed(playbackSpeed);
-      }
+      // Always set — including back to 1.0× — so leaving the speed setting
+      // actually restores normal playback (skipping 1.0× left the old speed
+      // stuck on the engine).
+      await _audioPlayer.setSpeed(playbackSpeed);
       try {
         await _audioPlayer.setSkipSilenceEnabled(skipSilence);
       } catch (_) {
@@ -588,8 +594,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
             // "picked one song, another played" happened: the old queue was
             // still loaded natively while the app's queue had moved on.)
             _nativeQueueIds = [for (final q in _queue) q.id];
-            // Shuffle/repeat must live on the engine too — see _syncNativeModes.
-            await _syncNativeModes();
           }
         } on PlayerInterruptedException {
           if (generation == _loadGeneration) {
@@ -602,7 +606,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         }
       }
       _nativeQueueActive = loadedNatively;
-      if (!loadedNatively) _nativeQueueIds = null;
+      if (loadedNatively) {
+        // Mirror AFTER the flag flips — _syncNativeModes early-returns while
+        // _nativeQueueActive is still false, which left the engine un-shuffled
+        // on the first native load.
+        await _syncNativeModes();
+      } else {
+        _nativeQueueIds = null;
+      }
 
       if (!loadedNatively) {
         await _loadSingle(source, tag, startAt);
@@ -966,6 +977,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       return;
     }
     _queue.insert(_queueIndex + 1, song);
+    _invalidateNativeQueue();
     notifyListeners();
   }
 
@@ -975,12 +987,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       return;
     }
     _queue.add(song);
+    _invalidateNativeQueue();
     notifyListeners();
   }
 
   Future<void> removeFromQueue(int index) async {
     if (index < 0 || index >= _queue.length) return;
     _queue.removeAt(index);
+    _invalidateNativeQueue();
     if (_queue.isEmpty) {
       _currentSong = null;
       _isPlaying = false;
@@ -1006,6 +1020,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (oldIndex == newIndex || oldIndex < 0 || oldIndex >= _queue.length || newIndex < 0 || newIndex >= _queue.length) return;
     final item = _queue.removeAt(oldIndex);
     _queue.insert(newIndex, item);
+    _invalidateNativeQueue();
     if (oldIndex == _queueIndex) {
       _queueIndex = newIndex;
     } else if (oldIndex < _queueIndex && newIndex >= _queueIndex) {
@@ -1019,8 +1034,15 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   void clearQueue() {
     _queue = _currentSong == null ? [] : [_currentSong!];
     _queueIndex = 0;
+    _invalidateNativeQueue();
     notifyListeners();
   }
+
+  /// Any direct _queue mutation invalidates the loaded native playlist: the
+  /// sync guards then route skips through the full-reload path, which rebuilds
+  /// the native source from the new queue. Without this the engine advanced in
+  /// the OLD order while the app showed the new one.
+  void _invalidateNativeQueue() => _nativeQueueIds = null;
 
   /// Restores a queue and position saved from a previous session —
   /// Settings → Behavior → "Remember queue"/"Resume playback". Loads
