@@ -353,3 +353,20 @@ Contract: (1) the red error text over the NPV backdrop must go; (2) picking a so
 - **Advanced playback settings (real, not decorative)**: Settings → Playback — Fade between songs (0/2/4/6 s end-of-track volume fade), Replay gain (per-track dB from the server tags applied as volume, clamped 0–1.25×), Playback speed (0.75×–2×, applied live), Skip silence (Android). All persisted and pushed to the player immediately.
 - **Faster motion option**: Backdrop motion gained "Fast" (10 s cycle, ±8.5 % scale) alongside Still/Subtle/Normal.
 - **Landscape polish**: Queue/Audio-info moved into the header (bottom column no longer clips them), lyrics re-centred, artwork slightly smaller for a safer fit.
+
+## Round 18 — four-verifier audit: every fix re-checked, 8 findings repaired
+
+Four independent verifiers audited the codebase against every reported issue (playback/queue, UI/UX, server features, startup/caching). Verdicts: 15 VERIFIED / 6 PARTIAL / 2 BROKEN — all 2 BROKEN + the actionable PARTIALs fixed in this round, then re-verified by tests:
+
+- **Crossfade stuck the volume low** (BROKEN): with a native queue the engine auto-advances — which bypassed the fade-in reset, leaving the faded-down volume on every later track. Native index changes now reset fade state and re-apply per-track tweaks (fade-in, ReplayGain volume, speed).
+- **Downloads were transcoded** (BROKEN): the download used the `stream` endpoint without format=raw. Now uses the Subsonic `download` endpoint — the original file, matching the owner's quality rule.
+- **Queue edits desynced the native playlist** (must-fix): playNext/addToQueue/removeFromQueue/reorder/clear now invalidate the loaded native playlist; guards route skips through a full rebuild so engine order always matches the app queue.
+- **Speed stuck above 1.0×** (must-fix): setSpeed now always applies (returning to 1.0× actually restores normal speed).
+- **_syncNativeModes ordering** (must-fix): shuffle/repeat mirroring now runs after the native queue flags are set, so the first native load is shuffled/looped correctly.
+- **Responsive grids everywhere** (must-fix): Favorites album/artist grids and artist-detail albums converted from fixed counts to width-aware extents (210/180) — the last giant-cell screens.
+- **Discover skeleton gate**: fake 550 ms timer removed; the skeleton now shows only while the first catalog fetch is genuinely in flight.
+- **Download progress in lists**: SongTile now reads the real download service status (was reading the old simulated status store).
+- **Blurred lyric rows clipped** (polish): the blur filter is contained in a rounded clip so softened edges can't bleed into neighbouring lines.
+- Cache-layer hygiene: teed sink closes no longer emit stray zone errors.
+
+Evidence: analyzer 0 errors · 113/113 tests · 4 verifier reports in _refs (verify_playback / verify_ui / verify_server_features / verify_startup_cache) · pushed as ca8d4d8.
