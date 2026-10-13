@@ -9,11 +9,13 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
-## [2.0.0] — 2026-10-14
+## [2.2.1] — 2026-10-14
 
-The first complete release of the rewritten app: playback engine, server
+The first complete public release of the rewritten app: playback engine, server
 feature layer, synced lyrics, adaptive artwork backgrounds, landscape Now
 Playing, real downloads, artist pictures, and its own navigation design.
+(Version reconciled with pubspec 2.2.1+2 — the rewrite shipped without a
+versioned release until now.)
 
 ### Added — Playback core
 
