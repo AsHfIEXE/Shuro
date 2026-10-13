@@ -344,3 +344,12 @@ Contract: (1) the red error text over the NPV backdrop must go; (2) picking a so
 - **Blur/motion defaults retuned**: default blur scale 1.0 → 0.6 (sharper artwork, per request) and the default motion is faster and more visible (18 s cycle, amplitude 0.065; subtle 36 s / 0.03). Settings labels follow.
 - **Non-playing lyric lines blur**: every line except the one being sung is blurred (ImageFiltered σ2.4, decal edges) plus the opacity ladder — repaint-bounded per line, so the cost is one-time per content change. Line-by-line mode fades its state changes over 200 ms.
 - Stream/monitor: logcat restarts after each install cycle (kill-server required by the harness); file at _logs/shuro_logcat.txt.
+
+## Round 17 — GitHub push, changelog, shimmer skeletons, persistent image cache, advanced playback settings
+
+- **Source pushed to GitHub**: https://github.com/AsHfIEXE/Shuro.git (main, commit b05a1d4, 148 files). New .gitignore (build/, .dart_tool/, android/build, .claude/, local.properties, _backup_lib). Full CHANGELOG.md written at the repo root.
+- **Shimmer skeletons for every loading state**: Library Songs/Albums/Artists/Genres tabs now show shape-matched skeletons while the first catalog fetch is in flight (Album/Artist/Genre grids + song rows), instead of an empty "No albums yet" page. Reduce-animations honoured via ShimmerBox.
+- **Persistent image cache (the big startup win)**: a caching layer under the HTTP client stores every image/* GET response on disk (auth params stripped from keys, 300 MB cap with prune). After the first session, covers and artist pictures render instantly from disk — only the small JSON catalog calls touch the network. Everything guarded: any cache failure falls through to plain networking.
+- **Advanced playback settings (real, not decorative)**: Settings → Playback — Fade between songs (0/2/4/6 s end-of-track volume fade), Replay gain (per-track dB from the server tags applied as volume, clamped 0–1.25×), Playback speed (0.75×–2×, applied live), Skip silence (Android). All persisted and pushed to the player immediately.
+- **Faster motion option**: Backdrop motion gained "Fast" (10 s cycle, ±8.5 % scale) alongside Still/Subtle/Normal.
+- **Landscape polish**: Queue/Audio-info moved into the header (bottom column no longer clips them), lyrics re-centred, artwork slightly smaller for a safer fit.
