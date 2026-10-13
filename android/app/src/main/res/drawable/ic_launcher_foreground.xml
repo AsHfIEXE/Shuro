@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shuro adaptive-icon foreground: the two gradient pills from the owner's
+     SVG, at ~58% of the canvas and centred — the adaptive-icon safe zone, so
+     no launcher mask crops the mark. Vector: crisp at every density. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:scaleX="0.58"
+        android:scaleY="0.58"
+        android:pivotX="256"
+        android:pivotY="256">
+
+        <!-- Pill A: #A78BFA -> #7C3AED -->
+        <group
+            android:translateX="262.764"
+            android:translateY="147.449"
+            android:rotation="-48.7">
+            <path android:pathData="M -87.04,-66.56 L 87.04,-66.56 A 66.56,66.56 0 0 1 87.04,66.56 L -87.04,66.56 A 66.56,66.56 0 0 1 -87.04,-66.56 Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient
+                        android:startX="-153.6"
+                        android:startY="0"
+                        android:endX="153.6"
+                        android:endY="0"
+                        android:type="linear">
+                        <item
+                            android:offset="0"
+                            android:color="#FFA78BFA" />
+                        <item
+                            android:offset="1"
+                            android:color="#FF7C3AED" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+
+        <!-- Pill B: #7C3AED -> #00D4FF -->
+        <group
+            android:translateX="249.236"
+            android:translateY="364.551"
+            android:rotation="-48.7">
+            <path android:pathData="M -87.04,-66.56 L 87.04,-66.56 A 66.56,66.56 0 0 1 87.04,66.56 L -87.04,66.56 A 66.56,66.56 0 0 1 -87.04,-66.56 Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient
+                        android:startX="-153.6"
+                        android:startY="0"
+                        android:endX="153.6"
+                        android:endY="0"
+                        android:type="linear">
+                        <item
+                            android:offset="0"
+                            android:color="#FF7C3AED" />
+                        <item
+                            android:offset="1"
+                            android:color="#FF00D4FF" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+    </group>
+</vector>

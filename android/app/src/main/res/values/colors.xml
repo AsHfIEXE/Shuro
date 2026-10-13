@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's surface colour (kSurfaceColor in lib/theme/app_theme.dart).
+         Used as the Android window background so the window behind Flutter's
+         first frame is dark: the generated default is pure white, which is what
+         showed as a white flash (and, on a slow first frame, a white screen)
+         before the app's own dark UI painted. -->
+    <color name="shuro_surface">#FF0B0F14</color>
+
+    <!-- Launcher adaptive-icon background: the app's own dark surface. -->
+    <color name="ic_launcher_background">#FF0B0F14</color>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shuro is a dark-only app, so both day and night themes use the same dark window. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <!-- Shown until Flutter paints its first frame; dark so startup never
+             flashes white. -->
+        <item name="android:windowBackground">@color/shuro_surface</item>
+    </style>
+    <!-- Applied once the process has started; also the colour behind the
+         Flutter UI while it initializes. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/shuro_surface</item>
+    </style>
+</resources>
+

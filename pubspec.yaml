@@ -1,0 +1,55 @@
+name: shuro
+description: Shuro — the self-hosted Navidrome/OpenSubsonic music player.
+publish_to: "none"
+version: 2.2.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.2
+  file_picker: ^8.1.2
+  http: ^1.2.2
+  crypto: ^3.0.6
+  # (Local-file tag reading is a small pure-Dart ID3/Vorbis parser in
+  # services/local_tag_enrichment.dart — audiotags was evaluated and rejected:
+  # it pulls a Rust build into every compile.)
+  # Real download storage: documents dir survives app updates (cache dirs do
+  # not), which is the whole point of an offline library.
+  path_provider: ^2.1.4
+  just_audio: ^0.9.36
+  # Real lock-screen/notification media controls for just_audio — see the
+  # Android manifest additions documented in README.md, required once for
+  # this to actually show up (not something `flutter pub get` can do for
+  # you). If pub resolves this to a newer non-beta release, that's fine —
+  # the API this app uses (JustAudioBackground.init, the `tag:` MediaItem
+  # passed to setUrl/setFilePath) has been stable across its betas.
+  just_audio_background: ^0.0.1-beta.13
+  # Real per-track accent colors on Now Playing/Lyrics, extracted from the
+  # actual cover art instead of a deterministic per-ID placeholder color.
+  palette_generator: ^0.3.3+4
+  # Real Wi-Fi vs. mobile-data detection, so Settings -> Wi-Fi quality /
+  # Mobile data quality actually pick different streaming quality instead
+  # of both being decorative. No manual Android setup needed — the
+  # ACCESS_NETWORK_STATE permission it needs is merged into the manifest
+  # automatically by the plugin itself.
+  connectivity_plus: ^6.0.5
+  # Local on-device persistence (Settings, favorites, saved servers,
+  # playlists, listening history, remembered queue/position) — see
+  # lib/services/app_persistence.dart. Plain key-value storage, not secure
+  # storage: saved server passwords are NOT encrypted at rest. That's an
+  # honest limitation worth upgrading to flutter_secure_storage later, not
+  # something papered over here.
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
