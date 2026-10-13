@@ -379,3 +379,9 @@ Evidence: analyzer 0 errors · 113/113 tests · 4 verifier reports in _refs (ver
 - **README rewritten**: full app description, features, build/usage guide, services note; author is AsHfIEXE; changelog lives in CHANGELOG.md only.
 - **Landscape NPV**: artwork clamped to its own column width (no more left-edge clipping), lyric pane top padding clears the header.
 - **Bottom sheets**: all picker sheets are bounded + scrollable (the fade picker no longer overflows by 27 px on short windows).
+
+## Round 20 — HTTP servers enabled, plain-language connection errors
+
+- **Plain-HTTP server URLs now work**: Android 9+ blocks cleartext HTTP by default, which silently broke every `http://` server address (LAN IPs, non-HTTPS setups). `usesCleartextTraffic=true` added to the manifest.
+- **Connection errors in plain language**: raw socket dumps ("Failed host lookup… errno = 7") are translated on the restoring screen into what they mean and what to do, with the technical line kept small below. DNS failures (DDNS names that only resolve at home) get their own explanation.
+- Noted: the reported lookup failure for a DDNS hostname is a network/DNS condition, not fixable in-app — the app now explains it instead of dumping errno text.
