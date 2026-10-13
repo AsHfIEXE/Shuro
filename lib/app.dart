@@ -93,6 +93,9 @@ class _RestoringScreen extends StatelessWidget {
     final failed = appState.connectionErrorMessage != null &&
         (appState.connectionStatus == ConnectionStatus.unreachable || appState.connectionStatus == ConnectionStatus.invalidCredentials);
     final serverName = appState.activeServer?.name ?? 'your server';
+    // Raw socket text ("Failed host lookup … errno = 7") is meaningless to a
+    // person — translated here into what it actually means and what to do.
+    final friendlyError = friendlyConnectionError(appState.connectionErrorMessage);
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
@@ -122,9 +125,17 @@ class _RestoringScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 10),
-                    Text(appState.connectionErrorMessage ?? 'The server did not respond.',
+                    Text(friendlyError,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13, height: 1.5)),
+                    if (appState.connectionErrorMessage != null && appState.connectionErrorMessage != friendlyError) ...[
+                      const SizedBox(height: 8),
+                      Text(appState.connectionErrorMessage!,
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white24, fontSize: 10, height: 1.4)),
+                    ],
                     const SizedBox(height: 22),
                     SizedBox(
                       width: double.infinity,

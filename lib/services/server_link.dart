@@ -79,6 +79,36 @@ class ServerLink {
   }
 }
 
+/// Translates raw socket/Dart connection errors into one plain sentence, plus
+/// keeps the technical detail available separately (the restoring screen shows
+/// the friendly line up top and the raw text small below).
+String friendlyConnectionError(String? raw) {
+  final error = raw ?? '';
+  final lower = error.toLowerCase();
+  if (lower.contains('failed host lookup') || lower.contains('no address associated') || lower.contains('unknownhost')) {
+    return 'That server address could not be found (DNS). Check the URL spelling — and note that some DDNS names only resolve inside your own network.';
+  }
+  if (lower.contains('connection refused')) {
+    return 'The server refused the connection — is it running, and is the port correct?';
+  }
+  if (lower.contains('cleartext') || lower.contains('not permitted by network security policy')) {
+    return 'This server uses plain HTTP, which this build blocks. Use an HTTPS address.';
+  }
+  if (lower.contains('connection reset') || lower.contains('connection abort')) {
+    return 'The connection was cut off mid-request — check your network and try again.';
+  }
+  if (lower.contains('timeout') || lower.contains('timed out')) {
+    return 'The server took too long to respond — it may be offline or asleep.';
+  }
+  if (lower.contains('handshake') || lower.contains('certificate') || lower.contains('ssl') || lower.contains('tls')) {
+    return 'The secure connection to the server failed (certificate problem).';
+  }
+  if (lower.contains('unreachable')) {
+    return 'This network has no route to the server — are you connected?';
+  }
+  return error.isEmpty ? 'The server did not respond.' : error;
+}
+
 /// Favourites that stay in step with the server. Every UI entry point calls
 /// this instead of [AppState.toggleFavoriteSong] directly: the local toggle is
 /// immediate (the UI must feel instant), then the matching star/unstar goes to
