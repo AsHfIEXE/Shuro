@@ -302,10 +302,13 @@ class NowPlayingScreen extends StatelessWidget {
     required AppState appState,
     required PlayerController player,
   }) {
-    // Sized from the *shorter* axis and deliberately smaller than before: the
-    // reported problem was the transport row clipped at the bottom, which is
-    // exactly what an artwork that fills the column causes.
-    final artworkSize = math.min(constraints.maxHeight * 0.44, constraints.maxWidth * 0.28).clamp(200.0, 360.0);
+    // Sized from the *shorter* axis AND constrained by its own column width —
+    // on short landscape windows the height factor alone let the ring grow
+    // past the column and clip at the screen edge (the reported screenshot).
+    final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - 56);
+    final artworkSize = math
+        .min(math.min(constraints.maxHeight * 0.44, columnWidth), 340.0)
+        .clamp(160.0, 340.0);
 
     return Column(
       children: [
@@ -400,7 +403,9 @@ class NowPlayingScreen extends StatelessWidget {
                     ),
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 28, right: 28, top: 8),
+                        // Top padding keeps the first lyric lines clear of the
+                        // header and its scrim, which previously cut through them.
+                        padding: const EdgeInsets.only(left: 28, right: 28, top: 28),
                         child: LyricsScreen(initialSong: song, embedded: true),
                       ),
                     ),
