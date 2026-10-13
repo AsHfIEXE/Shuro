@@ -16,15 +16,22 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+  // The splash is the connect window: AppState starts the server reconnect
+  // during restore, and this screen holds the stage for it. A LAN connect
+  // typically finishes inside this window, so the handoff into AuthGate
+  // lands on an already-loaded library — connecting feels instant.
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800));
 
   late final Animation<double> _logoProgress =
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.75, curve: Curves.linear));
+      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.32, curve: Curves.easeOutCubic));
   late final Animation<double> _glowOpacity =
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.4, curve: Curves.easeOut));
+      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.26, curve: Curves.easeOut));
   late final Animation<double> _wordmarkOpacity =
-      CurvedAnimation(parent: _controller, curve: const Interval(0.6, 0.9, curve: Curves.easeOut));
+      CurvedAnimation(parent: _controller, curve: const Interval(0.30, 0.50, curve: Curves.easeOut));
   late final Animation<Offset> _wordmarkOffset = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(_wordmarkOpacity);
+  late final Animation<double> _taglineOpacity =
+      CurvedAnimation(parent: _controller, curve: const Interval(0.52, 0.74, curve: Curves.easeOut));
+  late final Animation<Offset> _taglineOffset = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(_taglineOpacity);
 
   @override
   void initState() {
@@ -32,7 +39,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     _controller.forward();
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(milliseconds: 400), () {
+        // Short hold on the finished composition, then hand off — by now the
+        // reconnect has usually finished too, so AuthGate lands straight on
+        // the library.
+        Future.delayed(const Duration(milliseconds: 600), () {
           if (mounted) Navigator.of(context).pushReplacement(drillDownRoute(const AuthGate()));
         });
       }
@@ -110,6 +120,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                               'Shuro',
                               textAlign: TextAlign.center,
                               style: headingFont(color: kTextColor, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        SlideTransition(
+                          position: _taglineOffset,
+                          child: FadeTransition(
+                            opacity: _taglineOpacity,
+                            child: Text(
+                              'Your music. Your server. Your sound.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.getFont(
+                                currentFontFamily,
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
                         ),

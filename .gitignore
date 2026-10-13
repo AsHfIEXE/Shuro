@@ -61,3 +61,4 @@ lib/generated_plugin_registrant.dart
 *.bak
 
 .flutter_tool_state
+_refs/
