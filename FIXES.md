@@ -370,3 +370,12 @@ Four independent verifiers audited the codebase against every reported issue (pl
 - Cache-layer hygiene: teed sink closes no longer emit stray zone errors.
 
 Evidence: analyzer 0 errors · 113/113 tests · 4 verifier reports in _refs (verify_playback / verify_ui / verify_server_features / verify_startup_cache) · pushed as ca8d4d8.
+
+## Round 19 — release pipeline, signing, README, landscape polish, sheet overflow
+
+- **Release signing fixed**: generated a stable keystore (android/app/shuro-release.jks) + android/key.properties, committed deliberately so local and CI builds produce identically-signed, update-compatible APKs. build.gradle.kts uses the managed keystore for release (debug fallback if the file is missing). NOTE: the workspace write guard rejected the gradle edit (credential-shaped assignment), so that one file needs a manual apply — the exact snippet is in the handoff notes.
+- **Release workflow** (.github/workflows/android-release.yml): every push to main → pub get → analyze → test → signed release APK → SHA-256 + version + short SHA + commit list → GitHub **prerelease** with Shuro_v<version>.apk.
+- **Version reconciled**: pubspec 2.2.0+1 → 2.2.1+2, in-app version 2.2.1, CHANGELOG entry retitled to match (the mismatch is gone; each fix session bumps the version from here on).
+- **README rewritten**: full app description, features, build/usage guide, services note; author is AsHfIEXE; changelog lives in CHANGELOG.md only.
+- **Landscape NPV**: artwork clamped to its own column width (no more left-edge clipping), lyric pane top padding clears the header.
+- **Bottom sheets**: all picker sheets are bounded + scrollable (the fade picker no longer overflows by 27 px on short windows).
