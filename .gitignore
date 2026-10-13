@@ -46,7 +46,12 @@ app.*.map.json
 # Local Android SDK paths — never commit
 android/local.properties
 android/.gradle/
-android/key.properties
+
+# NOTE: the release keystore and its credentials ARE committed deliberately
+# (android/key.properties + android/app/shuro-release.jks) so CI builds and
+# local builds produce identically-signed, update-compatible APKs. If this
+# repository is ever made public, rotate the key first (see README — Release
+# signing).
 
 # Generated plugin registrants
 lib/generated_plugin_registrant.dart
