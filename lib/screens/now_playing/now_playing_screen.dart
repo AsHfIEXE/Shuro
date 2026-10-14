@@ -258,36 +258,24 @@ class NowPlayingScreen extends StatelessWidget {
                 height: 150,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Stack(
-                    children: [
-                      // Edge fade WITHOUT a ShaderMask: the old ClipRect+
-                      // dstIn pair saved a full-width layer, which at large
-                      // canvas sizes (TV / Chrome) can exceed GPU texture
-                      // limits and render as a black clipped region. A plain
-                      // gradient overlay needs no layer and reads the same.
-                      Positioned.fill(
-                        child: LyricsScreen(initialSong: song, embedded: true, compact: true),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  kSurfaceColor.withValues(alpha: 0.9),
-                                  Colors.transparent,
-                                  Colors.transparent,
-                                  kSurfaceColor.withValues(alpha: 0.95),
-                                ],
-                                stops: const [0.0, 0.22, 0.72, 1.0],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  // Edge fade = ALPHA-ONLY mask on the lyrics themselves
+                  // (ClipRect + dstIn ShaderMask, bounded to this 150 dp box:
+                  // static, small, no per-frame work — safe on Skia and
+                  // CanvasKit). Painting kSurfaceColor over the box instead —
+                  // as an earlier iteration did — draws a dark rectangular
+                  // band over the artwork; darkening overlays on the backdrop
+                  // are never the answer, the lyrics fade, the art stays.
+                  child: ClipRect(
+                    child: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x00000000), Color(0xFF000000), Color(0xFF000000), Color(0x00000000)],
+                        stops: [0.0, 0.22, 0.78, 1.0],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.dstIn,
+                      child: LyricsScreen(initialSong: song, embedded: true, compact: true),
+                    ),
                   ),
                 ),
               ),
