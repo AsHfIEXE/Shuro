@@ -69,6 +69,13 @@ class LyricsScreen extends StatefulWidget {
   /// right pane and the portrait "next lines" preview are the same widget.
   final bool embedded;
 
+  /// When non-null and this is an embedded (in-Now-Playing) instance with
+  /// NOTHING to show — no lyrics found, lookup failed, or the track has none
+  /// — this widget replaces the small centered message. On the wide layout's
+  /// half-screen pane a tiny message read as an empty/broken area; the
+  /// fallback keeps the pane useful (the Up Next list).
+  final Widget? embeddedFallback;
+
   /// When true the attribution footer and sync bar are hidden too — the
   /// portrait preview is a few lines, not a full controls surface.
   final bool compact;
@@ -84,6 +91,7 @@ class LyricsScreen extends StatefulWidget {
     this.initialSong,
     this.embedded = false,
     this.compact = false,
+    this.embeddedFallback,
     this.textAlign = TextAlign.center,
   });
 
@@ -341,9 +349,15 @@ class _LyricsScreenState extends State<LyricsScreen> {
               return const _Message(icon: null, loading: true, message: 'Loading lyrics…');
             }
             final result = snapshot.data;
-            if (result == null || !result.hasTrack) return _failureView(result);
+            if (result == null || !result.hasTrack) {
+              final fallback = widget.embedded && widget.embeddedFallback != null ? widget.embeddedFallback : null;
+              if (fallback != null) return fallback;
+              return _failureView(result);
+            }
             final track = result.track!;
             if (track.lines.isEmpty) {
+              final fallback = widget.embedded && widget.embeddedFallback != null ? widget.embeddedFallback : null;
+              if (fallback != null) return fallback;
               return const _Message(icon: Icons.music_off_rounded, message: 'This track has no lyrics to show.');
             }
             return _buildLyrics(track, colors.last);
