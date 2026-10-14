@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 /// A loopback reverse-proxy with its own DNS resolution.
 ///
 /// Purpose: the device's system DNS can fail (intermittently or permanently)

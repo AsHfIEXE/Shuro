@@ -80,28 +80,47 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   StreamSubscription<PlayerState>? _playerStateSub;
   StreamSubscription<int?>? _currentIndexSub;
 
-  /// True when the whole app queue is loaded as one native playlist (see
-  /// the whole-queue branch of [_jumpTo]). The system media notification
-  /// shows previous/next only when the native playlist actually has a
-  /// previous/next — the single-song load is why the notification only ever
-  /// had pause + stop.
+  /// True when a native playlist is loaded (see the whole-queue/window
+  /// branch of [_jumpTo]). The system media notification shows previous/next
+  /// only when the native playlist actually has a previous/next — the
+  /// single-song load is why the notification only ever had pause + stop.
   bool _nativeQueueActive = false;
 
-  /// The id sequence actually loaded into the native playlist. Native-index
-  /// seeks and index changes are only ever allowed while this matches the
-  /// app's queue — otherwise the engine is playing a different list than the
-  /// app is showing, which is the wrong-song bug.
+  /// The live native playlist, when one is loaded — kept so the window can
+  /// slide forward/backward via runtime insert/remove (gapless, no reload).
+  ConcatenatingAudioSource? _nativeSource;
+
+  /// The id sequence actually loaded into the native playlist — a WINDOW of
+  /// the app queue when the queue is large (loading thousands of sources
+  /// before the first note was the multi-second "tap → sound" delay), the
+  /// whole queue when it is small. Native↔app index translation always goes
+  /// through this list, never raw indexes.
   List<String>? _nativeQueueIds;
 
-  /// True only when a native playlist is loaded AND it is exactly the app's
-  /// current queue (same length, same order, same ids).
+  /// Window geometry: how many songs before/after the playhead are loaded
+  /// natively, and below which queue size the whole queue loads instead.
+  static const int _kNativeWindowBefore = 12;
+  static const int _kNativeWindowAfter = 15;
+  static const int _kNativeWindowFullLimit = 60;
+
+  /// True only when a native playlist is loaded AND it still contains the
+  /// song the app considers current. Containment, not equality — the window
+  /// moves.
   bool get _nativeInSync {
     final ids = _nativeQueueIds;
-    if (!_nativeQueueActive || ids == null || ids.length != _queue.length) return false;
-    for (var i = 0; i < ids.length; i++) {
-      if (ids[i] != _queue[i].id) return false;
-    }
-    return true;
+    if (!_nativeQueueActive || ids == null || ids.isEmpty) return false;
+    final currentId = _currentSong?.id;
+    return currentId != null && ids.contains(currentId);
+  }
+
+  /// Maps an app-queue index onto the native window's index — null when that
+  /// song is outside the window right now.
+  int? _nativeIndexOf(int appIndex) {
+    if (appIndex < 0 || appIndex >= _queue.length) return null;
+    final ids = _nativeQueueIds;
+    if (ids == null) return null;
+    final native = ids.indexOf(_queue[appIndex].id);
+    return native >= 0 ? native : null;
   }
 
   /// Loads exactly one song — the pre-native-queue path, kept as the fallback
@@ -348,10 +367,16 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// own doing.
   void _onNativeIndexChanged(int? index) {
     if (!_nativeInSync || _isLoading || index == null) return;
-    if (index < 0 || index >= _queue.length) return;
-    if (index == _queueIndex && _loadedSongId == _queue[index].id) return;
-    _queueIndex = index;
-    final song = _queue[index];
+    final ids = _nativeQueueIds!;
+    if (index < 0 || index >= ids.length) return;
+    // The engine speaks native-window indexes; translate to the app queue by
+    // id before touching any app state.
+    final id = ids[index];
+    final appIndex = _queue.indexWhere((s) => s.id == id);
+    if (appIndex < 0) return;
+    if (appIndex == _queueIndex && _loadedSongId == id) return;
+    _queueIndex = appIndex;
+    final song = _queue[appIndex];
     _currentSong = song;
     _loadedSongId = song.id;
     _lastNotifiedSecond = -1;
@@ -362,6 +387,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // faded down for the previous crossfade sticks on everything after it.
     _fadingOut = false;
     unawaited(_applyPlaybackTweaks(song));
+    unawaited(_slideNativeWindow(appIndex));
     onTrackStarted?.call(song);
     notifyListeners();
   }
@@ -549,51 +575,50 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
 
     try {
-      // Native queue: with more than one song, load the WHOLE queue as one
-      // playlist. This is what makes the system media notification show
-      // previous/next (it only shows skip buttons when the native playlist
-      // actually has them — the single-song load is why the notification only
-      // ever had pause + stop), and it is what lets Android 13+ render the
-      // seek bar. Every item must resolve; otherwise fall back to the proven
-      // single-song load below.
+      // Native queue window: load the current song plus a margin around it
+      // as one playlist — NOT the whole queue. Resolving thousands of audio
+      // sources before the first note was the multi-second "tap → sound"
+      // delay on big libraries. The window slides at runtime (see
+      // [_slideNativeWindow]) so the system notification keeps prev/next and
+      // playback stays gapless. Small queues load whole.
       var loadedNatively = false;
       if (_queue.length > 1) {
         try {
+          final whole = _queue.length <= _kNativeWindowFullLimit;
+          final windowStart = whole
+              ? 0
+              : (clamped - _kNativeWindowBefore)
+                  .clamp(0, math.max(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter)));
+          final windowEnd = whole ? _queue.length : math.min(_queue.length, windowStart + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
           final children = <AudioSource>[];
-          final childQueueIndex = <int>[];
-          for (var i = 0; i < _queue.length; i++) {
+          final windowIds = <String>[];
+          var playheadNative = -1;
+          for (var i = windowStart; i < windowEnd; i++) {
             final qSong = _queue[i];
             final qSource = identical(qSong, song) ? source : audioSourceResolver?.call(qSong);
             if (qSource == null) continue; // unresolvable item — not in the native queue
             final qMeta = identical(qSong, song) ? meta : metadataResolver?.call(qSong);
-            final qTag = MediaItem(
-              id: qSong.id,
-              album: qMeta?.albumTitle ?? qSong.artist,
-              title: qSong.title,
-              artist: qSong.artist,
-              duration: qSong.duration,
-              artUri: qMeta?.artUri,
-            );
             children.add(
               (qSource.startsWith('http://') || qSource.startsWith('https://'))
-                  ? AudioSource.uri(Uri.parse(qSource), tag: qTag)
-                  : AudioSource.file(qSource, tag: qTag),
+                  ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, qMeta))
+                  : AudioSource.file(qSource, tag: _mediaItemFor(qSong, qMeta)),
             );
-            childQueueIndex.add(i);
+            if (i == clamped) playheadNative = children.length - 1;
+            windowIds.add(qSong.id);
           }
-          if (children.length == _queue.length) {
+          if (children.length > 1 && children.length == windowEnd - windowStart && playheadNative >= 0) {
+            final native = ConcatenatingAudioSource(children: children);
             await _audioPlayer.setAudioSource(
-              ConcatenatingAudioSource(children: children),
-              initialIndex: clamped,
+              native,
+              initialIndex: playheadNative,
               initialPosition: startAt,
             );
             loadedNatively = true;
-            // The native playlist's identity: only while THIS id sequence is
-            // what's loaded do index-based native seeks and index changes map
-            // back onto the app queue. (Skipping the sync check is exactly how
-            // "picked one song, another played" happened: the old queue was
-            // still loaded natively while the app's queue had moved on.)
-            _nativeQueueIds = [for (final q in _queue) q.id];
+            _nativeSource = native;
+            // The native playlist's identity: only while the loaded id window
+            // contains what's playing do native seeks and index changes map
+            // back onto the app queue.
+            _nativeQueueIds = windowIds;
           }
         } on PlayerInterruptedException {
           if (generation == _loadGeneration) {
@@ -613,6 +638,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         await _syncNativeModes();
       } else {
         _nativeQueueIds = null;
+        _nativeSource = null;
       }
 
       if (!loadedNatively) {
@@ -756,18 +782,21 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       return;
     }
 
-    // With the whole queue loaded natively, moving between songs is a plain
-    // engine seek to an index — no reload, and the notification's own skip
-    // buttons stay in sync (the index listener follows whichever side
-    // initiated the move). If the seek can't land (e.g. autoplay just
-    // appended songs the native playlist doesn't know about), fall back to
-    // the full reload path, which rebuilds the native playlist.
+    // With the queue loaded natively, moving between songs is a plain
+    // engine seek to a (translated) index — no reload. If the seek can't
+    // land (target outside the window, autoplay appended songs the native
+    // playlist doesn't know about), fall back to the full reload path,
+    // which rebuilds the window around the target.
     if (_nativeInSync && !_isLoading) {
-      try {
-        await _audioPlayer.seek(Duration.zero, index: nextIndex);
-        return;
-      } catch (_) {
-        // Fall through to the full reload.
+      final native = _nativeIndexOf(nextIndex);
+      if (native != null) {
+        try {
+          await _audioPlayer.seek(Duration.zero, index: native);
+          unawaited(_slideNativeWindow(nextIndex));
+          return;
+        } catch (_) {
+          // Fall through to the full reload.
+        }
       }
     }
     await _jumpTo(nextIndex, startPlaying: true);
@@ -796,16 +825,20 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       await seekTo(startAt);
       return;
     }
-    // The queue is already loaded natively and this song is in it: a plain
-    // seek to its index — no rebuild, no interruption of the notification's
-    // playlist view.
+    // The queue is already loaded natively and this song is in the window:
+    // a plain seek to its translated index — no rebuild, no interruption of
+    // the notification's playlist view.
     if (_nativeInSync && !_isLoading) {
-      try {
-        await _audioPlayer.seek(Duration.zero, index: index);
-        if (startAt != null && startAt > Duration.zero) await _audioPlayer.seek(startAt);
-        return;
-      } catch (_) {
-        // Fall through to the full reload.
+      final native = _nativeIndexOf(index);
+      if (native != null) {
+        try {
+          await _audioPlayer.seek(Duration.zero, index: native);
+          if (startAt != null && startAt > Duration.zero) await _audioPlayer.seek(startAt);
+          unawaited(_slideNativeWindow(index));
+          return;
+        } catch (_) {
+          // Fall through to the full reload.
+        }
       }
     }
     await _jumpTo(index, startPlaying: true, initialPosition: startAt);
@@ -1042,7 +1075,84 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// sync guards then route skips through the full-reload path, which rebuilds
   /// the native source from the new queue. Without this the engine advanced in
   /// the OLD order while the app showed the new one.
-  void _invalidateNativeQueue() => _nativeQueueIds = null;
+  void _invalidateNativeQueue() {
+    _nativeQueueIds = null;
+    _nativeSource = null;
+  }
+
+  MediaItem _mediaItemFor(Song song, NowPlayingMetadata? meta) => MediaItem(
+        id: song.id,
+        album: meta?.albumTitle ?? song.artist,
+        title: song.title,
+        artist: song.artist,
+        duration: song.duration,
+        artUri: meta?.artUri,
+      );
+
+  /// Slides the native window so the playhead never runs off the loaded
+  /// edge — runtime insert/remove on the live playlist, which does not
+  /// interrupt playback (that's the point of the window: gapless keeps
+  /// working on huge queues). Failures are harmless: an out-of-window jump
+  /// simply rebuilds via [_jumpTo].
+  Future<void> _slideNativeWindow(int appIndex) async {
+    final source = _nativeSource;
+    final ids = _nativeQueueIds;
+    if (source == null || ids == null || _queue.length <= _kNativeWindowFullLimit) return;
+    try {
+      final native = _nativeIndexOf(appIndex);
+      if (native == null) return;
+      final windowStartApp = appIndex - native; // app index of ids.first
+
+      // Append ahead when the playhead nears the tail.
+      if (native >= ids.length - 6) {
+        var appended = 0;
+        for (var i = windowStartApp + ids.length; i < _queue.length && appended < _kNativeWindowAfter; i++) {
+          final qSong = _queue[i];
+          final qSource = audioSourceResolver?.call(qSong);
+          if (qSource == null) break;
+          await source.insert(
+            ids.length,
+            (qSource.startsWith('http://') || qSource.startsWith('https://'))
+                ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, metadataResolver?.call(qSong)))
+                : AudioSource.file(qSource, tag: _mediaItemFor(qSong, metadataResolver?.call(qSong))),
+          );
+          ids.add(qSong.id);
+          appended++;
+        }
+        // Trim the head so the window stays bounded — never the playing side.
+        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter && _nativeIndexOf(appIndex)! > _kNativeWindowBefore) {
+          await source.removeAt(0);
+          ids.removeAt(0);
+        }
+        return;
+      }
+
+      // Prepend behind when the playhead nears the head.
+      if (native <= 5 && windowStartApp > 0) {
+        var prepended = 0;
+        for (var i = windowStartApp - 1; i >= 0 && prepended < _kNativeWindowBefore; i--) {
+          final qSong = _queue[i];
+          final qSource = audioSourceResolver?.call(qSong);
+          if (qSource == null) break;
+          await source.insert(
+            0,
+            (qSource.startsWith('http://') || qSource.startsWith('https://'))
+                ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, metadataResolver?.call(qSong)))
+                : AudioSource.file(qSource, tag: _mediaItemFor(qSong, metadataResolver?.call(qSong))),
+          );
+          ids.insert(0, qSong.id);
+          prepended++;
+        }
+        // Trim the tail.
+        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter && _nativeIndexOf(appIndex)! < ids.length - 1 - _kNativeWindowAfter) {
+          await source.removeAt(ids.length - 1);
+          ids.removeLast();
+        }
+      }
+    } catch (_) {
+      // Window slide failed: the next out-of-window jump rebuilds cleanly.
+    }
+  }
 
   /// Restores a queue and position saved from a previous session —
   /// Settings → Behavior → "Remember queue"/"Resume playback". Loads
