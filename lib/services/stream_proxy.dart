@@ -61,23 +61,21 @@ class StreamProxy {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 20);
       // The DoH-resolving connector: the proxy's own outbound connections
-      // never depend on system DNS.
+      // never depend on system DNS. (Signature wrapper: connectionFactory
+      // takes (uri, proxyHost, proxyPort) — the proxy/hosts are unused, this
+      // app never proxies.)
       client.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
       try {
-        final upstream = await client.openUrl('GET', target);
+        final upstreamRequest = await client.openUrl('GET', target);
+        final upstream = await upstreamRequest.close();
         final proxied = request.response;
         proxied.statusCode = upstream.statusCode;
         for (final name in const ['content-type', 'content-length', 'content-range', 'accept-ranges', 'icy-metaint', 'content-disposition']) {
           final value = upstream.headers.value(name);
           if (value != null) proxied.headers.set(name, value);
         }
-        await upstream.listen((chunk) {
-          proxied.add(chunk);
-        }, onDone: () async {
-          await proxied.close();
-        }, onError: (Object _) async {
-          await proxied.close();
-        });
+        await proxied.addStream(upstream);
+        await proxied.close();
       } finally {
         client.close(force: true);
       }
@@ -112,12 +110,14 @@ Future<ConnectionTask<Socket>> connectResolvingDoh(Uri uri) async {
     throw SocketException('Failed host lookup: ${uri.host}');
   }
 
-  // Try each address in order; first successful TCP connection wins.
+  // Try each address in order — startConnect returns a proper
+  // ConnectionTask that dart:io manages for the TLS handshake (wrapping an
+  // already-connected socket manually broke HTTPS with "Connection closed
+  // before full header was received").
   Object? lastError;
   for (final address in addresses) {
     try {
-      final socket = await Socket.connect(address, port);
-      return ConnectionTask<Socket>.fromSocket(Future.value(socket), () {});
+      return await Socket.startConnect(address, port);
     } catch (error) {
       lastError = error;
     }
