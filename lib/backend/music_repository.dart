@@ -54,6 +54,13 @@ abstract class MusicRepository {
   /// and "couldn't check" are both null, so a server without this
   /// extension never blocks the LRCLIB fallback in [LyricsService].
   Future<LyricsTrack?> fetchEmbeddedLyrics(Song song);
+
+  /// Server-side scan state, for change detection: when the reported
+  /// [ScanStatusInfo.lastScan] is unchanged since the cached snapshot, the
+  /// library is unchanged and a full re-fetch can be skipped. The default
+  /// returns "unknown" — repositories that don't override it keep working,
+  /// and callers treat unknown as "must fetch", never "unchanged".
+  Future<ScanStatusInfo> getScanStatus() async => const ScanStatusInfo();
 }
 
 /// What the server says about its own library scan. Used for change

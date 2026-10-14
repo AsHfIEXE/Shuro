@@ -19,7 +19,7 @@ import 'navidrome_api_client.dart';
 /// existing screen (search, genre tab, album/artist detail) working
 /// unchanged against a plain in-memory snapshot — no async refactor needed
 /// anywhere outside this file and [AppState].
-class NavidromeMusicRepository implements MusicRepository {
+class NavidromeMusicRepository extends MusicRepository {
   NavidromeMusicRepository({
     required String baseUrl,
     required String username,
