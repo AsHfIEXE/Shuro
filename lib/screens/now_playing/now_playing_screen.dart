@@ -105,6 +105,13 @@ class NowPlayingScreen extends StatelessWidget {
     final progress = isCurrent ? player.progress : 0.0;
     final isFav = appState.isFavoriteSong(song.id);
 
+    // The immersive fade is a LANDSCAPE/two-pane behaviour only: in portrait
+    // everything stays visible always (the owner's call — portrait chrome is
+    // compact enough to never feel cluttered).
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.width >= kNowPlayingWideBreakpoint ||
+        (size.width > size.height && size.width >= 600);
+
     return ImmersiveScope(
       // Settings → Appearance → "Immersive screens": hides the system bars while
       // this screen is open, and restores them on the way out.
@@ -112,7 +119,7 @@ class NowPlayingScreen extends StatelessWidget {
       // slowly and only the artwork/backdrop/lyrics remain — any touch wakes
       // it. See idle_fade.dart.
       child: IdleFade(
-        enabled: isPlaying,
+        enabled: isPlaying && wide,
         child: ArtworkPaletteBuilder(
       artwork: song.artwork,
       fallback: song.gradientColors,
@@ -379,16 +386,16 @@ class NowPlayingScreen extends StatelessWidget {
                                 children: [
                                   IdleFadeChrome(child: _TimesRow(position: position, total: total, format: _formatDuration)),
                                   SizedBox(height: compact ? 8 : 18),
-                                  IdleFadeChrome(
-                                    child: _TrackTitleBlock(
-                                      song: song,
-                                      accent: accent,
-                                      duration: _trackChangeDuration,
-                                      shuffleOn: player.shuffle,
-                                      repeatMode: player.repeatMode,
-                                      onShuffleToggle: player.toggleShuffle,
-                                      onRepeatToggle: player.cycleRepeatMode,
-                                    ),
+                                  // Title + artist stay visible in landscape
+                                  // too — only the controls dissolve.
+                                  _TrackTitleBlock(
+                                    song: song,
+                                    accent: accent,
+                                    duration: _trackChangeDuration,
+                                    shuffleOn: player.shuffle,
+                                    repeatMode: player.repeatMode,
+                                    onShuffleToggle: player.toggleShuffle,
+                                    onRepeatToggle: player.cycleRepeatMode,
                                   ),
                                   SizedBox(height: compact ? 6 : 16),
                                   IdleFadeChrome(child: _transport(player, song, isPlaying, isCurrent, accent)),
