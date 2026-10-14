@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 /// A loopback reverse-proxy with its own DNS resolution.
 ///
 /// Purpose: the device's system DNS can fail (intermittently or permanently)
@@ -37,6 +39,11 @@ class StreamProxy {
   /// main() before the first request. Healthy resolvers answer in tens of
   /// milliseconds; broken ones fail immediately (no health-check delay).
   static Future<void> checkDeviceDns() async {
+    if (kIsWeb) {
+      // The browser owns DNS on web — there is no device resolver to fix.
+      _dohEnabled = false;
+      return;
+    }
     try {
       final result =
           await InternetAddress.lookup('one.one.one.one').timeout(const Duration(seconds: 4));
