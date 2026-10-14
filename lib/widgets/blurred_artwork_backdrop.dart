@@ -442,8 +442,11 @@ class _BlurredPlatePainter extends CustomPainter {
       srcRect = Rect.fromLTWH(0, (image.height - cropH) / 2, image.width.toDouble(), cropH);
     }
     // Slightly transparent so the mesh beneath still contributes colour.
+    // Low quality on purpose: the source tile is pre-blurred, so upscale
+    // artifacts are invisible — and medium forced a full-screen HQ resample
+    // every frame, which janked weak GPUs (the freeze report).
     final paint = Paint()
-      ..filterQuality = FilterQuality.medium
+      ..filterQuality = FilterQuality.low
       ..color = Colors.white.withValues(alpha: 0.92);
     canvas.drawImageRect(image, srcRect, Offset.zero & size, paint);
   }
@@ -485,8 +488,11 @@ class _ColourWash extends StatelessWidget {
   }
 }
 
-/// The legibility layer: vertical gradient (darker top and bottom, where chrome
-/// and transport sit), a flat scrim, then a vignette.
+/// The legibility layer — built to MESH with the backdrop, not sit on it:
+/// one long vertical gradient (deep at the very top and bottom where chrome
+/// sits, fully clear through the middle so the artwork colours read), then a
+/// soft vignette. No flat darkening layer — a constant black overlay on top
+/// of a moving gradient is exactly what made the bars look glued on.
 class _Scrim extends StatelessWidget {
   final BlurBackdropStyle style;
 
@@ -495,37 +501,32 @@ class _Scrim extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLyrics = style == BlurBackdropStyle.lyrics;
-    final flat = isLyrics ? 0.40 : 0.16;
 
     return IgnorePointer(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: isLyrics ? 0.48 : 0.30),
-                  Colors.black.withValues(alpha: isLyrics ? 0.20 : 0.06),
-                  kSurfaceColor.withValues(alpha: isLyrics ? 0.84 : 0.88),
-                ],
-                stops: isLyrics ? const [0.0, 0.40, 1.0] : const [0.0, 0.45, 1.0],
-              ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withValues(alpha: isLyrics ? 0.52 : 0.38),
+              Colors.black.withValues(alpha: 0.0),
+              Colors.black.withValues(alpha: 0.0),
+              Colors.black.withValues(alpha: isLyrics ? 0.42 : 0.30),
+              kSurfaceColor.withValues(alpha: isLyrics ? 0.86 : 0.84),
+            ],
+            stops: isLyrics ? const [0.0, 0.30, 0.42, 0.80, 1.0] : const [0.0, 0.26, 0.40, 0.82, 1.0],
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              radius: 1.0,
+              colors: [Colors.transparent, isLyrics ? const Color(0x52000000) : const Color(0x42000000)],
+              stops: isLyrics ? const [0.55, 1.0] : const [0.60, 1.0],
             ),
           ),
-          ColoredBox(color: Colors.black.withValues(alpha: flat)),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                radius: 0.95,
-                colors: [Colors.transparent, isLyrics ? const Color(0x59000000) : const Color(0x4D000000)],
-                stops: isLyrics ? const [0.50, 1.0] : const [0.55, 1.0],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

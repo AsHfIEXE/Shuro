@@ -387,7 +387,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // faded down for the previous crossfade sticks on everything after it.
     _fadingOut = false;
     unawaited(_applyPlaybackTweaks(song));
-    unawaited(_slideNativeWindow(appIndex));
     onTrackStarted?.call(song);
     notifyListeners();
   }
@@ -578,9 +577,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // Native queue window: load the current song plus a margin around it
       // as one playlist — NOT the whole queue. Resolving thousands of audio
       // sources before the first note was the multi-second "tap → sound"
-      // delay on big libraries. The window slides at runtime (see
-      // [_slideNativeWindow]) so the system notification keeps prev/next and
-      // playback stays gapless. Small queues load whole.
+      // delay on big libraries. A jump outside the window rebuilds it
+      // around the target (still fast — ~28 resolutions), so the notification
+      // keeps prev/next without ever mutating the live playlist. Small queues
+      // load whole.
       var loadedNatively = false;
       if (_queue.length > 1) {
         try {
@@ -795,7 +795,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       if (native != null) {
         try {
           await _audioPlayer.seek(Duration.zero, index: native);
-          unawaited(_slideNativeWindow(nextIndex));
           return;
         } catch (_) {
           // Fall through to the full reload.
@@ -837,7 +836,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         try {
           await _audioPlayer.seek(Duration.zero, index: native);
           if (startAt != null && startAt > Duration.zero) await _audioPlayer.seek(startAt);
-          unawaited(_slideNativeWindow(index));
           return;
         } catch (_) {
           // Fall through to the full reload.
@@ -1092,89 +1090,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         artUri: meta?.artUri,
       );
 
-  /// Slides the native window so the playhead never runs off the loaded
-  /// edge — runtime insert/remove on the live playlist, which does not
-  /// interrupt playback (that's the point of the window: gapless keeps
-  /// working on huge queues). Failures are harmless: an out-of-window jump
-  /// simply rebuilds via [_jumpTo].
-  Future<void> _slideNativeWindow(int appIndex) async {
-    // One slide at a time: two concurrent slides would interleave inserts and
-    // removes against stale id lists and corrupt the window state.
-    if (_windowSliding) return;
-    _windowSliding = true;
-    try {
-      await _slideNativeWindowLocked(appIndex);
-    } finally {
-      _windowSliding = false;
-    }
-  }
-
-  bool _windowSliding = false;
-
-  Future<void> _slideNativeWindowLocked(int appIndex) async {
-    final source = _nativeSource;
-    final ids = _nativeQueueIds;
-    if (source == null || ids == null || _queue.length <= _kNativeWindowFullLimit) return;
-    try {
-      final native = _nativeIndexOf(appIndex);
-      if (native == null) return;
-      final windowStartApp = appIndex - native; // app index of ids.first
-
-      // Append ahead when the playhead nears the tail.
-      if (native >= ids.length - 6) {
-        var appended = 0;
-        for (var i = windowStartApp + ids.length; i < _queue.length && appended < _kNativeWindowAfter; i++) {
-          final qSong = _queue[i];
-          final qSource = audioSourceResolver?.call(qSong);
-          if (qSource == null) break;
-          await source.insert(
-            ids.length,
-            (qSource.startsWith('http://') || qSource.startsWith('https://'))
-                ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, metadataResolver?.call(qSong)))
-                : AudioSource.file(qSource, tag: _mediaItemFor(qSong, metadataResolver?.call(qSong))),
-          );
-          ids.add(qSong.id);
-          appended++;
-        }
-        // Trim the head so the window stays bounded — never the playing side.
-        // Null-safe: a race already dropped the playhead id → stop trimming.
-        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter) {
-          final nativeNow = _nativeIndexOf(appIndex);
-          if (nativeNow == null || nativeNow <= _kNativeWindowBefore) break;
-          await source.removeAt(0);
-          ids.removeAt(0);
-        }
-        return;
-      }
-
-      // Prepend behind when the playhead nears the head.
-      if (native <= 5 && windowStartApp > 0) {
-        var prepended = 0;
-        for (var i = windowStartApp - 1; i >= 0 && prepended < _kNativeWindowBefore; i--) {
-          final qSong = _queue[i];
-          final qSource = audioSourceResolver?.call(qSong);
-          if (qSource == null) break;
-          await source.insert(
-            0,
-            (qSource.startsWith('http://') || qSource.startsWith('https://'))
-                ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, metadataResolver?.call(qSong)))
-                : AudioSource.file(qSource, tag: _mediaItemFor(qSong, metadataResolver?.call(qSong))),
-          );
-          ids.insert(0, qSong.id);
-          prepended++;
-        }
-        // Trim the tail.
-        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter) {
-          final nativeNow = _nativeIndexOf(appIndex);
-          if (nativeNow == null || nativeNow >= ids.length - 1 - _kNativeWindowAfter) break;
-          await source.removeAt(ids.length - 1);
-          ids.removeLast();
-        }
-      }
-    } catch (_) {
-      // Window slide failed: the next out-of-window jump rebuilds cleanly.
-    }
-  }
 
   /// Restores a queue and position saved from a previous session —
   /// Settings → Behavior → "Remember queue"/"Resume playback". Loads
