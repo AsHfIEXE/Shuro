@@ -588,8 +588,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           final windowStart = whole
               ? 0
               : (clamped - _kNativeWindowBefore)
-                  .clamp(0, math.max(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter)));
-          final windowEnd = whole ? _queue.length : math.min(_queue.length, windowStart + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
+                  .clamp(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter))
+                  .toInt();
+          final windowEnd = whole
+              ? _queue.length
+              : min(_queue.length, windowStart + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
           final children = <AudioSource>[];
           final windowIds = <String>[];
           var playheadNative = -1;
