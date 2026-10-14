@@ -327,8 +327,8 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
       );
     }
 
-    punchEdges(const Offset(-tileW / 2, 0), const Offset(tileW / 2, 0));
-    punchEdges(const Offset(0, -tileH / 2), const Offset(0, tileH / 2));
+    punchEdges(Offset(-tileW / 2, 0), Offset(tileW / 2, 0));
+    punchEdges(Offset(0, -tileH / 2), Offset(0, tileH / 2));
     final picture = recorder.endRecording();
     final image = await picture.toImage(tileW.toInt(), tileH.toInt());
     return image;
@@ -371,9 +371,6 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
                 scale: 1.16 + breathe,
                 child: CustomPaint(
                   painter: _BlurredPlatePainter(image: _blurredImage!),
-                ),
-              ),
-                  ),
                 ),
               ),
           ],
