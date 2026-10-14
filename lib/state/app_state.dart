@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../backend/music_repository.dart';
 import '../backend/navidrome_music_repository.dart';
+import '../services/library_cache.dart';
 import '../models/album.dart';
 import '../models/artist.dart';
 import '../models/artwork_style.dart';
@@ -153,14 +154,20 @@ class AppState extends ChangeNotifier {
       // to persist the folder paths and re-scan them, not the songs
       // themselves.
       final folders = persistence.getStringList(_kLocalFoldersKey);
+      // Off the critical path: folder rescans are disk I/O over possibly
+      // large trees — they no longer delay the server reconnect. The local
+      // library list fills in as each scan finishes (notifyListeners per
+      // folder keeps the UI live).
       for (final folder in folders) {
-        try {
-          await _rescanFolder(folder);
-          if (!localFolderPaths.contains(folder)) localFolderPaths.add(folder);
-        } catch (_) {
-          // Folder moved/unmounted/permission revoked since last launch —
-          // drop it silently rather than block the rest of startup.
-        }
+        unawaited(() async {
+          try {
+            await _rescanFolder(folder);
+            if (!localFolderPaths.contains(folder)) localFolderPaths.add(folder);
+          } catch (_) {
+            // Folder moved/unmounted/permission revoked since last launch —
+            // drop it silently rather than block the rest of startup.
+          }
+        }());
       }
 
       final serversJson = persistence.getString(_kServersKey);
@@ -376,6 +383,23 @@ class AppState extends ChangeNotifier {
   MusicRepository? _repository;
   MusicLibrarySnapshot _librarySnapshot = MusicLibrarySnapshot.empty;
 
+  /// True while a fresh library fetch is running (either first connect or
+  /// background revalidate). Skeletons key off this instead of fake timers.
+  bool isSyncingLibrary = false;
+
+  /// True while the visible library came from the disk cache and the fresh
+  /// fetch is still in flight (or has failed) — cached data stays browsable.
+  bool libraryFromCache = false;
+
+  /// True when the last connect failed AND the cached library is what's on
+  /// screen — offline browsing. Server streaming comes back with the server.
+  bool libraryOffline = false;
+
+  /// Server-side lastScan timestamp recorded with the cached snapshot.
+  /// Compared against getScanStatus before a full re-fetch: unchanged scan
+  /// means unchanged library, so the fetch is skipped entirely.
+  int? _cachedLastScan;
+
   ServerConfig? get activeServer {
     if (activeServerId == null) return null;
     for (final s in servers) {
@@ -403,6 +427,25 @@ class AppState extends ChangeNotifier {
     connectionErrorMessage = null;
     notifyListeners();
 
+    // Cache-first: for an already-saved server, paint its cached library
+    // IMMEDIATELY — launch stops waiting on the network for the first screen.
+    // The validation + connect + full fetch below then swaps in fresh data
+    // (and rewrites the cache). A first-time connect has no cache by
+    // definition (the server isn't in [servers] yet).
+    if (draft.id.isNotEmpty && servers.any((s) => s.id == draft.id)) {
+      final cached = await LibraryCache.load(draft.id);
+      if (cached != null) {
+        _librarySnapshot = cached.snapshot;
+        _cachedLastScan = cached.lastScan;
+        activeServerId = draft.id;
+        libraryFromCache = true;
+        libraryOffline = false;
+        connectionStatus = ConnectionStatus.connected;
+        connectionErrorMessage = null;
+        notifyListeners();
+      }
+    }
+
     final url = draft.url.trim();
     if (url.isEmpty || !(url.startsWith('http://') || url.startsWith('https://'))) {
       connectionStatus = ConnectionStatus.unreachable;
@@ -420,6 +463,8 @@ class AppState extends ChangeNotifier {
     final repository = NavidromeMusicRepository(baseUrl: url, username: draft.username, password: draft.password);
     try {
       await repository.connect();
+      isSyncingLibrary = true;
+      notifyListeners();
       final snapshot = await repository.fetchLibrary();
 
       // Only swap in the new repository/snapshot once both steps above
@@ -441,19 +486,39 @@ class AppState extends ChangeNotifier {
       activeServerId = id;
       connectionStatus = ConnectionStatus.connected;
       connectionErrorMessage = null;
+      libraryFromCache = false;
+      libraryOffline = false;
+      isSyncingLibrary = false;
+      if (id.isNotEmpty) unawaited(LibraryCache.save(id, snapshot, lastScan: _cachedLastScan));
       unawaited(_persistServers());
     } on MusicRepositoryException catch (e) {
       repository.dispose();
-      connectionStatus = switch (e.kind) {
-        MusicRepositoryFailure.invalidCredentials => ConnectionStatus.invalidCredentials,
-        MusicRepositoryFailure.unreachable => ConnectionStatus.unreachable,
-        MusicRepositoryFailure.unknown => ConnectionStatus.unreachable,
-      };
-      connectionErrorMessage = e.message;
+      isSyncingLibrary = false;
+      if (libraryFromCache) {
+        // Cached library stays up: offline browsing, downloads and local
+        // files all work; server streaming returns with the server.
+        libraryOffline = true;
+        connectionStatus = ConnectionStatus.connected;
+        connectionErrorMessage = null;
+      } else {
+        connectionStatus = switch (e.kind) {
+          MusicRepositoryFailure.invalidCredentials => ConnectionStatus.invalidCredentials,
+          MusicRepositoryFailure.unreachable => ConnectionStatus.unreachable,
+          MusicRepositoryFailure.unknown => ConnectionStatus.unreachable,
+        };
+        connectionErrorMessage = e.message;
+      }
     } catch (e) {
       repository.dispose();
-      connectionStatus = ConnectionStatus.unreachable;
-      connectionErrorMessage = "Couldn't reach that server. Check the URL and try again.";
+      isSyncingLibrary = false;
+      if (libraryFromCache) {
+        libraryOffline = true;
+        connectionStatus = ConnectionStatus.connected;
+        connectionErrorMessage = null;
+      } else {
+        connectionStatus = ConnectionStatus.unreachable;
+        connectionErrorMessage = "Couldn't reach that server. Check the URL and try again.";
+      }
     }
     notifyListeners();
   }
@@ -479,11 +544,37 @@ class AppState extends ChangeNotifier {
     final repository = _repository;
     if (repository == null) return;
     try {
+      // Change detection: when the server reports its last scan unchanged
+      // since the cached snapshot, the library is unchanged — skip the full
+      // fetch (one getAlbum per album) entirely.
+      try {
+        final scanInfo = await repository.getScanStatus();
+        final remote = scanInfo.lastScan?.millisecondsSinceEpoch;
+        if (remote != null && _cachedLastScan != null && remote == _cachedLastScan) {
+          libraryOffline = false;
+          return;
+        }
+        if (remote != null) _cachedLastScan = remote;
+      } catch (_) {
+        // Server without getScanStatus (older Navidrome): fall through to the
+        // full fetch — change detection is an optimisation, not a gate.
+      }
+      isSyncingLibrary = true;
+      notifyListeners();
       final snapshot = await repository.fetchLibrary();
       _librarySnapshot = snapshot;
+      libraryFromCache = false;
+      libraryOffline = false;
+      final serverId = activeServerId;
+      if (serverId != null && serverId.isNotEmpty) {
+        unawaited(LibraryCache.save(serverId, snapshot, lastScan: _cachedLastScan));
+      }
+      isSyncingLibrary = false;
       notifyListeners();
     } catch (_) {
+      isSyncingLibrary = false;
       // Transient network hiccup — keep showing the last good snapshot.
+      notifyListeners();
     }
   }
 
