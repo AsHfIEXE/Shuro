@@ -169,16 +169,16 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// Embedded lyrics (the server extracted them from the file's own tags) are
   /// tried first: they're as real as any online lookup, need no fuzzy match
   /// against a title, and are usually the version the tagger synced by hand.
-  /// LRCLIB only runs when that comes back empty.
+  /// LRCLIB runs whenever that comes back empty — including when the server
+  /// answers with a structured-but-empty result ("looked, found nothing"):
+  /// only REAL lines short-circuit the online lookup. Local files go through
+  /// the same path: their tags (filled by the local tag enrichment) are real
+  /// metadata, so a tagged import gets LRCLIB too, and an untagged one simply
+  /// ends at the not-found state.
   Future<_LyricsView> _load(Song song) async {
-    if (song.isLocal) {
-      // A local import's "artist" is the placeholder "Local file" — there is
-      // nothing honest to look up, so say so instead of searching by garbage.
-      return const _LyricsView.miss(null, detail: "Local imports don't carry the artist/title metadata lyrics lookups need.");
-    }
     try {
       final embedded = await _appState.fetchEmbeddedLyrics(song);
-      if (embedded != null) {
+      if (embedded != null && embedded.lines.isNotEmpty) {
         return _LyricsView.found(embedded);
       }
     } catch (_) {
