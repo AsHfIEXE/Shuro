@@ -380,20 +380,22 @@ class NowPlayingScreen extends StatelessWidget {
                     builder: (context, columnConstraints) => SingleChildScrollView(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(minHeight: columnConstraints.maxHeight),
+                        // One centered, cohesive player group: ring, time,
+                        // title, controls. The old spaceBetween pinned the ring
+                        // to the top and controls to the bottom, hollowing out
+                        // the middle on large screens.
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // The ring is the progress display on this screen (like
-                            // portrait) — the separate linear bar under it was
-                            // removed as duplicate clutter.
                             _ring(context, player, song, progress, colors, 'artwork_${song.id}', artworkSize),
+                            SizedBox(height: compact ? 14 : 30),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _TimesRow(position: position, total: total, format: _formatDuration),
-                                  SizedBox(height: compact ? 8 : 18),
+                                  SizedBox(height: compact ? 8 : 14),
                                   // Title + artist stay visible in landscape
                                   // too — only the controls dissolve.
                                   _TrackTitleBlock(
@@ -405,7 +407,7 @@ class NowPlayingScreen extends StatelessWidget {
                                     onShuffleToggle: player.toggleShuffle,
                                     onRepeatToggle: player.cycleRepeatMode,
                                   ),
-                                  SizedBox(height: compact ? 6 : 16),
+                                  SizedBox(height: compact ? 6 : 14),
                                   _transport(player, song, isPlaying, isCurrent, accent),
                                 ],
                               ),
