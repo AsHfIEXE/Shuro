@@ -234,6 +234,13 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
 
   void _resolveArtwork() {
     _generation++;
+    if (kIsWeb) {
+      // CanvasKit's offscreen toImage + blur-bake leaves edge streaks/caps on
+      // the web renderer — the mesh-gradient backdrop alone is used there.
+      // (Android keeps the full artwork-plate design.)
+      if (_blurredImage != null) setState(() => _blurredImage = null);
+      return;
+    }
     if (_imageListener != null) {
       _imageStream?.removeListener(_imageListener!);
       _imageListener = null;

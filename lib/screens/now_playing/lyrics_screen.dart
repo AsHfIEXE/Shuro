@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter, TileMode;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -595,17 +596,25 @@ class _LyricsLineView extends StatelessWidget {
     // BLURS. The extra inner padding gives the blur room to fade inside the
     // filtered bounds — without it the filter clips at the line box and every
     // blurred line gets sharp edges above and below (seen in landscape).
+    // On web the per-line ImageFiltered renders as black-box/smear artifacts
+    // on CanvasKit (and stacks one layer per line) — lines dim via opacity
+    // there instead, which reads almost identically.
     final Widget painted = (!isCurrent && !dimmed)
-        ? ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2, tileMode: TileMode.decal),
-              child: Padding(
+        ? (kIsWeb
+            ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                child: content,
-              ),
-            ),
-          )
+                child: Opacity(opacity: 0.42, child: content),
+              )
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2, tileMode: TileMode.decal),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                    child: content,
+                  ),
+                ),
+              ))
         : Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: content,
