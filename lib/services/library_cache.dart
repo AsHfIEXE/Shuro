@@ -10,11 +10,14 @@ import '../models/artist.dart';
 import '../models/audio_info.dart';
 import '../models/song.dart';
 
-/// A saved server library: the [MusicLibrarySnapshot] plus when it was saved.
+/// A saved server library: the [MusicLibrarySnapshot] plus when it was saved
+/// and the server-side scan generation it was taken at ([lastScan], when the
+/// server reports one — used to skip re-fetching an unchanged library).
 class CachedLibrary {
   final MusicLibrarySnapshot snapshot;
   final DateTime savedAt;
-  const CachedLibrary({required this.snapshot, required this.savedAt});
+  final int? lastScan;
+  const CachedLibrary({required this.snapshot, required this.savedAt, this.lastScan});
 }
 
 /// Whole-library disk cache, one JSON file per server id.
@@ -74,19 +77,22 @@ class LibraryCache {
       return CachedLibrary(
         snapshot: snapshot,
         savedAt: DateTime.tryParse(map['savedAt'] as String? ?? '') ?? DateTime.now(),
+        lastScan: map['lastScan'] as int?,
       );
     } catch (_) {
       return null;
     }
   }
 
-  /// Persists [snapshot] for [serverId]. Never throws.
-  static Future<void> save(String serverId, MusicLibrarySnapshot snapshot) async {
+  /// Persists [snapshot] for [serverId]. [lastScan] is the server-side scan
+  /// generation (epoch ms) to compare against next launch. Never throws.
+  static Future<void> save(String serverId, MusicLibrarySnapshot snapshot, {int? lastScan}) async {
     try {
       final file = await _fileFor(serverId);
       await file.writeAsString(jsonEncode({
         'v': _formatVersion,
         'savedAt': DateTime.now().toIso8601String(),
+        'lastScan': lastScan,
         'library': _snapshotToJson(snapshot),
       }), flush: true);
     } catch (_) {

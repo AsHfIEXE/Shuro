@@ -18,6 +18,7 @@ import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/playback_controls.dart';
 import '../../widgets/song_actions_sheet.dart';
+import '../../widgets/up_next_list.dart';
 import 'audio_info_sheet.dart';
 import 'lyrics_screen.dart';
 import 'queue_screen.dart';
@@ -436,7 +437,14 @@ class NowPlayingScreen extends StatelessWidget {
                         // Top padding keeps the first lyric lines clear of the
                         // header and its scrim, which previously cut through them.
                         padding: EdgeInsets.only(left: 28, right: 28, top: compact ? 12 : 28),
-                        child: LyricsScreen(initialSong: song, embedded: true),
+                        // With no lyrics to show, the pane falls back to the
+                        // Up Next list — real content instead of a dark void
+                        // (the TV-width "empty half" report).
+                        child: LyricsScreen(
+                          initialSong: song,
+                          embedded: true,
+                          embeddedFallback: const UpNextList(),
+                        ),
                       ),
                     ),
                     Positioned(
