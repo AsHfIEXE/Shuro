@@ -58,13 +58,31 @@ final ScrobbleService sharedScrobbleService = ScrobbleService();
 /// shell appeared. With saved servers the app now shows a branded "connecting"
 /// screen instead, and if the reconnect genuinely fails it says so and offers a
 /// way forward, rather than silently presenting first-run onboarding.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  /// Whether a terminal connection status has been observed at least once
+  /// this session. Until restore finishes, the status sits at `disconnected`/
+  /// `connecting` — showing Welcome at that moment flashed first-run onboarding
+  /// at returning users (the boot-sequence bug). Once any terminal status is
+  /// seen, the gate trusts statuses as-is.
+  bool _sawTerminalStatus = false;
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final status = appState.connectionStatus;
+    final terminal = status == ConnectionStatus.connected ||
+        status == ConnectionStatus.localOnly ||
+        status == ConnectionStatus.unreachable ||
+        status == ConnectionStatus.invalidCredentials;
+    if (terminal) _sawTerminalStatus = true;
+
     if (status == ConnectionStatus.connected || status == ConnectionStatus.localOnly) {
       // A connected server is the one moment server features get bound: the
       // feature API joins the provider tree, play reporting is wired, and
@@ -74,7 +92,8 @@ class AuthGate extends StatelessWidget {
       }
       return const AppShell();
     }
-    // Saved servers exist, so this is a reconnect rather than a first run.
+    // Saved servers + restore still in flight (or failed): restoring screen —
+    // never Welcome — until a terminal status has been seen.
     if (appState.servers.isNotEmpty) {
       return _RestoringScreen(appState: appState);
     }

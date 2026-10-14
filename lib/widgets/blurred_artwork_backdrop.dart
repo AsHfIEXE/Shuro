@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -76,7 +77,10 @@ class BlurredArtworkBackdrop extends StatelessWidget {
       children: [
         const ColoredBox(color: kSurfaceColor),
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
+          // Full-screen opacity layers on web/CanvasKit can exceed GPU
+          // texture limits at TV widths (black-region artifacts) — swap
+          // instantly there, crossfade everywhere else.
+          duration: kIsWeb ? Duration.zero : const Duration(milliseconds: 600),
           switchInCurve: Curves.easeInOut,
           switchOutCurve: Curves.easeInOut,
           layoutBuilder: (currentChild, previousChildren) => Stack(

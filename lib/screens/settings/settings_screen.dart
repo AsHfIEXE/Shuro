@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -342,7 +343,33 @@ class SettingsScreen extends StatelessWidget {
       }
     } catch (_) {}
 
-    // 3) Close. The next launch starts from the Welcome screen.
+    // 3) Restart. On Android the app closes — the next launch starts from the
+    //    Welcome screen. On web (Chrome testing) a page can't close itself, so
+    //    the data is cleared and the user reloads; the reload lands on the
+    //    fresh Welcome screen too.
+    if (kIsWeb) {
+      if (context.mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: kCardColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('App data cleared', style: GoogleFonts.getFont(currentFontFamily, color: kTextColor, fontWeight: FontWeight.w600)),
+            content: Text(
+              'Everything stored by Shuro was erased. Reload the page to start fresh.',
+              style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13.5, height: 1.45),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('OK', style: TextStyle(color: kBrandColor, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
     await SystemNavigator.pop();
   }
 
