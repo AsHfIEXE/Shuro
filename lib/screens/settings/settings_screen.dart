@@ -302,6 +302,7 @@ class SettingsScreen extends StatelessWidget {
   /// server itself is never touched. Then the app closes — the next launch
   /// lands on a fresh Welcome screen.
   Future<void> _confirmResetApp(BuildContext context) async {
+    final player = context.read<PlayerController>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -326,6 +327,11 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (confirmed != true) return;
+
+    // Stop playback FIRST: the audio service is a foreground service that
+    // outlives the activity — closing the app while it plays left the music
+    // running with no app attached (the reported reset bug).
+    await player.stopForExit();
 
     // 1) Preferences: the whole store — one clear covers servers, favorites,
     //    history, playlists, settings, saved queue and the downloads registry.

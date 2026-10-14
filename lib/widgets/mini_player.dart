@@ -79,8 +79,17 @@ class _MiniPlayerBar extends StatelessWidget {
         }
       },
       child: Container(
-        decoration: const BoxDecoration(
-          color: kCardColor,
+        // Palette-tinted: the bar quietly picks up the track's own colours —
+        // same design language as the NPV backdrop — over the base card color.
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              kCardColor,
+              Color.lerp(kCardColor, song.gradientColors.first, 0.22) ?? kCardColor,
+            ],
+          ),
           // No border of its own: the mini player lives INSIDE the nav bar's
           // rounded block now (see ShuroNavBar.header), so its own edges would
           // draw mismatched corners against the bar's.
@@ -88,7 +97,6 @@ class _MiniPlayerBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _SeekBar(player: player, song: song),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: wide ? 20 : 12, vertical: 8),
               child: Row(
@@ -152,6 +160,9 @@ class _MiniPlayerBar extends StatelessWidget {
                 ],
               ),
             ),
+            // The progress line is the bar's BASE EDGE — bottom, full-bleed —
+            // the classic mini-player read: content above, position below.
+            _SeekBar(player: player, song: song),
           ],
         ),
       ),
@@ -266,12 +277,26 @@ class _PlayPauseButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: isBuffering ? 'Loading' : (isPlaying ? 'Pause' : 'Play'),
-      child: IconButton(
-        tooltip: isPlaying ? 'Pause' : 'Play',
-        onPressed: onPressed,
-        icon: isBuffering
-            ? const SizedBox(width: 22, height: 22, child: Padding(padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70)))
-            : ShuroIcon(isPlaying ? ShuroGlyph.pause : ShuroGlyph.play, color: Colors.white, size: 28),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Container(
+          // Filled accent disc with a soft glow — the one anchored control on
+          // the bar; prev/next stay quiet beside it.
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: accent,
+            boxShadow: [
+              BoxShadow(color: accent.withValues(alpha: 0.45), blurRadius: 14, spreadRadius: 1),
+            ],
+          ),
+          child: IconButton(
+            tooltip: isPlaying ? 'Pause' : 'Play',
+            onPressed: onPressed,
+            icon: isBuffering
+                ? const SizedBox(width: 22, height: 22, child: Padding(padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
+                : ShuroIcon(isPlaying ? ShuroGlyph.pause : ShuroGlyph.play, color: Colors.white, size: 26),
+          ),
+        ),
       ),
     );
   }
