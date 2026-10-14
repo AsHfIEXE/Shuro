@@ -264,12 +264,17 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
   }
 
   /// Downscale + blur the artwork **once** into a small cached texture. The
-  /// sigma is scaled by the user's Background blur setting (halved here because
-  /// the tile is small — blur radii are relative to pixels, and 160 px is a
-  /// fraction of the screen).
+  /// sigma is scaled by the user's Background blur setting.
+  ///
+  /// Edge hygiene (the "sharp cut" fix): the art is drawn LARGER than the
+  /// canvas (overscan) before blurring, so the blur filter always has real
+  /// pixels to sample at the tile borders — clamped edge sampling is what
+  /// streaked into a hard rectangular cut, amplified by the tile→screen
+  /// upscale, and it was worst at low blur strengths. More overscan at heavier
+  /// blur (the filter reaches further out).
   Future<ui.Image> _blurredCopy(ui.Image source) async {
-    const tileW = 160.0;
-    final tileH = (tileW * source.height / source.width).clamp(1.0, 640.0);
+    const tileW = 240.0;
+    final tileH = (tileW * source.height / source.width).clamp(1.0, 960.0);
     // Cover-crop the source so the tile's aspect matches without distortion.
     final destAspect = tileW / tileH;
     final srcAspect = source.width / source.height;
@@ -287,15 +292,16 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, tileW, tileH));
+    final overscan = 1.30 + (sigma / 80.0).clamp(0.0, 1.0) * 0.40;
+    final drawn = Rect.fromCenter(
+      center: Offset(tileW / 2, tileH / 2),
+      width: tileW * overscan,
+      height: tileH * overscan,
+    );
     final paint = Paint()
       ..filterQuality = FilterQuality.medium
       ..imageFilter = ui.ImageFilter.blur(sigmaX: sigma * 0.5, sigmaY: sigma * 0.5, tileMode: ui.TileMode.clamp);
-    canvas.drawImageRect(
-      source,
-      srcRect,
-      Rect.fromLTWH(0, 0, tileW, tileH),
-      paint,
-    );
+    canvas.drawImageRect(source, srcRect, drawn, paint);
     final picture = recorder.endRecording();
     final image = await picture.toImage(tileW.toInt(), tileH.toInt());
     return image;
@@ -333,8 +339,40 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
                 // Breathing a *drawn texture* is the cheap part — this is what
                 // keeps the motion smooth where the old version stuttered.
                 scale: 1.16 + breathe,
-                child: CustomPaint(
-                  painter: _BlurredPlatePainter(image: _blurredImage!),
+                // The dissolve: the plate's alpha fades to zero toward every
+                // edge, so the artwork melds into the mesh gradient instead
+                // of ending at a boundary — smooth at ALL blur strengths,
+                // including near-sharp ones.
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (bounds) => ui.Gradient.linear(
+                    Offset(0, 0),
+                    Offset(0, bounds.height),
+                    [
+                      Colors.white.withValues(alpha: 0.0),
+                      Colors.white.withValues(alpha: 1.0),
+                      Colors.white.withValues(alpha: 1.0),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                    const [0.0, 0.16, 0.84, 1.0],
+                  ),
+                  child: ShaderMask(
+                    blendMode: BlendMode.dstIn,
+                    shaderCallback: (bounds) => ui.Gradient.linear(
+                      Offset.zero,
+                      Offset(bounds.width, 0),
+                      [
+                        Colors.white.withValues(alpha: 0.0),
+                        Colors.white.withValues(alpha: 1.0),
+                        Colors.white.withValues(alpha: 1.0),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                      const [0.0, 0.16, 0.84, 1.0],
+                    ),
+                    child: CustomPaint(
+                      painter: _BlurredPlatePainter(image: _blurredImage!),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -407,7 +445,7 @@ class _BlurredPlatePainter extends CustomPainter {
     }
     // Slightly transparent so the mesh beneath still contributes colour.
     final paint = Paint()
-      ..filterQuality = FilterQuality.low
+      ..filterQuality = FilterQuality.medium
       ..color = Colors.white.withValues(alpha: 0.92);
     canvas.drawImageRect(image, srcRect, Offset.zero & size, paint);
   }
