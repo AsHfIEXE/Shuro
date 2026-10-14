@@ -1098,6 +1098,20 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// working on huge queues). Failures are harmless: an out-of-window jump
   /// simply rebuilds via [_jumpTo].
   Future<void> _slideNativeWindow(int appIndex) async {
+    // One slide at a time: two concurrent slides would interleave inserts and
+    // removes against stale id lists and corrupt the window state.
+    if (_windowSliding) return;
+    _windowSliding = true;
+    try {
+      await _slideNativeWindowLocked(appIndex);
+    } finally {
+      _windowSliding = false;
+    }
+  }
+
+  bool _windowSliding = false;
+
+  Future<void> _slideNativeWindowLocked(int appIndex) async {
     final source = _nativeSource;
     final ids = _nativeQueueIds;
     if (source == null || ids == null || _queue.length <= _kNativeWindowFullLimit) return;
@@ -1123,7 +1137,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           appended++;
         }
         // Trim the head so the window stays bounded — never the playing side.
-        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter && _nativeIndexOf(appIndex)! > _kNativeWindowBefore) {
+        // Null-safe: a race already dropped the playhead id → stop trimming.
+        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter) {
+          final nativeNow = _nativeIndexOf(appIndex);
+          if (nativeNow == null || nativeNow <= _kNativeWindowBefore) break;
           await source.removeAt(0);
           ids.removeAt(0);
         }
@@ -1147,7 +1164,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           prepended++;
         }
         // Trim the tail.
-        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter && _nativeIndexOf(appIndex)! < ids.length - 1 - _kNativeWindowAfter) {
+        while (ids.length > _kNativeWindowBefore + 1 + _kNativeWindowAfter) {
+          final nativeNow = _nativeIndexOf(appIndex);
+          if (nativeNow == null || nativeNow >= ids.length - 1 - _kNativeWindowAfter) break;
           await source.removeAt(ids.length - 1);
           ids.removeLast();
         }

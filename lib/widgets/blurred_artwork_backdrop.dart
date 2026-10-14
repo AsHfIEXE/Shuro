@@ -302,6 +302,33 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
       ..filterQuality = FilterQuality.medium
       ..imageFilter = ui.ImageFilter.blur(sigmaX: sigma * 0.5, sigmaY: sigma * 0.5, tileMode: ui.TileMode.clamp);
     canvas.drawImageRect(source, srcRect, drawn, paint);
+
+    // Bake the edge dissolve INTO the texture: dstOut with edge gradients
+    // erases the plate toward its borders so it melds into the mesh with no
+    // visible boundary — at every blur strength, including near-sharp ones.
+    // Once per track, instead of per-frame ShaderMasks (see the build method).
+    void punchEdges(Offset begin, Offset end) {
+      final rect = Offset.zero & Size(tileW, tileH);
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..blendMode = BlendMode.dstOut
+          ..shader = ui.Gradient.linear(
+            Offset(rect.center.dx + begin.dx, rect.center.dy + begin.dy),
+            Offset(rect.center.dx + end.dx, rect.center.dy + end.dy),
+            const [
+              Color(0xFFFFFFFF),
+              Color(0x00000000),
+              Color(0x00000000),
+              Color(0xFFFFFFFF),
+            ],
+            const [0.0, 0.22, 0.78, 1.0],
+          ),
+      );
+    }
+
+    punchEdges(const Offset(-tileW / 2, 0), const Offset(tileW / 2, 0));
+    punchEdges(const Offset(0, -tileH / 2), const Offset(0, tileH / 2));
     final picture = recorder.endRecording();
     final image = await picture.toImage(tileW.toInt(), tileH.toInt());
     return image;
@@ -336,42 +363,16 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
             ),
             if (showPlate)
               Transform.scale(
-                // Breathing a *drawn texture* is the cheap part — this is what
-                // keeps the motion smooth where the old version stuttered.
+                // Breathing a *drawn texture* is the cheap part. The edge
+                // dissolve is baked into the tile itself (see _blurredCopy),
+                // so no runtime ShaderMask sits here: two full-screen
+                // saveLayers per frame janked weak GPUs into the "UI frozen
+                // while music plays" report.
                 scale: 1.16 + breathe,
-                // The dissolve: the plate's alpha fades to zero toward every
-                // edge, so the artwork melds into the mesh gradient instead
-                // of ending at a boundary — smooth at ALL blur strengths,
-                // including near-sharp ones.
-                child: ShaderMask(
-                  blendMode: BlendMode.dstIn,
-                  shaderCallback: (bounds) => ui.Gradient.linear(
-                    Offset(0, 0),
-                    Offset(0, bounds.height),
-                    [
-                      Colors.white.withValues(alpha: 0.0),
-                      Colors.white.withValues(alpha: 1.0),
-                      Colors.white.withValues(alpha: 1.0),
-                      Colors.white.withValues(alpha: 0.0),
-                    ],
-                    const [0.0, 0.16, 0.84, 1.0],
-                  ),
-                  child: ShaderMask(
-                    blendMode: BlendMode.dstIn,
-                    shaderCallback: (bounds) => ui.Gradient.linear(
-                      Offset.zero,
-                      Offset(bounds.width, 0),
-                      [
-                        Colors.white.withValues(alpha: 0.0),
-                        Colors.white.withValues(alpha: 1.0),
-                        Colors.white.withValues(alpha: 1.0),
-                        Colors.white.withValues(alpha: 0.0),
-                      ],
-                      const [0.0, 0.16, 0.84, 1.0],
-                    ),
-                    child: CustomPaint(
-                      painter: _BlurredPlatePainter(image: _blurredImage!),
-                    ),
+                child: CustomPaint(
+                  painter: _BlurredPlatePainter(image: _blurredImage!),
+                ),
+              ),
                   ),
                 ),
               ),

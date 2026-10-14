@@ -133,7 +133,13 @@ class NowPlayingScreen extends StatelessWidget {
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= kNowPlayingWideBreakpoint;
+                    // Two-pane on tablets/desktop (>=1024) AND on landscape
+                    // phones (wider than tall, >=600 wide) — a phone rotated
+                    // sideways used to get the portrait stack, which cramped
+                    // into its scroll fallback with a 160 px ring; the split
+                    // layout is the correct landscape composition at any size.
+                    final wide = constraints.maxWidth >= kNowPlayingWideBreakpoint ||
+                        (constraints.maxWidth > constraints.maxHeight && constraints.maxWidth >= 600);
                     final body = wide
                         ? _wideLayout(
                             context: context,
@@ -314,13 +320,17 @@ class NowPlayingScreen extends StatelessWidget {
     required AppState appState,
     required PlayerController player,
   }) {
+    // Compact tuning for short windows (landscape phones: ~360 dp tall) —
+    // the tablet proportions would overflow into the scroll fallback,
+    // which is exactly the cramped landscape look this layout replaces.
+    final compact = constraints.maxHeight < 520;
     // Sized from the *shorter* axis AND constrained by its own column width —
     // on short landscape windows the height factor alone let the ring grow
     // past the column and clip at the screen edge (the reported screenshot).
-    final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - 56);
+    final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
     final artworkSize = math
-        .min(math.min(constraints.maxHeight * 0.44, columnWidth), 340.0)
-        .clamp(160.0, 340.0);
+        .min(math.min(constraints.maxHeight * (compact ? 0.46 : 0.44), columnWidth), compact ? 260.0 : 340.0)
+        .clamp(160.0, compact ? 260.0 : 340.0);
 
     return Column(
       children: [
@@ -346,7 +356,7 @@ class NowPlayingScreen extends StatelessWidget {
               Expanded(
                 flex: 5,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 4, 28, 18),
+                  padding: EdgeInsets.fromLTRB(compact ? 20 : 28, 2, compact ? 20 : 28, compact ? 8 : 18),
                   // LayoutBuilder + scroll fallback: at normal sizes the column
                   // is spaceBetween (artwork up top, controls at the bottom,
                   // nothing clipped — the reported bug); on an unusually short
@@ -368,7 +378,7 @@ class NowPlayingScreen extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IdleFadeChrome(child: _TimesRow(position: position, total: total, format: _formatDuration)),
-                                  const SizedBox(height: 18),
+                                  SizedBox(height: compact ? 8 : 18),
                                   IdleFadeChrome(
                                     child: _TrackTitleBlock(
                                       song: song,
@@ -380,7 +390,7 @@ class NowPlayingScreen extends StatelessWidget {
                                       onRepeatToggle: player.cycleRepeatMode,
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
+                                  SizedBox(height: compact ? 6 : 16),
                                   IdleFadeChrome(child: _transport(player, song, isPlaying, isCurrent, accent)),
                                 ],
                               ),
@@ -421,7 +431,7 @@ class NowPlayingScreen extends StatelessWidget {
                       child: Padding(
                         // Top padding keeps the first lyric lines clear of the
                         // header and its scrim, which previously cut through them.
-                        padding: const EdgeInsets.only(left: 28, right: 28, top: 28),
+                        padding: EdgeInsets.only(left: 28, right: 28, top: compact ? 12 : 28),
                         child: LyricsScreen(initialSong: song, embedded: true),
                       ),
                     ),
