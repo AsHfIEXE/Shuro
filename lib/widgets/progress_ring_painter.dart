@@ -10,10 +10,15 @@ class ProgressRingPainter extends CustomPainter {
   final List<Color> gradientColors;
   final double strokeWidth;
 
+  /// While the user is dragging the knob it grows and its glow strengthens —
+  /// the seek control answers the touch instead of staying inert.
+  final bool scrubbing;
+
   ProgressRingPainter({
     required this.progress,
     required this.gradientColors,
     this.strokeWidth = 4,
+    this.scrubbing = false,
   });
 
   static const double _startAngle = math.pi / 2; // bottom of the circle
@@ -65,19 +70,42 @@ class ProgressRingPainter extends CustomPainter {
       center.dx + radius * math.cos(knobAngle),
       center.dy + radius * math.sin(knobAngle),
     );
-    canvas.drawCircle(knobOffset, strokeWidth * 2.4, Paint()..color = gradientColors.last);
+
+    // The knob, bottom → top: drop shadow (lifts it off ANY artwork, light
+    // or dark), accent glow (same visual language as the arc's glow), white
+    // disc, hairline rim. Scale + glow strengthen while scrubbing.
+    final knobRadius = strokeWidth * 2.0 * (scrubbing ? 1.22 : 1.0);
+    final accent = gradientColors.last;
+
     canvas.drawCircle(
       knobOffset,
-      strokeWidth * 2.4,
+      knobRadius,
       Paint()
-        ..color = Colors.white.withOpacity(0.9)
+        ..color = Colors.black.withValues(alpha: scrubbing ? 0.45 : 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawCircle(
+      knobOffset,
+      knobRadius * 1.75,
+      Paint()
+        ..color = accent.withValues(alpha: scrubbing ? 0.50 : 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+    );
+    canvas.drawCircle(knobOffset, knobRadius, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      knobOffset,
+      knobRadius,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.08)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = 1,
     );
   }
 
   @override
   bool shouldRepaint(covariant ProgressRingPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.gradientColors != gradientColors;
+    return oldDelegate.progress != progress ||
+        oldDelegate.gradientColors != gradientColors ||
+        oldDelegate.scrubbing != scrubbing;
   }
 }

@@ -29,6 +29,10 @@ class ArtworkRing extends StatelessWidget {
   /// track was reported as redundant clutter.
   final bool showProgress;
 
+  /// True while the user is dragging the knob — the painter grows the knob
+  /// and strengthens its glow so the seek control answers the touch.
+  final bool scrubbing;
+
   const ArtworkRing({
     super.key,
     required this.song,
@@ -37,6 +41,7 @@ class ArtworkRing extends StatelessWidget {
     this.size = 260,
     this.heroTag,
     this.showProgress = true,
+    this.scrubbing = false,
   });
 
   static const _innerRatio = 0.72;
@@ -102,7 +107,7 @@ class ArtworkRing extends StatelessWidget {
           if (showProgress)
             CustomPaint(
               size: Size(size, size),
-              painter: ProgressRingPainter(progress: progress, gradientColors: colors),
+              painter: ProgressRingPainter(progress: progress, gradientColors: colors, scrubbing: scrubbing),
             ),
           heroTag != null ? Hero(tag: heroTag!, child: artwork) : artwork,
         ],
