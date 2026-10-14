@@ -125,6 +125,28 @@ class NowPlayingScreen extends StatelessWidget {
                   cacheKey: song.id,
                 ),
               ),
+              // The right pane's darkening lives HERE, full-screen, so it is
+              // vertically uniform across the whole viewport — painting it
+              // inside the pane started abruptly at the header's bottom edge
+              // and drew a hard horizontal seam (reported on Android + web).
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.28),
+                          Colors.black.withValues(alpha: 0.45),
+                        ],
+                        stops: const [0.45, 0.72, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               SafeArea(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -403,27 +425,11 @@ class NowPlayingScreen extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withValues(alpha: 0.40),
-                                Colors.black.withValues(alpha: 0.55),
-                              ],
-                              stops: const [0.0, 0.38, 1.0],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
                       child: Padding(
                         // Top padding keeps the first lyric lines clear of the
                         // header and its scrim, which previously cut through them.
+                        // (The pane's own darkening gradient was removed — it
+                        // lives full-screen now, see the layer above SafeArea.)
                         padding: EdgeInsets.only(left: 28, right: 28, top: compact ? 12 : 28),
                         // With no lyrics to show, the pane falls back to the
                         // Up Next list — real content instead of a dark void

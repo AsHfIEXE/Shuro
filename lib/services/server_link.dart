@@ -85,6 +85,13 @@ class ServerLink {
 String friendlyConnectionError(String? raw) {
   final error = raw ?? '';
   final lower = error.toLowerCase();
+  if (lower.contains('failed to fetch')) {
+    // Web-only phrasing (the browser fetch() API). On web the BROWSER owns
+    // DNS — this is not the device-resolver problem; it is CORS or an
+    // origin/WAF block: a page on localhost asking a Cloudflare-proxied
+    // domain is frequently refused. The LAN address has no such gate.
+    return 'The browser blocked this request (CORS/origin policy). Cloudflare-proxied domains often refuse requests from a localhost page — in Chrome, connect with your LAN address (http://192.168.x.x:4533) instead, or use the Android app for the DDNS address.';
+  }
   if (lower.contains('failed host lookup') || lower.contains('no address associated') || lower.contains('unknownhost')) {
     return 'Your device could not look up that server name (DNS). DDNS names like yours often fail here while working in a browser: set this device DNS to 1.1.1.1 or 8.8.8.8, or use the local address (http://192.168.x.x:4533) while at home. — and note that some DDNS names only resolve inside your own network.';
   }
