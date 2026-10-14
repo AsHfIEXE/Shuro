@@ -471,20 +471,14 @@ class NowPlayingScreen extends StatelessWidget {
   // --- shared pieces --------------------------------------------------------
 
   Widget _ring(BuildContext context, PlayerController player, Song song, double progress, List<Color> colors, String heroTag, double size, {bool showProgress = true}) {
-    return GestureDetector(
-      onPanUpdate: (details) => _handleSeekDrag(player, details.localPosition, size),
-      onTapUp: (details) => _handleSeekDrag(player, details.localPosition, size),
-      child: ArtworkRing(
-        song: song,
-        progress: progress,
-        // The track's real artwork-derived palette (see ArtworkPaletteBuilder),
-        // not a single accent smeared into a gradient — the ring's own glow and
-        // placeholder artwork both read from it.
-        colors: colors,
-        size: size,
-        heroTag: heroTag,
-        showProgress: showProgress,
-      ),
+    return _ScrubbingRing(
+      player: player,
+      size: size,
+      song: song,
+      progress: progress,
+      colors: colors,
+      heroTag: heroTag,
+      showProgress: showProgress,
     );
   }
 
@@ -502,6 +496,72 @@ class NowPlayingScreen extends StatelessWidget {
       },
       onPrevious: player.previous,
       onNext: player.next,
+    );
+  }
+}
+
+/// The ring with its drag-to-seek gesture AND the scrubbing state: while a
+/// finger is down on the ring, the knob grows and its glow strengthens (see
+/// ProgressRingPainter.scrubbing) so the seek control visibly answers touch.
+class _ScrubbingRing extends StatefulWidget {
+  final PlayerController player;
+  final double size;
+  final Song song;
+  final double progress;
+  final List<Color> colors;
+  final String heroTag;
+  final bool showProgress;
+
+  const _ScrubbingRing({
+    required this.player,
+    required this.size,
+    required this.song,
+    required this.progress,
+    required this.colors,
+    required this.heroTag,
+    this.showProgress = true,
+  });
+
+  @override
+  State<_ScrubbingRing> createState() => _ScrubbingRingState();
+}
+
+class _ScrubbingRingState extends State<_ScrubbingRing> {
+  bool _scrubbing = false;
+
+  void _seekFrom(Offset localPosition) {
+    final center = Offset(widget.size / 2, widget.size / 2);
+    final dx = localPosition.dx - center.dx;
+    final dy = localPosition.dy - center.dy;
+    final theta = math.atan2(dy, dx);
+    var delta = theta - math.pi / 2;
+    while (delta < 0) {
+      delta += 2 * math.pi;
+    }
+    final progress = (delta / (2 * math.pi)).clamp(0.0, 1.0);
+    widget.player.seekToProgress(progress);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => setState(() => _scrubbing = true),
+      onPointerUp: (_) => setState(() => _scrubbing = false),
+      onPointerCancel: (_) => setState(() => _scrubbing = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) => _seekFrom(details.localPosition),
+        onTapUp: (details) => _seekFrom(details.localPosition),
+        child: ArtworkRing(
+          song: widget.song,
+          progress: widget.progress,
+          colors: widget.colors,
+          size: widget.size,
+          heroTag: widget.heroTag,
+          showProgress: widget.showProgress,
+          scrubbing: _scrubbing,
+        ),
+      ),
     );
   }
 }
