@@ -103,10 +103,13 @@ class CachingHttpClient implements HttpClient {
   final HttpClient inner;
 
   CachingHttpClient({required HttpClient inner}) : inner = inner {
-    // DoH-resolving connector on the underlying client: the proxy/image layer
-    // resolves names itself (system DNS first, public DoH as fallback), so
-    // cover art, API calls and streams all survive a broken device resolver.
-    inner.connectionFactory = connectResolvingDoh;
+    // DoH-resolving connector only when the device resolver is broken (the
+    // StreamProxy startup health check decides). On a healthy resolver the
+    // default connect path must stay untouched — it owns socket lifecycle
+    // through the TLS handshake, and replacing it broke HTTPS on emulators.
+    if (StreamProxy.dohEnabled) {
+      inner.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
+    }
   }
 
   @override

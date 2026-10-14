@@ -28,9 +28,15 @@ Future<void> main() async {
   // falls through to plain networking.
   HttpOverrides.global = CachingHttpOverrides();
 
+  // DNS health check BEFORE any request goes out: decides whether the DoH
+  // fallback connector engages this session. On a healthy device resolver it
+  // answers in milliseconds and the default (TLS-safe) connect path is kept;
+  // only a genuinely broken resolver gets the DoH treatment.
+  await StreamProxy.checkDeviceDns();
+
   // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
-  // forwarded with DoH-backed resolution, so playback survives device DNS
-  // failures for DDNS/server names.
+  // forwarded, so playback survives device DNS failures for DDNS/server
+  // names.
   unawaited(StreamProxy.start());
 
   // Deliberately non-fatal. This call is awaited before runApp, and it throws on
