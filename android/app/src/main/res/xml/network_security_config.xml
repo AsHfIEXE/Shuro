@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Explicit cleartext permission for self-hosted servers on plain HTTP
+     (LAN IPs, non-HTTPS setups). The usesCleartextTraffic manifest attribute
+     covers most builds; some OEM/emulator images only honor this config. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
