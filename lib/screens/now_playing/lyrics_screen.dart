@@ -608,7 +608,9 @@ class _LyricsLineView extends StatelessWidget {
             : ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2, tileMode: TileMode.decal),
+                  // Subtle: 0.8 keeps surrounding lines readable while the
+                  // sung line stays clearly the focus (2.2 was heavy).
+                  imageFilter: ImageFilter.blur(sigmaX: 0.8, sigmaY: 0.8, tileMode: TileMode.decal),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                     child: content,

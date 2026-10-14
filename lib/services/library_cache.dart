@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -18,6 +19,16 @@ class CachedLibrary {
   final DateTime savedAt;
   final int? lastScan;
   const CachedLibrary({required this.snapshot, required this.savedAt, this.lastScan});
+}
+
+/// Plain-data carrier for the background-isolate encode. The snapshot object
+/// itself is passed through (plain data: strings, numbers, colors, URLs —
+/// nothing with native handles), so the expensive jsonEncode happens off the
+/// UI isolate.
+class _SavePayload {
+  final MusicLibrarySnapshot snapshot;
+  final int? lastScan;
+  const _SavePayload(this.snapshot, this.lastScan);
 }
 
 /// Whole-library disk cache, one JSON file per server id.
@@ -70,7 +81,9 @@ class LibraryCache {
     try {
       final file = await _fileFor(serverId);
       if (!file.existsSync()) return null;
-      final map = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      // Decode off the UI isolate — a whole-library JSON (thousands of
+      // songs) stalled the main thread at launch (reported freeze).
+      final map = await compute(_decodeJson, await file.readAsString());
       if (map['v'] != _formatVersion) return null;
       final snapshot = _snapshotFromJson(map['library'] as Map<String, dynamic>);
       if (snapshot.songs.isEmpty) return null;
@@ -86,19 +99,26 @@ class LibraryCache {
 
   /// Persists [snapshot] for [serverId]. [lastScan] is the server-side scan
   /// generation (epoch ms) to compare against next launch. Never throws.
+  /// Encoding runs in a background isolate: a whole-library jsonEncode on
+  /// the UI thread stalled it for hundreds of ms at every connect/refresh.
   static Future<void> save(String serverId, MusicLibrarySnapshot snapshot, {int? lastScan}) async {
     try {
       final file = await _fileFor(serverId);
-      await file.writeAsString(jsonEncode({
-        'v': _formatVersion,
-        'savedAt': DateTime.now().toIso8601String(),
-        'lastScan': lastScan,
-        'library': _snapshotToJson(snapshot),
-      }), flush: true);
+      final json = await compute(_encodeJson, _SavePayload(snapshot, lastScan));
+      await file.writeAsString(json, flush: true);
     } catch (_) {
       // Cache write failed: nothing about the app depends on it.
     }
   }
+
+  static String _encodeJson(_SavePayload payload) => jsonEncode({
+        'v': _formatVersion,
+        'savedAt': DateTime.now().toIso8601String(),
+        'lastScan': payload.lastScan,
+        'library': _snapshotToJson(payload.snapshot),
+      });
+
+  static Map<String, dynamic> _decodeJson(String raw) => jsonDecode(raw) as Map<String, dynamic>;
 
   static Future<void> clear(String serverId) async {
     try {
