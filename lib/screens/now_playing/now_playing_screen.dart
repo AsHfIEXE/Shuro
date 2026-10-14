@@ -14,7 +14,6 @@ import '../../theme/dynamic_theme.dart';
 import '../../widgets/animated_favorite_icon.dart';
 import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
-import '../../widgets/idle_fade.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/playback_controls.dart';
@@ -105,22 +104,10 @@ class NowPlayingScreen extends StatelessWidget {
     final progress = isCurrent ? player.progress : 0.0;
     final isFav = appState.isFavoriteSong(song.id);
 
-    // The immersive fade is a LANDSCAPE/two-pane behaviour only: in portrait
-    // everything stays visible always (the owner's call — portrait chrome is
-    // compact enough to never feel cluttered).
-    final size = MediaQuery.sizeOf(context);
-    final wide = size.width >= kNowPlayingWideBreakpoint ||
-        (size.width > size.height && size.width >= 600);
-
     return ImmersiveScope(
       // Settings → Appearance → "Immersive screens": hides the system bars while
       // this screen is open, and restores them on the way out.
-      // IdleFade: after 4 s of stillness (while playing) the chrome dissolves
-      // slowly and only the artwork/backdrop/lyrics remain — any touch wakes
-      // it. See idle_fade.dart.
-      child: IdleFade(
-        enabled: isPlaying && wide,
-        child: ArtworkPaletteBuilder(
+      child: ArtworkPaletteBuilder(
       artwork: song.artwork,
       fallback: song.gradientColors,
       cacheKey: song.id,
@@ -186,7 +173,6 @@ class NowPlayingScreen extends StatelessWidget {
           ),
         );
       },
-        ),
       ),
     );
   }
@@ -226,14 +212,12 @@ class NowPlayingScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IdleFadeChrome(
-                child: _Header(
-                  song: song,
-                  accent: accent,
-                  isFav: isFav,
-                  onFavorite: () => Favorites.toggle(context, song.id),
-                  onMore: () => showSongActionsSheet(context, song),
-                ),
+              _Header(
+                song: song,
+                accent: accent,
+                isFav: isFav,
+                onFavorite: () => Favorites.toggle(context, song.id),
+                onMore: () => showSongActionsSheet(context, song),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -242,21 +226,19 @@ class NowPlayingScreen extends StatelessWidget {
                   children: [
                     _ring(context, player, song, progress, colors, 'artwork_${song.id}', ringSize),
                     const SizedBox(height: 18),
-                    IdleFadeChrome(child: _TimesRow(position: position, total: total, format: _formatDuration)),
+                    _TimesRow(position: position, total: total, format: _formatDuration),
                     const SizedBox(height: 22),
-                    IdleFadeChrome(
-                      child: _TrackTitleBlock(
-                        song: song,
-                        accent: accent,
-                        duration: _trackChangeDuration,
-                        shuffleOn: player.shuffle,
-                        repeatMode: player.repeatMode,
-                        onShuffleToggle: player.toggleShuffle,
-                        onRepeatToggle: player.cycleRepeatMode,
-                      ),
+                    _TrackTitleBlock(
+                      song: song,
+                      accent: accent,
+                      duration: _trackChangeDuration,
+                      shuffleOn: player.shuffle,
+                      repeatMode: player.repeatMode,
+                      onShuffleToggle: player.toggleShuffle,
+                      onRepeatToggle: player.cycleRepeatMode,
                     ),
                     const SizedBox(height: 22),
-                    IdleFadeChrome(child: _transport(player, song, isPlaying, isCurrent, accent)),
+                    _transport(player, song, isPlaying, isCurrent, accent),
                   ],
                 ),
               ),
@@ -293,14 +275,12 @@ class NowPlayingScreen extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IdleFadeChrome(
-                    child: _QuickActions(
-                      onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
-                      onAudioInfo: () => showAudioInfoSheet(context, song),
-                    ),
+                  _QuickActions(
+                    onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
+                    onAudioInfo: () => showAudioInfoSheet(context, song),
                   ),
                   const SizedBox(height: 14),
-                  IdleFadeChrome(child: _LyricsBar(onTap: () => openLyricsScreen(context, song), accent: accent)),
+                  _LyricsBar(onTap: () => openLyricsScreen(context, song), accent: accent),
                 ],
               ),
             ],
@@ -341,16 +321,14 @@ class NowPlayingScreen extends StatelessWidget {
 
     return Column(
       children: [
-        IdleFadeChrome(
-          child: _Header(
-            song: song,
-            accent: accent,
-            isFav: isFav,
-            onFavorite: () => Favorites.toggle(context, song.id),
-            onMore: () => showSongActionsSheet(context, song),
-            onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
-            onAudioInfo: () => showAudioInfoSheet(context, song),
-          ),
+        _Header(
+          song: song,
+          accent: accent,
+          isFav: isFav,
+          onFavorite: () => Favorites.toggle(context, song.id),
+          onMore: () => showSongActionsSheet(context, song),
+          onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
+          onAudioInfo: () => showAudioInfoSheet(context, song),
         ),
         Expanded(
           child: Row(
@@ -384,7 +362,7 @@ class NowPlayingScreen extends StatelessWidget {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IdleFadeChrome(child: _TimesRow(position: position, total: total, format: _formatDuration)),
+                                  _TimesRow(position: position, total: total, format: _formatDuration),
                                   SizedBox(height: compact ? 8 : 18),
                                   // Title + artist stay visible in landscape
                                   // too — only the controls dissolve.
@@ -398,7 +376,7 @@ class NowPlayingScreen extends StatelessWidget {
                                     onRepeatToggle: player.cycleRepeatMode,
                                   ),
                                   SizedBox(height: compact ? 6 : 16),
-                                  IdleFadeChrome(child: _transport(player, song, isPlaying, isCurrent, accent)),
+                                  _transport(player, song, isPlaying, isCurrent, accent),
                                 ],
                               ),
                             ),

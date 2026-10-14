@@ -611,11 +611,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           }
           if (children.length > 1 && children.length == windowEnd - windowStart && playheadNative >= 0) {
             final native = ConcatenatingAudioSource(children: children);
-            await _audioPlayer.setAudioSource(
-              native,
-              initialIndex: playheadNative,
-              initialPosition: startAt,
-            );
+            await _audioPlayer
+                .setAudioSource(
+                  native,
+                  initialIndex: playheadNative,
+                  initialPosition: startAt,
+                )
+                .timeout(const Duration(seconds: 20));
             loadedNatively = true;
             _nativeSource = native;
             // The native playlist's identity: only while the loaded id window
@@ -645,7 +647,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       }
 
       if (!loadedNatively) {
-        await _loadSingle(source, tag, startAt);
+        await _loadSingle(source, tag, startAt).timeout(const Duration(seconds: 20));
       }
     } on PlayerInterruptedException {
       // A newer load aborted this one on purpose (the user picked another
@@ -1099,6 +1101,22 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// actually reads the saved data back out of storage.
   Future<void> restoreQueue(List<Song> queue, int index, Duration position) async {
     if (queue.isEmpty) return;
+    // ADOPT a live session: after a process/engine restart (BlueStacks window
+    // churn, service restart), the shared AudioPlayer may still be PLAYING
+    // what the service never stopped. Reloading the saved queue here used to
+    // issue a paused load that clobbered that live playback — the "tapped the
+    // notification and the music stopped" bug. If audio is already flowing,
+    // sync the app-side bookkeeping from the live state and touch nothing.
+    if (_audioPlayer.playing) {
+      _queue = List.of(queue);
+      _queueIndex = index.clamp(0, _queue.length - 1);
+      final live = _currentSong ?? _queue[_queueIndex];
+      _currentSong = live;
+      _loadedSongId = live.id;
+      _isPlaying = true;
+      notifyListeners();
+      return;
+    }
     _queue = List.of(queue);
     final clamped = index.clamp(0, _queue.length - 1);
     await _jumpTo(clamped, startPlaying: false, initialPosition: position);

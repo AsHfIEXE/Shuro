@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../app_info.dart';
@@ -248,6 +253,19 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => _rescanServer(context),
             ),
 
+            const _SectionLabel('RESET'),
+            _NavRow(
+              icon: Icons.restart_alt_rounded,
+              label: 'Reset app data',
+              value: 'Erase everything',
+              destructive: true,
+              onTap: () => _confirmResetApp(context),
+            ),
+            const _Note(
+              'Signs out, forgets servers, favorites, playlists, downloads and every setting, '
+              'then closes the app. Nothing on your Navidrome server is touched.',
+            ),
+
             const _SectionLabel('ABOUT'),
             const _AboutBlock(),
             _NavRow(icon: Icons.info_outline_rounded, label: 'Version', value: kAppVersion),
@@ -276,6 +294,56 @@ class SettingsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Full local wipe: preferences (servers, favorites, history, playlists,
+  /// settings, queue), the cover-art disk cache and the library cache. The
+  /// server itself is never touched. Then the app closes — the next launch
+  /// lands on a fresh Welcome screen.
+  Future<void> _confirmResetApp(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: kCardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Reset app data?', style: GoogleFonts.getFont(currentFontFamily, color: kTextColor, fontWeight: FontWeight.w600)),
+        content: Text(
+          'This erases everything stored on this device: servers, favorites, playlists, downloads, lyrics settings and preferences. '
+          'Your music on the server is not touched.',
+          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Erase everything', style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    // 1) Preferences: the whole store — one clear covers servers, favorites,
+    //    history, playlists, settings, saved queue and the downloads registry.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
+
+    // 2) Disk caches: cover art + library snapshots.
+    try {
+      final base = await getApplicationSupportDirectory();
+      for (final name in ['image_cache', 'library_cache']) {
+        final dir = Directory('${base.path}${Platform.pathSeparator}$name');
+        if (dir.existsSync()) dir.deleteSync(recursive: true);
+      }
+    } catch (_) {}
+
+    // 3) Close. The next launch starts from the Welcome screen.
+    await SystemNavigator.pop();
   }
 
   /// Picks how Now Playing and Lyrics paint their background.
@@ -800,8 +868,16 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
-        child: Text(label, style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
+        child: Row(
+          children: [
+            Text(label, style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
+            const SizedBox(width: 10),
+            // A hairline runs to the edge — anchors the label so sections read
+            // as ruled groups instead of floating captions.
+            const Expanded(child: Divider(color: Color(0x14FFFFFF), thickness: 1, height: 1)),
+          ],
+        ),
       );
 }
 
@@ -922,4 +998,21 @@ class _ToggleRow extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
+}
+
+
+/// A small muted caption under a row — used for one-line explanations
+/// (the reset section's warning).
+class _Note extends StatelessWidget {
+  final String text;
+  const _Note(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 24, 6),
+        child: Text(
+          text,
+          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5, height: 1.5),
+        ),
+      );
 }
