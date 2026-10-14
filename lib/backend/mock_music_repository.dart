@@ -13,7 +13,7 @@ import 'music_repository.dart';
 /// returns null: the mock catalog is illustrative data with no real audio
 /// files behind it, so songs from it correctly show as "no audio source"
 /// once real playback is wired in. That's intentional, not a bug.
-class MockMusicRepository implements MusicRepository {
+class MockMusicRepository extends MusicRepository {
   @override
   Future<void> connect() async {}
 
