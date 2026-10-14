@@ -24,6 +24,30 @@ class StreamProxy {
   static HttpServer? _server;
   static bool get isRunning => _server != null;
 
+  /// Whether outbound clients should use the DoH-resolving connector.
+  /// Engaged ONLY when the device resolver fails a startup health check: the
+  /// manual connector, while DNS-robust, has been observed breaking TLS
+  /// handshakes on some emulators ("Connection closed before full header was
+  /// received" — TCP connects, then the handshake dies), so it must stay off
+  /// unless the system resolver is genuinely broken.
+  static bool _dohEnabled = false;
+
+  static bool get dohEnabled => _dohEnabled;
+
+  /// One-shot startup check: if the device cannot resolve a well-known name,
+  /// route all outbound clients through DoH for this session. Call once from
+  /// main() before the first request. Healthy resolvers answer in tens of
+  /// milliseconds; broken ones fail immediately (no health-check delay).
+  static Future<void> checkDeviceDns() async {
+    try {
+      final result =
+          await InternetAddress.lookup('one.one.one.one').timeout(const Duration(seconds: 4));
+      _dohEnabled = result.isEmpty;
+    } catch (_) {
+      _dohEnabled = true;
+    }
+  }
+
   /// Starts the loopback server. Idempotent.
   static Future<void> start() async {
     if (_server != null) return;
@@ -60,11 +84,13 @@ class StreamProxy {
 
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 20);
-      // The DoH-resolving connector: the proxy's own outbound connections
-      // never depend on system DNS. (Signature wrapper: connectionFactory
-      // takes (uri, proxyHost, proxyPort) — the proxy/hosts are unused, this
-      // app never proxies.)
-      client.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
+      // DoH-resolving connector only when the device resolver is broken
+      // (see checkDeviceDns). On a healthy resolver the default connect path
+      // must stay untouched — it owns socket lifecycle through the TLS
+      // handshake, and replacing it broke HTTPS on emulators.
+      if (_dohEnabled) {
+        client.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
+      }
       try {
         final upstreamRequest = await client.openUrl('GET', target);
         final upstream = await upstreamRequest.close();
@@ -110,12 +136,18 @@ Future<ConnectionTask<Socket>> connectResolvingDoh(Uri uri) async {
     throw SocketException('Failed host lookup: ${uri.host}');
   }
 
+  // IPv4 first: virtualised networks (emulators, VPNs) frequently advertise
+  // AAAA records with no working IPv6 route — connecting there stalls. Only
+  // when there is no A record at all do we fall back to the full list.
+  final ipv4 = addresses.where((a) => a.type == InternetAddressType.IPv4).toList();
+  final ordered = ipv4.isNotEmpty ? ipv4 : addresses;
+
   // Try each address in order — startConnect returns a proper
   // ConnectionTask that dart:io manages for the TLS handshake (wrapping an
   // already-connected socket manually broke HTTPS with "Connection closed
   // before full header was received").
   Object? lastError;
-  for (final address in addresses) {
+  for (final address in ordered) {
     try {
       return await Socket.startConnect(address, port);
     } catch (error) {
