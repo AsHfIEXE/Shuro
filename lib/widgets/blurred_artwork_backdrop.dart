@@ -314,32 +314,13 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
       ..imageFilter = ui.ImageFilter.blur(sigmaX: sigma * 0.5, sigmaY: sigma * 0.5, tileMode: ui.TileMode.clamp);
     canvas.drawImageRect(source, srcRect, drawn, paint);
 
-    // Bake the edge dissolve INTO the texture: dstOut with edge gradients
-    // erases the plate toward its borders so it melds into the mesh with no
-    // visible boundary — at every blur strength, including near-sharp ones.
-    // Once per track, instead of per-frame ShaderMasks (see the build method).
-    void punchEdges(Offset begin, Offset end) {
-      final rect = Offset.zero & Size(tileW, tileH);
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..blendMode = BlendMode.dstOut
-          ..shader = ui.Gradient.linear(
-            Offset(rect.center.dx + begin.dx, rect.center.dy + begin.dy),
-            Offset(rect.center.dx + end.dx, rect.center.dy + end.dy),
-            const [
-              Color(0xFFFFFFFF),
-              Color(0x00000000),
-              Color(0x00000000),
-              Color(0xFFFFFFFF),
-            ],
-            const [0.0, 0.22, 0.78, 1.0],
-          ),
-      );
-    }
-
-    punchEdges(Offset(-tileW / 2, 0), Offset(tileW / 2, 0));
-    punchEdges(Offset(0, -tileH / 2), Offset(0, tileH / 2));
+    // NOTE: an earlier iteration additionally "dissolved" the tile's edges
+    // here (dstOut punch). That erased the artwork from ~22% of every screen
+    // edge — the plate survived only as a centre blob, which read as a flat
+    // "cap" behind the header and side columns on every platform. The
+    // overscan draw above alone already fixes the original sharp-cut bug
+    // (blur at the tile borders always samples real pixels), so the plate
+    // goes back to full-bleed, edge to edge.
     final picture = recorder.endRecording();
     final image = await picture.toImage(tileW.toInt(), tileH.toInt());
     return image;
@@ -452,12 +433,10 @@ class _BlurredPlatePainter extends CustomPainter {
       final cropH = image.width / destAspect;
       srcRect = Rect.fromLTWH(0, (image.height - cropH) / 2, image.width.toDouble(), cropH);
     }
-    // Slightly transparent so the mesh beneath still contributes colour.
-    // Low quality on purpose: the source tile is pre-blurred, so upscale
-    // artifacts are invisible — and medium forced a full-screen HQ resample
-    // every frame, which janked weak GPUs (the freeze report).
+    // Medium: the tile is pre-blurred so artifacts are invisible, and a
+    // low-quality full-screen upscale read as banded/blocky on device.
     final paint = Paint()
-      ..filterQuality = FilterQuality.low
+      ..filterQuality = FilterQuality.medium
       ..color = Colors.white.withValues(alpha: 0.92);
     canvas.drawImageRect(image, srcRect, Offset.zero & size, paint);
   }
