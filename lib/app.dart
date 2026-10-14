@@ -93,7 +93,13 @@ class _RestoringScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final failed = appState.connectionErrorMessage != null &&
         (appState.connectionStatus == ConnectionStatus.unreachable || appState.connectionStatus == ConnectionStatus.invalidCredentials);
-    final serverName = appState.activeServer?.name ?? 'your server';
+    // The retry target: the ACTIVE server, falling back to the first SAVED
+    // one. activeServerId is only assigned on a successful connect — after a
+    // failed startup reconnect it is null, and the Try-again button used to
+    // read it directly and silently do nothing (the "button doesn't work"
+    // report). The saved list is the honest source of what to retry.
+    final retryServer = appState.activeServer ?? (appState.servers.isNotEmpty ? appState.servers.first : null);
+    final serverName = retryServer?.name ?? 'your server';
     // Raw socket text ("Failed host lookup … errno = 7") is meaningless to a
     // person — translated here into what it actually means and what to do.
     final friendlyError = friendlyConnectionError(appState.connectionErrorMessage);
@@ -143,7 +149,7 @@ class _RestoringScreen extends StatelessWidget {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () {
-                          final id = appState.activeServerId;
+                          final id = retryServer?.id;
                           if (id != null) unawaited(appState.switchServer(id));
                         },
                         style: ElevatedButton.styleFrom(
