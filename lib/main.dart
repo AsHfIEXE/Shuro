@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
@@ -22,22 +23,23 @@ Future<void> main() async {
   // itself must be initialized before any AudioPlayer is created.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Persistent image cache: every cover/artist picture fetched once is served
-  // from disk on every later launch — the single biggest "library loads asap"
-  // win, since covers are most of the bytes. Guarded: any cache-layer failure
-  // falls through to plain networking.
-  HttpOverrides.global = CachingHttpOverrides();
+  // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
+  // on web the browser owns caching and DNS, and the dart:io surface is a
+  // throwing stub — skip all of it there (Chrome testing path).
+  if (!kIsWeb) {
+    HttpOverrides.global = CachingHttpOverrides();
 
-  // DNS health check BEFORE any request goes out: decides whether the DoH
-  // fallback connector engages this session. On a healthy device resolver it
-  // answers in milliseconds and the default (TLS-safe) connect path is kept;
-  // only a genuinely broken resolver gets the DoH treatment.
-  await StreamProxy.checkDeviceDns();
+    // DNS health check BEFORE any request goes out: decides whether the DoH
+    // fallback connector engages this session. On a healthy device resolver it
+    // answers in milliseconds and the default (TLS-safe) connect path is kept;
+    // only a genuinely broken resolver gets the DoH treatment.
+    await StreamProxy.checkDeviceDns();
 
-  // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
-  // forwarded, so playback survives device DNS failures for DDNS/server
-  // names.
-  unawaited(StreamProxy.start());
+    // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
+    // forwarded, so playback survives device DNS failures for DDNS/server
+    // names.
+    unawaited(StreamProxy.start());
+  }
 
   // Deliberately non-fatal. This call is awaited before runApp, and it throws on
   // a platform whose manifest hasn't declared the audio service and

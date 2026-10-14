@@ -54,7 +54,6 @@ android/.gradle/
 # signing).
 
 # Generated plugin registrants
-lib/generated_plugin_registrant.dart
 
 # Local backups / scratch (not part of the app)
 /_backup_lib/
