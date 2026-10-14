@@ -14,6 +14,7 @@ import '../../services/download_service.dart';
 import '../../services/playback_prefs.dart';
 import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
+import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/state_views.dart';
