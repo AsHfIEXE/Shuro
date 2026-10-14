@@ -9,6 +9,25 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
+## [2.2.3] — 2026-10-14
+
+- **Critical: release builds had no INTERNET permission.** Flutter adds it
+  automatically to debug builds only — release APKs silently lost it, which
+  blocked *all* app networking (every host lookup and socket failed with
+  permission denied). On phones this made the app look permanently offline;
+  the permission is now explicit in the main manifest.
+- HTTPS/TLS fix: the always-on DoH fallback connector interfered with TLS
+  handshakes on some networks/emulators ("Connection closed before full header
+  was received"). It now engages only after a startup DNS health check fails,
+  prefers IPv4 addresses when it does, and the default connect path — which
+  owns the socket through the TLS handshake — is otherwise untouched.
+- Artist images: `getArtistInfo2` now reads the standard `largeImageUrl` /
+  `mediumImageUrl` / `smallImageUrl` fields in addition to the OpenSubsonic
+  `artistImageUrl`, so Navidrome servers that only fill the standard fields
+  show artist pictures.
+- Network security config: cleartext (plain-HTTP server URLs) allowed on all
+  API levels, not just Android 9.
+
 ## [2.2.2] — 2026-10-14
 
 - DNS-failure retry: self-hosted/DDNS names that fail to resolve are retried
