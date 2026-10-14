@@ -1090,6 +1090,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         artist: song.artist,
         duration: song.duration,
         artUri: meta?.artUri,
+        // The system notification's text lines: on several Android versions
+        // these (not title/artist) are what the MediaStyle card renders.
+        displayTitle: song.title,
+        displaySubtitle: song.artist,
+        displayDescription: meta?.albumTitle ?? song.artist,
       );
 
 
@@ -1129,6 +1134,20 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     _currentIndexSub?.cancel();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  /// Full stop for app exit (Settings → Reset app data): releases the platform
+  /// player, which ends the foreground audio service and dismisses the media
+  /// notification. Without this, closing the activity left the service playing
+  /// — "the app closed but the music kept going". Errors swallowed: the app is
+  /// on its way out either way.
+  Future<void> stopForExit() async {
+    try {
+      await _audioPlayer.stop();
+    } catch (_) {}
+    try {
+      await _audioPlayer.dispose();
+    } catch (_) {}
   }
 
   // --- PlaybackEngine (§6) ---------------------------------------------
