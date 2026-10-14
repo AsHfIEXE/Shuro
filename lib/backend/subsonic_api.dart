@@ -199,16 +199,25 @@ class SubsonicApi {
       _call('scrobble', {'id': songId, 'submission': submission ? 'true' : 'false'});
 
   /// An artist's biography and picture from the server's own metadata
-  /// (OpenSubsonic getArtistInfo2 — Navidrome fills artistImageUrl from its
-  /// tags/fanart). Returns null when the server has nothing; the caller can
-  /// fall back to MusicBrainz.
+  /// (OpenSubsonic getArtistInfo2 — Navidrome fills the image from its
+  /// tags/fanart when integrations are enabled). Returns null when the server
+  /// has nothing; the caller can fall back to MusicBrainz.
+  ///
+  /// Image field order matters: OpenSubsonic servers expose `artistImageUrl`,
+  /// but the base Subsonic spec only defines `largeImageUrl` /
+  /// `mediumImageUrl` / `smallImageUrl` — all four are checked, best first.
   Future<({String? imageUrl, String? biography})> getArtistInfo2(String id) async {
     try {
       final body = await _call('getArtistInfo2', {'id': id});
       final info = body['artistInfo2'] as Map<String, dynamic>?;
+      if (info == null) return (imageUrl: null, biography: null);
+      final imageUrl = (info['artistImageUrl'] as String?) ??
+          (info['largeImageUrl'] as String?) ??
+          (info['mediumImageUrl'] as String?) ??
+          (info['smallImageUrl'] as String?);
       return (
-        imageUrl: info?['artistImageUrl'] as String?,
-        biography: info?['biography'] as String?,
+        imageUrl: (imageUrl != null && imageUrl.isNotEmpty) ? imageUrl : null,
+        biography: info['biography'] as String?,
       );
     } catch (_) {
       return (imageUrl: null, biography: null);
