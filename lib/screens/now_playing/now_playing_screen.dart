@@ -355,14 +355,17 @@ class NowPlayingScreen extends StatelessWidget {
     // Compact tuning for short windows (landscape phones: ~360 dp tall) —
     // the tablet proportions would overflow into the scroll fallback,
     // which is exactly the cramped landscape look this layout replaces.
+    // The ring cap is derived so ring + times + title + transport + volume
+    // FIT the column without scrolling (that sum overflowing was the
+    // "controls cut off at the bottom" bug).
     final compact = constraints.maxHeight < 520;
     // Sized from the *shorter* axis AND constrained by its own column width —
     // on short landscape windows the height factor alone let the ring grow
     // past the column and clip at the screen edge (the reported screenshot).
     final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
     final artworkSize = math
-        .min(math.min(constraints.maxHeight * (compact ? 0.46 : 0.44), columnWidth), compact ? 260.0 : 340.0)
-        .clamp(160.0, compact ? 260.0 : 340.0);
+        .min(math.min(constraints.maxHeight * (compact ? 0.40 : 0.44), columnWidth), compact ? 230.0 : 340.0)
+        .clamp(150.0, compact ? 230.0 : 340.0);
 
     return Column(
       children: [
@@ -384,7 +387,7 @@ class NowPlayingScreen extends StatelessWidget {
               Expanded(
                 flex: 5,
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(compact ? 20 : 28, 2, compact ? 20 : 28, compact ? 8 : 18),
+                  padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 2, compact ? 16 : 28, compact ? 4 : 18),
                   // LayoutBuilder + scroll fallback: at normal sizes the column
                   // is spaceBetween (artwork up top, controls at the bottom,
                   // nothing clipped — the reported bug); on an unusually short
@@ -401,14 +404,14 @@ class NowPlayingScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _ring(context, player, song, progress, colors, 'artwork_${song.id}', artworkSize),
-                            SizedBox(height: compact ? 14 : 30),
+                            SizedBox(height: compact ? 10 : 30),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _TimesRow(position: position, total: total, format: _formatDuration),
-                                  SizedBox(height: compact ? 8 : 14),
+                                  SizedBox(height: compact ? 5 : 14),
                                   // Title + artist stay visible in landscape
                                   // too — only the controls dissolve.
                                   _TrackTitleBlock(
@@ -422,9 +425,9 @@ class NowPlayingScreen extends StatelessWidget {
                                     isFavorite: isFav,
                                     onToggleFavorite: () => Favorites.toggle(context, song.id),
                                   ),
-                                  SizedBox(height: compact ? 6 : 14),
+                                  SizedBox(height: compact ? 4 : 14),
                                   _transport(player, song, isPlaying, isCurrent, accent),
-                                  SizedBox(height: compact ? 6 : 10),
+                                  SizedBox(height: compact ? 2 : 10),
                                   // Landscape volume: the phone's own buttons
                                   // are across the device in this orientation.
                                   const _VolumeSlider(),
@@ -1089,32 +1092,35 @@ class _VolumeSliderState extends State<_VolumeSlider> {
     if (kIsWeb) return const SizedBox.shrink();
     final value = (_volume ?? 0.5).clamp(0.0, 1.0);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          Icon(Icons.volume_down_rounded, size: 18, color: Colors.white54),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-              ),
-              child: Slider(
-                value: value,
-                onChanged: _volume == null
-                    ? null
-                    : (v) async {
-                        setState(() => _volume = v);
-                        try {
-                          await VolumeController.instance.setVolume(v);
-                        } catch (_) {}
-                      },
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SizedBox(
+        height: 30,
+        child: Row(
+          children: [
+            Icon(Icons.volume_down_rounded, size: 16, color: Colors.white54),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2.5,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                ),
+                child: Slider(
+                  value: value,
+                  onChanged: _volume == null
+                      ? null
+                      : (v) async {
+                          setState(() => _volume = v);
+                          try {
+                            await VolumeController.instance.setVolume(v);
+                          } catch (_) {}
+                        },
+                ),
               ),
             ),
-          ),
-          Icon(Icons.volume_up_rounded, size: 18, color: Colors.white54),
-        ],
+            Icon(Icons.volume_up_rounded, size: 16, color: Colors.white54),
+          ],
+        ),
       ),
     );
   }
