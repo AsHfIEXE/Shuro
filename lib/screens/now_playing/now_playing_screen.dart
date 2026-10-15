@@ -174,6 +174,7 @@ class NowPlayingScreen extends StatelessWidget {
                             total: total,
                             isPlaying: isPlaying,
                             isCurrent: isCurrent,
+                            isFav: isFav,
                             appState: appState,
                             player: player,
                           )
@@ -188,6 +189,7 @@ class NowPlayingScreen extends StatelessWidget {
                             total: total,
                             isPlaying: isPlaying,
                             isCurrent: isCurrent,
+                            isFav: isFav,
                             appState: appState,
                             player: player,
                           );
