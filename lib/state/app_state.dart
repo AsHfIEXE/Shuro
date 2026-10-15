@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import '../backend/music_repository.dart';
 import '../backend/navidrome_music_repository.dart';
 import '../services/library_cache.dart';
+import '../services/multi_server.dart';
+import '../services/multi_server_session.dart';
 import '../services/server_secret_store.dart';
 import '../models/album.dart';
 import '../models/artist.dart';
@@ -205,6 +207,13 @@ class AppState extends ChangeNotifier {
         } catch (_) {}
       }
 
+      final enabledJson = persistence.getStringList(_kEnabledServersKey);
+      if (enabledJson != null && enabledJson.isNotEmpty) {
+        enabledServerIds
+          ..clear()
+          ..addAll(enabledJson);
+      }
+
       _savedQueueSongIds = persistence.getStringList(_kSavedQueueKey);
       if (_savedQueueSongIds!.isEmpty) _savedQueueSongIds = null;
       _savedQueueIndex = persistence.getInt(_kSavedQueueIndexKey);
@@ -228,6 +237,163 @@ class AppState extends ChangeNotifier {
       // app still works, it just starts fresh every time, same as before
       // this existed.
     }
+  }
+
+  /// The servers participating in the library right now, ACTIVE FIRST
+  /// (merge priority: on duplicate entries the active server's copy wins).
+  List<ServerConfig> get _libraryServers {
+    final enabled = enabledServerIds.isEmpty
+        ? <String>{if (activeServerId != null) activeServerId!}
+        : enabledServerIds;
+    final picked = servers.where((s) => enabled.contains(s.id)).toList();
+    picked.sort((a, b) {
+      if (a.id == activeServerId) return -1;
+      if (b.id == activeServerId) return 1;
+      return 0;
+    });
+    return picked;
+  }
+
+  /// True when more than one server feeds the library (combined mode).
+  bool get isMultiServer => _libraryServers.length > 1;
+
+  bool isServerEnabled(String id) {
+    if (enabledServerIds.isEmpty) return id == activeServerId;
+    return enabledServerIds.contains(id);
+  }
+
+  /// Include/exclude a server from the combined library. Persists and
+  /// reconnects in the background so the library updates without a manual
+  /// step. One enabled server = plain single-server mode; two or more =
+  /// combined.
+  void setServerEnabled(String id, bool enabled) {
+    if (enabledServerIds.isEmpty && activeServerId != null) {
+      // First explicit edit: materialise the implicit default before editing.
+      enabledServerIds.add(activeServerId!);
+    }
+    if (enabled) {
+      enabledServerIds.add(id);
+    } else {
+      enabledServerIds.remove(id);
+    }
+    notifyListeners();
+    unawaited(_persistServers());
+    final anchorId = activeServerId ?? (servers.isNotEmpty ? servers.first.id : null);
+    if (anchorId == null) return;
+    if (isMultiServer) {
+      unawaited(connectMultiServer());
+    } else {
+      unawaited(switchServer(anchorId));
+    }
+  }
+
+  /// Combined-library connect: every enabled server in parallel, merged into
+  /// one snapshot with namespaced ids — no cross-server id collisions, no
+  /// duplicate entries (see MultiServerLibrary for the merge rules).
+  /// Cache-first per server for an instant paint, then the live fetch swaps
+  /// in. One server failing never blocks the others; with at least one
+  /// online the session is `connected` (offline flag when some are down),
+  /// matching the single-server offline behaviour.
+  Future<void> connectMultiServer() async {
+    final picked = _libraryServers;
+    if (picked.length < 2) {
+      // Not actually multi — the proven single-server path handles it.
+      if (picked.isNotEmpty) await connectToServer(picked.first);
+      return;
+    }
+
+    connectionStatus = ConnectionStatus.connecting;
+    connectionErrorMessage = null;
+    notifyListeners();
+
+    // Cache-first: merge whatever each enabled server has on disk.
+    final cachedEntries = <MapEntry<String, MusicLibrarySnapshot>>[];
+    for (final config in picked) {
+      final cached = await LibraryCache.load(config.id);
+      if (cached != null) cachedEntries.add(MapEntry(config.id, cached.snapshot));
+    }
+    if (cachedEntries.isNotEmpty) {
+      _librarySnapshot = MultiServerLibrary.merge(cachedEntries);
+      libraryFromCache = true;
+      libraryOffline = false;
+      connectionStatus = ConnectionStatus.connected;
+      notifyListeners();
+    }
+
+    // The single-repo field must not double-hold a connection in multi mode.
+    _repository?.dispose();
+    _multi.disposeAll();
+    _repository = null;
+
+    isSyncingLibrary = true;
+    notifyListeners();
+    final outcome = await _multi.connectAll(picked);
+    isSyncingLibrary = false;
+
+    if (outcome.online.isEmpty) {
+      libraryOffline = true;
+      if (cachedEntries.isEmpty) {
+        connectionStatus = ConnectionStatus.unreachable;
+        connectionErrorMessage = outcome.lastError ?? "Couldn't reach your servers.";
+      } else {
+        connectionStatus = ConnectionStatus.connected; // cached browsing
+      }
+      notifyListeners();
+      return;
+    }
+
+    _librarySnapshot = outcome.merged;
+    _migrateLegacyIds(outcome.rawByServer);
+    for (final entry in outcome.rawByServer.entries) {
+      unawaited(LibraryCache.save(entry.key, entry.value));
+    }
+    libraryFromCache = false;
+    libraryOffline = outcome.failed.isNotEmpty;
+    connectionStatus = ConnectionStatus.connected;
+    connectionErrorMessage = null;
+    final firstOnline = picked.firstWhere((c) => outcome.online.contains(c.id), orElse: () => picked.first);
+    activeServerId = firstOnline.id;
+    unawaited(_persistServers());
+    notifyListeners();
+  }
+
+  /// One-time rewrite of pre-multi-server (bare) ids in favourites, history
+  /// and the saved queue: a bare id is adopted by the FIRST server whose raw
+  /// snapshot contains it. Ids that match nothing stay untouched (deleted
+  /// songs stay harmlessly unknown).
+  void _migrateLegacyIds(Map<String, MusicLibrarySnapshot> rawByServer) {
+    bool bare(String id) => MultiServerLibrary.serverIdOf(id) == null;
+    final anyBare = favoriteSongIds.any(bare) ||
+        listeningHistory.any(bare) ||
+        (_savedQueueSongIds?.any(bare) ?? false);
+    if (!anyBare) return;
+    String adopt(String id) {
+      if (!bare(id)) return id;
+      for (final entry in rawByServer.entries) {
+        if (entry.value.songs.any((s) => s.id == id)) {
+          return MultiServerLibrary.qualify(entry.key, id);
+        }
+      }
+      return id;
+    }
+
+    final migratedFavs = favoriteSongIds.map(adopt).toSet();
+    if (migratedFavs.difference(favoriteSongIds).isNotEmpty) {
+      favoriteSongIds
+        ..clear()
+        ..addAll(migratedFavs);
+    }
+    for (var i = 0; i < listeningHistory.length; i++) {
+      listeningHistory[i] = adopt(listeningHistory[i]);
+    }
+    final saved = _savedQueueSongIds;
+    if (saved != null) {
+      for (var i = 0; i < saved.length; i++) {
+        saved[i] = adopt(saved[i]);
+      }
+    }
+    unawaited(_persistFavorites());
+    unawaited(_persistHistory());
   }
 
   StreamingQuality? _qualityFromName(dynamic name) {
@@ -317,6 +483,7 @@ class AppState extends ChangeNotifier {
       p.setString(_kServersKey, jsonEncode(list)),
       activeServerId != null ? p.setString(_kActiveServerKey, activeServerId!) : p.remove(_kActiveServerKey),
       p.setBool(_kLocalOnlyKey, isLocalOnly),
+      p.setStringList(_kEnabledServersKey, enabledServerIds.toList()),
     ]);
   }
 
@@ -428,6 +595,14 @@ class AppState extends ChangeNotifier {
   /// means unchanged library, so the fetch is skipped entirely.
   int? _cachedLastScan;
 
+  /// Servers included in the COMBINED library. Empty means "the active
+  /// server only" — the single-server behaviour every existing install has.
+  /// With two or more entries every enabled server's catalog is fetched in
+  /// parallel and merged into one library (namespaced ids, no duplicates).
+  static const _kEnabledServersKey = 'shuro_enabled_servers_v1';
+  final Set<String> enabledServerIds = {};
+  final MultiServerSession _multi = MultiServerSession();
+
   ServerConfig? get activeServer {
     if (activeServerId == null) return null;
     for (final s in servers) {
@@ -499,6 +674,7 @@ class AppState extends ChangeNotifier {
       // succeeded — a failed reconnect attempt must never wipe out an
       // already-working connection.
       _repository?.dispose();
+      _multi.disposeAll();
       _repository = repository;
       _librarySnapshot = snapshot;
 
@@ -612,6 +788,13 @@ class AppState extends ChangeNotifier {
   Future<void> switchServer(String id) async {
     final index = servers.indexWhere((s) => s.id == id);
     if (index < 0) return;
+    if (isMultiServer && enabledServerIds.contains(id)) {
+      // The server is part of the combined library: make it the active one
+      // (merge priority) and rebuild the combined session.
+      activeServerId = id;
+      await connectMultiServer();
+      return;
+    }
     await connectToServer(servers[index]);
   }
 
@@ -630,6 +813,7 @@ class AppState extends ChangeNotifier {
       }
       activeServerId = null;
       _repository?.dispose();
+      _multi.disposeAll();
       _repository = null;
       _librarySnapshot = MusicLibrarySnapshot.empty;
       // Fall back to local-only rather than disconnected if there's
@@ -657,6 +841,7 @@ class AppState extends ChangeNotifier {
     connectionStatus = ConnectionStatus.disconnected;
     activeServerId = null;
     _repository?.dispose();
+    _multi.disposeAll();
     _repository = null;
     _librarySnapshot = MusicLibrarySnapshot.empty;
     notifyListeners();
@@ -761,6 +946,10 @@ class AppState extends ChangeNotifier {
   /// gracefully rather than crash.
   String? audioSourceFor(Song song) {
     if (song.localFilePath != null) return song.localFilePath;
+    if (isMultiServer) {
+      final viaMulti = _multi.streamUrlFor(song, quality: effectiveStreamingQuality);
+      if (viaMulti != null) return viaMulti;
+    }
     return _repository?.streamUrlFor(song, quality: effectiveStreamingQuality);
   }
 
@@ -774,6 +963,10 @@ class AppState extends ChangeNotifier {
   Future<LyricsTrack?> fetchEmbeddedLyrics(Song song) async {
     if (!hasServer || song.isLocal) return null;
     try {
+      if (isMultiServer) {
+        final viaMulti = await _multi.embeddedLyrics(song);
+        if (viaMulti != null) return viaMulti;
+      }
       return await _repository?.fetchEmbeddedLyrics(song);
     } catch (_) {
       return null;
@@ -1318,6 +1511,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _connectivitySub?.cancel();
     _repository?.dispose();
+    _multi.disposeAll();
     super.dispose();
   }
 }

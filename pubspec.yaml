@@ -25,14 +25,14 @@ dependencies:
   # Real download storage: documents dir survives app updates (cache dirs do
   # not), which is the whole point of an offline library.
   path_provider: ^2.1.4
-  just_audio: ^0.9.36
+  just_audio: ^0.10.4
   # Real lock-screen/notification media controls for just_audio — see the
   # Android manifest additions documented in README.md, required once for
   # this to actually show up (not something `flutter pub get` can do for
   # you). If pub resolves this to a newer non-beta release, that's fine —
   # the API this app uses (JustAudioBackground.init, the `tag:` MediaItem
   # passed to setUrl/setFilePath) has been stable across its betas.
-  just_audio_background: ^0.0.1-beta.13
+  just_audio_background: ^0.0.1-beta.17
   # Real per-track accent colors on Now Playing/Lyrics, extracted from the
   # actual cover art instead of a deterministic per-ID placeholder color.
   palette_generator: ^0.3.3+4

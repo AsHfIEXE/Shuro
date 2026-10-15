@@ -87,6 +87,16 @@ class _ManageServersScreenState extends State<ManageServersScreen> {
                 subtitle: "You're listening from local files only. Connect a Navidrome server to stream its full catalog too.",
               ),
             ),
+          if (appState.servers.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: Text(
+                'Turn a server on to include its music in one combined library. '
+                'Two or more on = every enabled server\'s catalog, merged with no duplicates. '
+                'One on = that server alone.',
+                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5, height: 1.45),
+              ),
+            ),
           for (final server in appState.servers)
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -103,7 +113,15 @@ class _ManageServersScreenState extends State<ManageServersScreen> {
               title: Text(server.name, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
               subtitle: Text(server.url, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
               onTap: () => _connect(appState, server.id),
-              trailing: PopupMenuButton<String>(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch(
+                    value: appState.isServerEnabled(server.id),
+                    activeColor: kBrandColor,
+                    onChanged: appState.servers.length > 1 ? (value) => appState.setServerEnabled(server.id, value) : null,
+                  ),
+                  PopupMenuButton<String>(
                 color: kCardColor,
                 icon: const Icon(Icons.more_vert_rounded, color: kMutedTextColor, size: 20),
                 onSelected: (value) {
@@ -115,7 +133,8 @@ class _ManageServersScreenState extends State<ManageServersScreen> {
                   PopupMenuItem(value: 'remove', child: Text('Remove', style: GoogleFonts.getFont(currentFontFamily, color: Colors.redAccent, fontSize: 13))),
                 ],
               ),
-            ),
+            ]),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
             child: OutlinedButton.icon(
