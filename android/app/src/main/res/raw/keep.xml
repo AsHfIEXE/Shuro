@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps audio_service's media-control icons reachable when resource
+     shrinking is enabled. Without this, the shrinker strips these drawables
+     (they are resolved by name at runtime) and the media notification
+     renders its transport buttons with a blank icon (upstream
+     audio_service PR #1167). Harmless while shrinking is off. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/audio_service_play_arrow,@drawable/audio_service_pause,@drawable/audio_service_skip_to_previous,@drawable/audio_service_skip_to_next,@drawable/audio_service_skip_next,@drawable/audio_service_skip_previous,@drawable/audio_service_stop,@drawable/audio_service_fast_forward,@drawable/audio_service_fast_rewind" />

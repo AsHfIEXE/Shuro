@@ -42,14 +42,19 @@
              and Android Auto controls. Copied from README -> "Lock-screen &
              notification controls", which documents these as a required manual
              step for any generated android/ folder. -->
+        <!-- exported=false + no MediaBrowserService filter: the OS media
+             framework (assistant, Bluetooth stack, some OEM media UIs) used to
+             bind-and-warm this service AT LAUNCH, booting a SECOND Flutter
+             engine whose main() raced the visible one — the intermittent
+             "stuck on splash with music playing" freeze (upstream audio_service
+             #1162/#965/#899 family). Lock-screen/headset/Bluetooth transport
+             controls come from the MediaSession + MediaButtonReceiver, which
+             stay intact. -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true"
+            android:exported="false"
             tools:ignore="Instantiatable">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
         </service>
 
         <receiver
