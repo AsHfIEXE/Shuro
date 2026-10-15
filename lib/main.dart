@@ -22,6 +22,7 @@ Future<void> main() async {
   // talks to platform channels during init) — and JustAudioBackground
   // itself must be initialized before any AudioPlayer is created.
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[boot] binding ready');
 
   // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
   // on web the browser owns caching and DNS, and the dart:io surface is a
@@ -39,6 +40,7 @@ Future<void> main() async {
     } catch (_) {
       // Leave DoH disabled (healthy default); DNS itself is unchanged.
     }
+    debugPrint('[boot] dns check done');
 
     // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
     // forwarded, so playback survives device DNS failures for DDNS/server
@@ -82,6 +84,8 @@ Future<void> main() async {
     debugPrint('JustAudioBackground.init failed — continuing without system media controls: $error');
     debugPrint('$stack');
   }
+  debugPrint('[boot] audio init done');
+  debugPrint('[boot] runApp');
   runApp(const MusicStreamApp());
 }
 

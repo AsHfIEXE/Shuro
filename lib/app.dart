@@ -80,6 +80,17 @@ class _AuthGateState extends State<AuthGate> {
   /// in the session flags instead.
   bool _hasShownShell = false;
 
+  /// Boot diagnostics: logged once per branch change so the next freeze's
+  /// logcat alone shows how far startup got ([gate] shell / restoring /
+  /// welcome / shell(offline-retry)).
+  String? _lastBranch;
+
+  void _mark(String branch) {
+    if (_lastBranch == branch) return;
+    _lastBranch = branch;
+    debugPrint('[gate] $branch');
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -95,6 +106,7 @@ class _AuthGateState extends State<AuthGate> {
       // feature API joins the provider tree, play reporting is wired, and
       // favourites merge. Cheap and idempotent per server — see ServerLink.
       _hasShownShell = true;
+      _mark('shell');
       if (status == ConnectionStatus.connected) {
         scheduleServerLink(context);
       }
@@ -104,13 +116,16 @@ class _AuthGateState extends State<AuthGate> {
     // been up once: keep the library visible (cached/offline mode).
     if (_hasShownShell &&
         (status == ConnectionStatus.connecting || status == ConnectionStatus.unreachable)) {
+      _mark('shell(offline-retry)');
       return const AppShell();
     }
     // Saved servers + restore still in flight (or failed): restoring screen —
     // never Welcome — until a terminal status has been seen.
     if (appState.servers.isNotEmpty) {
+      _mark('restoring');
       return _RestoringScreen(appState: appState);
     }
+    _mark('welcome');
     return const WelcomeScreen();
   }
 }
