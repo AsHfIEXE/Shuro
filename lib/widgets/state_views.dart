@@ -137,9 +137,28 @@ void showErrorSnackBar(BuildContext context, String message) {
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: Text(message, style: GoogleFonts.getFont(currentFontFamily, fontSize: 13)),
-      backgroundColor: const Color(0xFF3A1E1E),
+      // Previously a dim translucent red bar with low-contrast text — readable
+      // in a screenshot, illegible in the hand. Now: solid error surface,
+      // white text, a leading icon, rounded and inset so it reads as a
+      // deliberate alert rather than a rendering artifact.
+      content: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.getFont(currentFontFamily, fontSize: 13, color: Colors.white, height: 1.35),
+            ),
+          ),
+        ],
+      ),
+      backgroundColor: const Color(0xFFB3261E),
       behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 6,
+      duration: const Duration(seconds: 4),
     ),
   );
 }

@@ -209,6 +209,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// loading either seeked the *previous* track or silently did nothing.
   Duration? _pendingSeek;
 
+  /// Position saved with the previous session's queue; applied when the
+  /// user first presses play after the lazy restore.
+  Duration? _restoredPosition;
+
   /// Loads run one at a time, chained through this future.
   ///
   /// Overlapping load requests are not just wasteful, they actively break
@@ -529,6 +533,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     _lastError = null;
     _pendingSeek = null;
     _needsReload = false;
+    _restoredPosition = null;
     if (startPlaying) _isPlaying = true;
     notifyListeners();
 
@@ -860,7 +865,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // track switch interrupted mid-flight) — a resume press has to actually
     // (re)load it, otherwise the icon flips over silence.
     if (_needsReload || _loadedSongId != song.id) {
-      await _jumpTo(_queueIndex, startPlaying: true);
+      final restored = _restoredPosition;
+      _restoredPosition = null;
+      await _jumpTo(_queueIndex, startPlaying: true, initialPosition: restored);
       return;
     }
     _isPlaying = true;
@@ -1122,9 +1129,23 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       notifyListeners();
       return;
     }
+    // LAZY restore: remember the queue, the song and the saved position — but
+    // do NOT resolve an audio source. At launch the server session is still
+    // connecting, so resolving here produced a false "no audio source is
+    // available" error at every start for a track the user never asked to
+    // play. The source resolves on the first press of play instead
+    // (_needsReload routes togglePlayPause through _jumpTo then, with the
+    // session ready and the restored position applied).
     _queue = List.of(queue);
-    final clamped = index.clamp(0, _queue.length - 1);
-    await _jumpTo(clamped, startPlaying: false, initialPosition: position);
+    _queueIndex = index.clamp(0, _queue.length - 1);
+    _currentSong = _queue[_queueIndex];
+    _isPlaying = false;
+    _isLoading = false;
+    _loadedSongId = null;
+    _needsReload = true;
+    _restoredPosition = position > Duration.zero ? position : null;
+    _lastError = null;
+    notifyListeners();
   }
 
   @override
