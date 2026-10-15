@@ -32,8 +32,13 @@ Future<void> main() async {
     // DNS health check BEFORE any request goes out: decides whether the DoH
     // fallback connector engages this session. On a healthy device resolver it
     // answers in milliseconds and the default (TLS-safe) connect path is kept;
-    // only a genuinely broken resolver gets the DoH treatment.
-    await StreamProxy.checkDeviceDns();
+    // only a genuinely broken resolver gets the DoH treatment. Time-boxed with
+    // an outer guard as well — startup must never stall on it.
+    try {
+      await StreamProxy.checkDeviceDns().timeout(const Duration(seconds: 6));
+    } catch (_) {
+      // Leave DoH disabled (healthy default); DNS itself is unchanged.
+    }
 
     // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
     // forwarded, so playback survives device DNS failures for DDNS/server
@@ -49,6 +54,15 @@ Future<void> main() async {
   // device. Background/lock-screen controls are an enhancement; playback inside
   // the app must not depend on them, so a failure here is logged and the app
   // starts anyway.
+  //
+  // TIMEOUT: when the app is re-launched while the previous audio service is
+  // still alive (tapping the media notification, an emulator recreating the
+  // activity), this init can WAIT FOREVER on a service that will never answer
+  // the new engine — leaving the native splash window on screen while the old
+  // service keeps playing: the reported "music is playing but the screen is
+  // blank" freeze. After 8 s we give up on the media session and start the
+  // app anyway; in-app playback still works, and a user can always stop the
+  // stray service from the notification.
   try {
     await JustAudioBackground.init(
       androidNotificationChannelId: 'com.shuro.audio.channel',
@@ -59,7 +73,9 @@ Future<void> main() async {
       androidNotificationOngoing: true,
       androidNotificationIcon: 'mipmap/ic_launcher',
       androidShowNotificationBadge: true,
-    );
+    ).timeout(const Duration(seconds: 8));
+  } on TimeoutException {
+    debugPrint('JustAudioBackground.init timed out — starting without system media controls; is an old audio service still running?');
   } catch (error, stack) {
     // Release builds get no logging that a user could act on, but the app still
     // runs: in-app playback, the queue, lyrics and diagnostics are unaffected.
