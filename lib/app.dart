@@ -73,6 +73,13 @@ class _AuthGateState extends State<AuthGate> {
   /// seen, the gate trusts statuses as-is.
   bool _sawTerminalStatus = false;
 
+  /// Whether the app shell has ever been shown. Once it has, background
+  /// reconnects (the quiet offline retry loop) must never replace the user's
+  /// library with the restoring screen — `connecting`/`unreachable` after
+  /// the shell has been up keeps the shell, with the offline state carried
+  /// in the session flags instead.
+  bool _hasShownShell = false;
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -87,9 +94,16 @@ class _AuthGateState extends State<AuthGate> {
       // A connected server is the one moment server features get bound: the
       // feature API joins the provider tree, play reporting is wired, and
       // favourites merge. Cheap and idempotent per server — see ServerLink.
+      _hasShownShell = true;
       if (status == ConnectionStatus.connected) {
         scheduleServerLink(context);
       }
+      return const AppShell();
+    }
+    // Background reconnect in flight, or still offline, AFTER the shell has
+    // been up once: keep the library visible (cached/offline mode).
+    if (_hasShownShell &&
+        (status == ConnectionStatus.connecting || status == ConnectionStatus.unreachable)) {
       return const AppShell();
     }
     // Saved servers + restore still in flight (or failed): restoring screen —
@@ -214,6 +228,28 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
+
+  /// Quiet background reconnect: while the session is offline (server was
+  /// down at startup or dropped mid-session) the shell keeps retrying every
+  /// 25 s. Without this, a user who started their server AFTER the app did
+  /// sat on a dead session forever — nothing ever re-connected. The retry
+  /// never tears down the UI (AuthGate keeps the shell while
+  /// connecting/unreachable once shown) and stops trying the moment the
+  /// session is healthy again.
+  Timer? _reconnectTimer;
+  bool _reconnecting = false;
+
+  void _maybeReconnect() {
+    final appState = _boundAppState;
+    if (appState == null || _reconnecting) return;
+    final offline = appState.libraryOffline || appState.connectionStatus == ConnectionStatus.unreachable;
+    if (!offline) return;
+    final id = appState.activeServerId ?? (appState.servers.isNotEmpty ? appState.servers.first.id : null);
+    if (id == null) return;
+    _reconnecting = true;
+    appState.switchServer(id).whenComplete(() => _reconnecting = false);
+  }
+
   int _tabIndex = 0;
   AppState? _boundAppState;
   PlayerController? _boundPlayer;
@@ -230,6 +266,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
     WidgetsBinding.instance.addObserver(this);
     // Wire Settings → Behavior → Autoplay into the player, give it a real
     // (if simple) source of "what to play next" once the queue runs out,
@@ -495,10 +532,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (error == null || !mounted) return;
     player!.clearPlaybackError();
     showErrorSnackBar(context, error);
+    // A play that failed with no source while the session is offline is
+    // usually "the server just came back but nothing retried yet" — try to
+    // reconnect right now instead of making the user wait for the timer.
+    _maybeReconnect();
   }
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _boundAppState?.removeListener(_syncAutoplay);
     _boundPlayer?.removeListener(_recordListeningHistory);
