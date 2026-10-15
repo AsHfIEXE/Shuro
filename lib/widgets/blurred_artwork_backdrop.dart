@@ -215,19 +215,22 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
   }
 
   void _applyMotion() {
+    // Durations are the master loop; nodes orbit at 1/2/3× within it. The
+    // loop is seamless now (integer multiples), so the wrap point is
+    // invisible and the length only sets the drift speed.
     switch (widget.motion) {
       case BackdropMotion.still:
         _clock.stop();
       case BackdropMotion.subtle:
-        _clock.duration = const Duration(seconds: 36);
+        _clock.duration = const Duration(seconds: 50);
         if (!(_clock.isAnimating)) _clock.repeat();
       case BackdropMotion.normal:
-        // The owner's default: clearly alive — 18 s cycle, shallower blur so
-        // the artwork itself reads, motion carries the atmosphere.
-        _clock.duration = const Duration(seconds: 18);
+        // The owner's default: clearly alive — a 26 s master loop, shallower
+        // blur so the artwork itself reads, motion carries the atmosphere.
+        _clock.duration = const Duration(seconds: 26);
         if (!_clock.isAnimating) _clock.repeat();
       case BackdropMotion.lively:
-        _clock.duration = const Duration(seconds: 10);
+        _clock.duration = const Duration(seconds: 14);
         if (!_clock.isAnimating) _clock.repeat();
     }
   }
@@ -390,12 +393,20 @@ class _MeshGradientPainter extends CustomPainter {
     final count = math.min(colors.length, 5);
     for (var i = 0; i < count; i++) {
       final color = Color.lerp(colors[i], kSurfaceColor, 0.30) ?? colors[i];
-      final speed = 0.5 + (i % 3) * 0.21;
+      // INTEGER speed multiples only. The controller loops its phase 0→1; a
+      // node on a fractional multiple (the old 0.5/0.71/0.92) is mid-orbit at
+      // the wrap and JUMPS — the visible "animation resets every ~13–18 s"
+      // bug. With 1/2/3 every node completes whole cycles per loop, so the
+      // wrap is mathematically invisible. Variety comes from the golden-angle
+      // offsets and per-node orbit sizes instead of speed fractions.
+      final speed = 1 + (i % 3);
       final offsetAngle = i * 2.399; // golden-angle spread
       final orbit = 0.16 + (i % 2) * 0.09;
       final center = Offset(
         size.width * (0.5 + orbit * math.cos(phase * speed + offsetAngle)),
-        size.height * (0.42 + orbit * math.sin(phase * speed * 0.8 + offsetAngle)),
+        // y-axis on a different integer multiple (2/3/4) so horizontal and
+        // vertical drift de-correlate — still seamless at the wrap.
+        size.height * (0.42 + orbit * math.sin(phase * (speed + 1) + offsetAngle)),
       );
       final radius = diag * (0.55 + 0.12 * math.sin(phase * speed + i));
       final paint = Paint()
