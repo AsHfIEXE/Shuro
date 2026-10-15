@@ -174,7 +174,6 @@ class NowPlayingScreen extends StatelessWidget {
                             total: total,
                             isPlaying: isPlaying,
                             isCurrent: isCurrent,
-                            isFav: isFav,
                             appState: appState,
                             player: player,
                           )
@@ -189,7 +188,6 @@ class NowPlayingScreen extends StatelessWidget {
                             total: total,
                             isPlaying: isPlaying,
                             isCurrent: isCurrent,
-                            isFav: isFav,
                             appState: appState,
                             player: player,
                           );
@@ -243,8 +241,6 @@ class NowPlayingScreen extends StatelessWidget {
               _Header(
                 song: song,
                 accent: accent,
-                isFav: isFav,
-                onFavorite: () => Favorites.toggle(context, song.id),
                 onMore: () => showSongActionsSheet(context, song),
               ),
               Padding(
@@ -371,8 +367,6 @@ class NowPlayingScreen extends StatelessWidget {
         _Header(
           song: song,
           accent: accent,
-          isFav: isFav,
-          onFavorite: () => Favorites.toggle(context, song.id),
           onMore: () => showSongActionsSheet(context, song),
           onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
           onAudioInfo: () => showAudioInfoSheet(context, song),
@@ -592,8 +586,6 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
 class _Header extends StatelessWidget {
   final Song song;
   final Color accent;
-  final bool isFav;
-  final VoidCallback onFavorite;
   final VoidCallback onMore;
 
   /// Wide screens move Queue/Audio-info up here (the bottom-left column has no
@@ -604,8 +596,6 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.song,
     required this.accent,
-    required this.isFav,
-    required this.onFavorite,
     required this.onMore,
     this.onQueue,
     this.onAudioInfo,
@@ -632,7 +622,8 @@ class _Header extends StatelessWidget {
                   style: GoogleFonts.getFont(currentFontFamily, color: const Color(0x80FFFFFF), fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 2.0)),
             ),
           ),
-          AnimatedFavoriteIcon(isFavorite: isFav, activeColor: accent, onTap: onFavorite),
+          // (No favourite here: the heart lives in its sweet spot under the
+          // artist — a second one in the header was duplicate clutter.)
           if (onQueue != null)
             IconButton(
               onPressed: onQueue,
