@@ -78,6 +78,15 @@ class _MiniPlayerBar extends StatelessWidget {
           player.previous();
         }
       },
+      // Swipe UP opens Now Playing (the tap does too — the gesture is the
+      // shortcut for a thumb already resting on the bar).
+      onVerticalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity < -350) {
+          HapticFeedback.lightImpact();
+          Navigator.of(context).push(risingRoute(NowPlayingScreen(initialSong: song)));
+        }
+      },
       child: Container(
         // Palette-tinted: the bar quietly picks up the track's own colours —
         // same design language as the NPV backdrop — over the base card color.

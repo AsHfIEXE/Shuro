@@ -1148,6 +1148,44 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     notifyListeners();
   }
 
+  /// Sleep timer: pause playback when it fires. The UI reads [sleepUntil]
+  /// to show what's armed, and offers Off / 15 / 30 / 45 / 60 / 90 minutes
+  /// / end of track.
+  Timer? _sleepTimer;
+  DateTime? _sleepUntil;
+
+  DateTime? get sleepUntil => _sleepUntil;
+
+  void startSleepTimer(Duration duration) {
+    cancelSleepTimer();
+    _sleepUntil = DateTime.now().add(duration);
+    _sleepTimer = Timer(duration, () async {
+      _sleepUntil = null;
+      try {
+        await _audioPlayer.pause();
+      } catch (_) {}
+      _isPlaying = false;
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  void startSleepTimerEndOfTrack() {
+    final remaining = _audioPlayer.duration != null
+        ? _audioPlayer.duration! - position
+        : Duration.zero;
+    startSleepTimer(remaining > Duration.zero ? remaining : Duration(seconds: 1));
+  }
+
+  void cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (_sleepUntil != null) {
+      _sleepUntil = null;
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     _positionSub?.cancel();

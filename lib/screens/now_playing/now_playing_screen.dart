@@ -323,6 +323,8 @@ class NowPlayingScreen extends StatelessWidget {
                   _QuickActions(
                     onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
                     onAudioInfo: () => showAudioInfoSheet(context, song),
+                    onSleep: () => showSleepTimerSheet(context, player),
+                    sleepActiveUntil: player.sleepUntil,
                   ),
                   const SizedBox(height: 14),
                   _LyricsBar(onTap: () => openLyricsScreen(context, song), accent: accent),
@@ -751,15 +753,31 @@ class _ProgressLine extends StatelessWidget {
 class _QuickActions extends StatelessWidget {
   final VoidCallback onQueue;
   final VoidCallback onAudioInfo;
+  final VoidCallback onSleep;
+  final DateTime? sleepActiveUntil;
 
-  const _QuickActions({required this.onQueue, required this.onAudioInfo});
+  const _QuickActions({
+    required this.onQueue,
+    required this.onAudioInfo,
+    required this.onSleep,
+    this.sleepActiveUntil,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final sleepActive = sleepActiveUntil != null;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _QuickAction(icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
+        const SizedBox(width: 36),
+        _QuickAction(
+          icon: Icons.bedtime_rounded,
+          label: sleepActive
+              ? 'Sleep · ${TimeOfDay.fromDateTime(sleepActiveUntil!).format(context)}'
+              : 'Sleep',
+          onTap: onSleep,
+        ),
         const SizedBox(width: 36),
         _QuickAction(icon: Icons.info_outline_rounded, label: 'Audio info', onTap: onAudioInfo),
       ],
@@ -896,6 +914,62 @@ class _QuickAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Sleep timer picker: Off / preset minutes / end of track. Shows what's
+/// armed with the time it will pause.
+Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) {
+  Color? rowColor(BuildContext c) => Theme.of(c).scaffoldBackgroundColor == Colors.transparent ? null : null;
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: kSurfaceColor,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+            child: Text(
+              'Sleep timer',
+              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (player.sleepUntil != null)
+            ListTile(
+              leading: const Icon(Icons.timer_off_rounded, color: Colors.redAccent),
+              title: Text(
+                'Cancel timer (pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!).format(context)})',
+                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+              ),
+              onTap: () {
+                player.cancelSleepTimer();
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          for (final minutes in const [15, 30, 45, 60, 90])
+            ListTile(
+              leading: const Icon(Icons.bedtime_rounded, color: kBrandColor),
+              title: Text('$minutes minutes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+              onTap: () {
+                player.startSleepTimer(Duration(minutes: minutes));
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.music_note_rounded, color: kBrandColor),
+            title: Text('End of current track', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+            onTap: () {
+              player.startSleepTimerEndOfTrack();
+              Navigator.of(sheetContext).pop();
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
 }
 
 /// "Playing from <device>" — the current audio output route, exactly what

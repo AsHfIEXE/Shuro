@@ -24,6 +24,7 @@ import 'avatar_editor_screen.dart';
 import 'font_picker_sheet.dart';
 import 'manage_servers_screen.dart';
 import 'quality_selector_sheet.dart';
+import '../onboarding/consent_screen.dart' show LegalTexts, DeviceBasics;
 
 import '../../widgets/page_transitions.dart';
 /// "14. Settings" — Account / Playback / Downloads / Cache / Appearance /
@@ -272,6 +273,19 @@ class SettingsScreen extends StatelessWidget {
             const _SectionLabel('ABOUT'),
             const _AboutBlock(),
             _NavRow(icon: Icons.info_outline_rounded, label: 'Version', value: kAppVersion),
+            // Play Store reviewers and screen-reader users both get real
+            // value here: the exact facts the consent screen discloses, in
+            // plain sight.
+            _NavRow(
+              icon: Icons.phone_android_rounded,
+              label: 'Device & app info',
+              onTap: () => _showDeviceInfoSheet(context),
+            ),
+            _NavRow(
+              icon: Icons.gavel_rounded,
+              label: 'Terms & privacy',
+              onTap: () => _showTermsSheet(context),
+            ),
             // Flutter collects licence text for every package the app links
             // (pub packages plus engine components) into one OBS-compliant
             // page — this is the standard, complete way to satisfy the MIT/BSD
@@ -298,6 +312,82 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
+
+  /// Device & app basics — the exact facts the consent screen discloses,
+  /// shown in plain sight in About. On-device only, nothing transmitted.
+  Future<void> _showDeviceInfoSheet(BuildContext context) async {
+    final basics = await DeviceBasics.collect();
+    final screen = DeviceBasics.screenParts(context);
+    if (!context.mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Device & app info', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              for (final row in [...basics.entries, ...screen.entries])
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(row.key, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
+                      Text(row.value, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Terms & privacy sheet — the same texts as the first-launch consent,
+  /// reachable any time from About.
+  Future<void> _showTermsSheet(BuildContext context) async {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCardColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => DefaultTabController(
+        length: 2,
+        child: SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.8,
+            child: Column(
+              children: [
+                const TabBar(
+                  tabs: [Tab(text: 'Terms'), Tab(text: 'Privacy')],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _legalScroll(LegalTexts.terms),
+                      _legalScroll(LegalTexts.privacy),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _legalScroll(String body) => SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Text(body, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, height: 1.55)),
+      );
 
   /// Full local wipe: preferences (servers, favorites, history, playlists,
   /// settings, queue), the cover-art disk cache and the library cache. The

@@ -1,7 +1,7 @@
 /// Single source of truth for the version shown in the app (Settings →
 /// About). Keep in step with `version:` in pubspec.yaml — bump both on
 /// every release ("2.0.3+1" in pubspec = [kAppVersion]+[kAppBuild]).
-const String kAppVersion = '2.2.3';
+const String kAppVersion = '2.3.0';
 const int kAppBuild = 1;
 
 // --- Brand identity -------------------------------------------------------

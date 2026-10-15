@@ -1,7 +1,7 @@
 name: shuro
 description: Shuro — the self-hosted Navidrome/OpenSubsonic music player.
 publish_to: "none"
-version: 2.2.3+4
+version: 2.3.0+5
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -18,6 +18,8 @@ dependencies:
   # plain prefs into Keystore-encrypted storage. Non-secret server fields
   # stay in SharedPreferences.
   flutter_secure_storage: ^9.2.4
+  # First-launch consent + About screen: app version for the device basics.
+  package_info_plus: ^8.1.0
   provider: ^6.1.2
   file_picker: ^8.1.2
   http: ^1.2.2

@@ -91,8 +91,25 @@ class ImageDiskCache {
 /// Call once from main() before runApp: `HttpOverrides.global = CachingHttpOverrides();`
 class CachingHttpOverrides extends HttpOverrides {
   @override
-  HttpClient createHttpClient(SecurityContext? context) =>
-      CachingHttpClient(inner: super.createHttpClient(context));
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = CachingHttpClient(inner: super.createHttpClient(context));
+    // Self-signed certificates on the user's OWN LAN (192.168.x, 10.x,
+    // 172.16-31.x, localhost) are accepted — the classic homelab setup.
+    // Public hosts keep full validation.
+    client.badCertificateCallback = (cert, host, port) => _isPrivateHost(host);
+    return client;
+  }
+
+  static bool _isPrivateHost(String host) {
+    final h = host.toLowerCase();
+    if (h == 'localhost' || h.endsWith('.local') || h.endsWith('.lan')) return true;
+    if (h.startsWith('192.168.') || h.startsWith('10.')) return true;
+    if (h.startsWith('172.')) {
+      final second = int.tryParse(h.split('.')[1]);
+      if (second != null && second >= 16 && second <= 31) return true;
+    }
+    return false;
+  }
 }
 
 /// An [HttpClient] whose GETs are served from, and written to, the image disk

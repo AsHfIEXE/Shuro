@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'backend/subsonic_api.dart';
 import 'models/download_state.dart';
 import 'models/server_config.dart';
@@ -22,6 +23,7 @@ import 'screens/favorites/favorites_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/library/library_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
+import 'screens/onboarding/consent_screen.dart' show ConsentScreen, kTermsAcceptedKey;
 import 'screens/onboarding/server_setup_screen.dart';
 import 'screens/search/search_screen.dart';
 import 'state/app_state.dart';
@@ -91,8 +93,33 @@ class _AuthGateState extends State<AuthGate> {
     debugPrint('[gate] $branch');
   }
 
+  /// Terms acceptance: null = still loading from prefs, false = not yet
+  /// accepted (first launch), true = accepted. The gate shows the consent
+  /// screen whenever it is exactly false.
+  bool? _termsAccepted;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted) return;
+      setState(() => _termsAccepted = prefs.getString(kTermsAcceptedKey) == 'true');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Terms gate runs first: a fresh install must accept before anything
+    // else loads. While prefs are being read (fast), the normal flow renders
+    // underneath for a frame.
+    if (_termsAccepted == false) {
+      return ConsentScreen(onAccepted: () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(kTermsAcceptedKey, 'true');
+        if (mounted) setState(() => _termsAccepted = true);
+      });
+    }
+
     final appState = context.watch<AppState>();
     final status = appState.connectionStatus;
     final terminal = status == ConnectionStatus.connected ||
@@ -185,7 +212,7 @@ class _RestoringScreen extends StatelessWidget {
                         style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13, height: 1.5)),
                     if (appState.connectionErrorMessage != null && appState.connectionErrorMessage != friendlyError) ...[
                       const SizedBox(height: 8),
-                      Text(appState.connectionErrorMessage!,
+                      Text(sanitizeAuthParams(appState.connectionErrorMessage!),
                           textAlign: TextAlign.center,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,

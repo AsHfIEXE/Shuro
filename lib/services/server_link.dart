@@ -107,7 +107,7 @@ class ServerLink {
 /// keeps the technical detail available separately (the restoring screen shows
 /// the friendly line up top and the raw text small below).
 String friendlyConnectionError(String? raw) {
-  final error = raw ?? '';
+  final error = sanitizeAuthParams(raw ?? '');
   final lower = error.toLowerCase();
   if (lower.contains('failed host lookup') || lower.contains('no address associated') || lower.contains('unknownhost')) {
     return 'Your device could not look up that server name (DNS). DDNS names like yours often fail here while working in a browser: set this device DNS to 1.1.1.1 or 8.8.8.8, or use the local address (http://192.168.x.x:4533) while at home. — and note that some DDNS names only resolve inside your own network.';
@@ -132,6 +132,14 @@ String friendlyConnectionError(String? raw) {
   }
   return error.isEmpty ? 'The server did not respond.' : error;
 }
+
+/// Strips Subsonic auth parameters (`u=`, `t=`, `s=` and friends) from any
+/// error text before it reaches the screen or the log — a raw URL in an
+/// exception leaks the user's credentials (plan §4.1).
+String sanitizeAuthParams(String text) => text.replaceAllMapped(
+      RegExp('([?&])(?:u|t|s|v|c|f)=[^&"\\s]*'),
+      (m) => '${m.group(1)}<redacted>',
+    );
 
 /// Favourites that stay in step with the server. Every UI entry point calls
 /// this instead of [AppState.toggleFavoriteSong] directly: the local toggle is
