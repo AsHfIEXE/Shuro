@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../app_info.dart';
 import '../../models/download_state.dart';
 import '../../backend/subsonic_api.dart';
+import '../../services/server_secret_store.dart';
 import '../../services/download_service.dart';
 import '../../services/playback_prefs.dart';
 import '../../state/app_state.dart';
@@ -341,7 +342,9 @@ class SettingsScreen extends StatelessWidget {
       await prefs.clear();
     } catch (_) {}
 
-    // 2) Disk caches: cover art + library snapshots.
+    // 2) Disk caches: cover art + library snapshots. And the secure store:
+    //    a reset forgets the passwords too.
+    await ServerSecretStore.clear();
     try {
       final base = await getApplicationSupportDirectory();
       for (final name in ['image_cache', 'library_cache']) {

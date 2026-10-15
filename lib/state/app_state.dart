@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../backend/music_repository.dart';
 import '../backend/navidrome_music_repository.dart';
 import '../services/library_cache.dart';
+import '../services/server_secret_store.dart';
 import '../models/album.dart';
 import '../models/artist.dart';
 import '../models/artwork_style.dart';
@@ -170,14 +171,37 @@ class AppState extends ChangeNotifier {
         }());
       }
 
+      // Passwords live in OS-backed secure storage (plan §7), never in plain
+      // prefs. Legacy installs migrate on first load: any password found in
+      // the old prefs JSON moves to the secure store and is scrubbed from
+      // prefs immediately.
+      final serverSecrets = await ServerSecretStore.readAll();
       final serversJson = persistence.getString(_kServersKey);
       if (serversJson != null) {
+        var migratedLegacyPassword = false;
         try {
           final list = jsonDecode(serversJson) as List<dynamic>;
-          servers.addAll(list.map((e) {
-            final m = e as Map<String, dynamic>;
-            return ServerConfig(id: m['id'] as String, name: m['name'] as String, url: m['url'] as String, username: m['username'] as String, password: m['password'] as String);
-          }));
+          final sanitized = <Map<String, dynamic>>[];
+          for (final entry in list) {
+            final m = entry as Map<String, dynamic>;
+            final id = m['id'] as String;
+            var password = serverSecrets[id] ?? '';
+            final legacy = m['password'] as String?;
+            if (legacy != null && legacy.isNotEmpty) {
+              password = legacy;
+              migratedLegacyPassword = true;
+            }
+            servers.add(ServerConfig(id: id, name: m['name'] as String, url: m['url'] as String, username: m['username'] as String, password: password));
+            sanitized.add({'id': m['id'], 'name': m['name'], 'url': m['url'], 'username': m['username']});
+          }
+          if (migratedLegacyPassword) {
+            for (final s in servers) {
+              if (s.password.isNotEmpty) serverSecrets[s.id] = s.password;
+            }
+            await ServerSecretStore.writeAll(serverSecrets);
+            // Scrub passwords out of prefs right away.
+            await persistence.setString(_kServersKey, jsonEncode(sanitized));
+          }
         } catch (_) {}
       }
 
@@ -282,8 +306,12 @@ class AppState extends ChangeNotifier {
   Future<void> _persistServers() async {
     final p = _persistence;
     if (p == null) return;
+    // The secret never touches prefs: it goes to OS-backed secure storage
+    // (plan §7). Writing the current map also prunes entries for removed
+    // servers.
+    await ServerSecretStore.writeAll({for (final s in servers) s.id: s.password});
     final list = servers
-        .map((s) => {'id': s.id, 'name': s.name, 'url': s.url, 'username': s.username, 'password': s.password})
+        .map((s) => {'id': s.id, 'name': s.name, 'url': s.url, 'username': s.username}) // the secret itself goes to secure storage, below
         .toList();
     await Future.wait([
       p.setString(_kServersKey, jsonEncode(list)),
