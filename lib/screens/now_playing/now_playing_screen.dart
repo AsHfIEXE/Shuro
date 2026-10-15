@@ -296,7 +296,13 @@ class NowPlayingScreen extends StatelessWidget {
                         stops: [0.0, 0.22, 0.78, 1.0],
                       ).createShader(bounds),
                       blendMode: BlendMode.dstIn,
-                      child: LyricsScreen(initialSong: song, embedded: true, compact: true),
+                      child: ScrollConfiguration(
+                        // The preview is a passive glance, not a document: no
+                        // scrollbar thumb (web/desktop draw one by default,
+                        // and Android flashes one while scrolling).
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        child: LyricsScreen(initialSong: song, embedded: true, compact: true),
+                      ),
                     ),
                   ),
                 ),
