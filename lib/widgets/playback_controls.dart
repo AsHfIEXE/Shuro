@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
 import '../theme/app_theme.dart';
+import 'animated_favorite_icon.dart';
 import 'shuro_icons.dart';
 
 /// Track title + artist, flanked by shuffle/repeat — the "Música/Artista"
@@ -19,6 +20,12 @@ class TrackInfoRow extends StatelessWidget {
   final VoidCallback onShuffleToggle;
   final VoidCallback onRepeatToggle;
 
+  /// The favourite sweet spot: a compact heart right under the artist — the
+  /// most natural place to love a track while it plays. Null/absent = the
+  /// caller doesn't want it rendered here.
+  final bool? isFavorite;
+  final VoidCallback? onToggleFavorite;
+
   const TrackInfoRow({
     super.key,
     required this.song,
@@ -27,6 +34,8 @@ class TrackInfoRow extends StatelessWidget {
     required this.repeatMode,
     required this.onShuffleToggle,
     required this.onRepeatToggle,
+    this.isFavorite,
+    this.onToggleFavorite,
   });
 
   @override
@@ -61,6 +70,25 @@ class TrackInfoRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 14, height: 20 / 14, fontWeight: FontWeight.w500),
                 ),
+                if (isFavorite != null && onToggleFavorite != null) ...[
+                  const SizedBox(height: 6),
+                  // The favourite sweet spot: heart under the artist, one tap
+                  // from the thumb's natural arc while the transport plays.
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: onToggleFavorite,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      child: AnimatedFavoriteIcon(
+                        isFavorite: isFavorite!,
+                        activeColor: accent,
+                        inactiveColor: Colors.white38,
+                        size: 20,
+                        onTap: onToggleFavorite!,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

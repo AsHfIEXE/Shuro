@@ -1,11 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:volume_controller/volume_controller.dart';
 
 import '../../models/download_state.dart';
 import '../../models/song.dart';
+import '../../playback/audio_capability.dart';
+import '../../playback/audio_diagnostics.dart';
 import '../../services/server_link.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
@@ -250,7 +255,9 @@ class NowPlayingScreen extends StatelessWidget {
                     _ring(context, player, song, progress, colors, 'artwork_${song.id}', ringSize),
                     const SizedBox(height: 18),
                     _TimesRow(position: position, total: total, format: _formatDuration),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 6),
+                    const _PlayingFromLine(),
+                    const SizedBox(height: 14),
                     _TrackTitleBlock(
                       song: song,
                       accent: accent,
@@ -259,6 +266,8 @@ class NowPlayingScreen extends StatelessWidget {
                       repeatMode: player.repeatMode,
                       onShuffleToggle: player.toggleShuffle,
                       onRepeatToggle: player.cycleRepeatMode,
+                      isFavorite: isFav,
+                      onToggleFavorite: () => Favorites.toggle(context, song.id),
                     ),
                     const SizedBox(height: 22),
                     _transport(player, song, isPlaying, isCurrent, accent),
@@ -412,9 +421,15 @@ class NowPlayingScreen extends StatelessWidget {
                                     repeatMode: player.repeatMode,
                                     onShuffleToggle: player.toggleShuffle,
                                     onRepeatToggle: player.cycleRepeatMode,
+                                    isFavorite: isFav,
+                                    onToggleFavorite: () => Favorites.toggle(context, song.id),
                                   ),
                                   SizedBox(height: compact ? 6 : 14),
                                   _transport(player, song, isPlaying, isCurrent, accent),
+                                  SizedBox(height: compact ? 6 : 10),
+                                  // Landscape volume: the phone's own buttons
+                                  // are across the device in this orientation.
+                                  const _VolumeSlider(),
                                 ],
                               ),
                             ),
@@ -805,6 +820,10 @@ class _TrackTitleBlock extends StatelessWidget {
   final VoidCallback onShuffleToggle;
   final VoidCallback onRepeatToggle;
 
+  /// Favourite sweet spot passthrough (see TrackInfoRow).
+  final bool? isFavorite;
+  final VoidCallback? onToggleFavorite;
+
   const _TrackTitleBlock({
     required this.song,
     required this.accent,
@@ -813,6 +832,8 @@ class _TrackTitleBlock extends StatelessWidget {
     required this.repeatMode,
     required this.onShuffleToggle,
     required this.onRepeatToggle,
+    this.isFavorite,
+    this.onToggleFavorite,
   });
 
   @override
@@ -844,6 +865,8 @@ class _TrackTitleBlock extends StatelessWidget {
         repeatMode: repeatMode,
         onShuffleToggle: onShuffleToggle,
         onRepeatToggle: onRepeatToggle,
+        isFavorite: isFavorite,
+        onToggleFavorite: onToggleFavorite,
       ),
     );
   }
@@ -870,6 +893,161 @@ class _QuickAction extends StatelessWidget {
             Text(label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 11)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Playing from <device>" — the current audio output route, exactly what
+/// Apple Music/Spotify surface. Data comes from the Kotlin capability
+/// monitor (real device product names on the routes that report them).
+/// Honesty rules apply: the line is only shown when the route is actually
+/// KNOWN — unknown routes render nothing.
+class _PlayingFromLine extends StatefulWidget {
+  const _PlayingFromLine();
+
+  @override
+  State<_PlayingFromLine> createState() => _PlayingFromLineState();
+}
+
+class _PlayingFromLineState extends State<_PlayingFromLine> {
+  AudioCapabilityReport? _report;
+
+  @override
+  void initState() {
+    super.initState();
+    _report = sharedAudioCapabilityMonitor.last;
+    // Re-read when the app returns (route may have changed while hidden);
+    // route changes while open are pushed by the Kotlin monitor via app.dart's
+    // lifecycle recheck.
+    unawaited(sharedAudioCapabilityMonitor.recheck().then((r) {
+      if (mounted) setState(() => _report = r);
+    }));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final report = _report;
+    if (report == null || report.routeKind == RouteKind.unknown) {
+      return const SizedBox(height: 18);
+    }
+    final label = report.routeLabel;
+    final kindText = switch (report.routeKind) {
+      RouteKind.bluetooth => 'Bluetooth',
+      RouteKind.wired => 'Wired headphones',
+      RouteKind.usb => 'USB audio',
+      RouteKind.builtIn => 'This device',
+      RouteKind.other || RouteKind.unknown => 'External output',
+    };
+    final deviceName = (label != null && label.trim().isNotEmpty) ? label.trim() : null;
+    final text = deviceName != null && report.routeKind != RouteKind.builtIn
+        ? 'Playing from $deviceName'
+        : 'Playing from $kindText';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(_iconFor(report.routeKind), size: 13, color: Colors.white38),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconFor(RouteKind kind) => switch (kind) {
+        RouteKind.bluetooth => Icons.bluetooth_audio_rounded,
+        RouteKind.wired => Icons.headset_rounded,
+        RouteKind.usb => Icons.usb_rounded,
+        RouteKind.builtIn => Icons.smartphone_rounded,
+        _ => Icons.speaker_rounded,
+      };
+}
+
+/// Landscape volume: a media-volume slider with speaker icons, for the
+/// orientation where the phone's own volume rocker sits across the device.
+/// Web has no volume plugin — the widget hides itself there.
+class _VolumeSlider extends StatefulWidget {
+  const _VolumeSlider();
+
+  @override
+  State<_VolumeSlider> createState() => _VolumeSliderState();
+}
+
+class _VolumeSliderState extends State<_VolumeSlider> {
+  double? _volume;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) return;
+    try {
+      VolumeController.instance.showSystemUI = false;
+      // fetchInitialVolume: true → the first event delivers the current
+      // value, so no separate getVolume round trip is needed.
+      _sub = VolumeController.instance.addListener((v) {
+        if (mounted) setState(() => _volume = v);
+      });
+    } catch (_) {
+      _volume = null;
+    }
+  }
+
+  StreamSubscription<double>? _sub;
+
+  void _onVolume(double v) {
+    if (mounted) setState(() => _volume = v);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sub?.cancel());
+    try {
+      unawaited(VolumeController.instance.removeListener());
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) return const SizedBox.shrink();
+    final value = (_volume ?? 0.5).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Icon(Icons.volume_down_rounded, size: 18, color: Colors.white54),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              ),
+              child: Slider(
+                value: value,
+                onChanged: _volume == null
+                    ? null
+                    : (v) async {
+                        setState(() => _volume = v);
+                        try {
+                          await VolumeController.instance.setVolume(v);
+                        } catch (_) {}
+                      },
+              ),
+            ),
+          ),
+          Icon(Icons.volume_up_rounded, size: 18, color: Colors.white54),
+        ],
       ),
     );
   }
