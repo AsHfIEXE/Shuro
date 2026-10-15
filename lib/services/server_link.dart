@@ -6,6 +6,7 @@ import '../models/server_config.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import 'artist_artwork_service.dart';
+import 'multi_server.dart';
 
 /// One-time binding between the app and the connected server's feature API.
 ///
@@ -30,48 +31,71 @@ class ServerLink {
 
   static Future<void> bind(BuildContext context) async {
     final appState = context.read<AppState>();
-    if (appState.connectionStatus != ConnectionStatus.connected || appState.activeServerId == null) {
+    if (appState.connectionStatus != ConnectionStatus.connected || appState.servers.isEmpty) {
       return;
     }
-    final server = appState.servers.firstWhere(
-      (s) => s.id == appState.activeServerId,
-      orElse: () => appState.servers.first,
-    );
-    // Already bound to this exact server (rebuilds of AuthGate must not
-    // re-merge favourites or re-create clients on every frame).
-    final key = '${server.id}|${server.url}|${server.username}';
+    final active = appState.servers.where((s) => s.id == appState.activeServerId).firstOrNull ?? appState.servers.first;
+
+    // One client per SAVED server: the library may combine several servers
+    // (enabledServerIds), and favourites/scrobbles must reach each item's OWN
+    // server no matter which ones are enabled for browsing.
+    final apis = <String, SubsonicApi>{
+      for (final server in appState.servers)
+        server.id: SubsonicApi(baseUrl: server.url, username: server.username, passphrase: server.password),
+    };
+
+    // Already bound to this exact set (rebuilds of AuthGate must not re-merge
+    // favourites or re-create clients on every frame).
+    final key = '${appState.servers.map((s) => '${s.id}|${s.url}|${s.username}').join('~')}|${appState.activeServerId}';
     if (_boundKey == key) return;
     _boundKey = key;
 
     final session = context.read<ServerSession>();
-    final api = SubsonicApi(baseUrl: server.url, username: server.username, passphrase: server.password);
-    session.attach(api);
+    final api = apis[active.id]!;
+    session.attachAll(apis, primaryId: active.id);
 
-    // Artist pictures resolve against this server's metadata — tell the
+    // Artist pictures resolve against the active server's metadata — tell the
     // service which server (and user) is live.
-    context.read<ArtistArtworkService>().updateSession(api, server.username);
+    context.read<ArtistArtworkService>().updateSession(api, active.username);
 
     // Play reporting: "now playing" on track start, a counted play at the
-    // listen threshold (past half the track or four minutes). Both
-    // fire-and-forget — a failed report is silent, playback is untouched.
+    // listen threshold. Routed to the song's OWN server — the remote id goes
+    // out in that server's namespace (a qualified id would 404).
     final player = context.read<PlayerController>();
     player.onTrackStarted = (song) {
-      api.scrobble(song.id, submission: false).catchError((_) {});
+      final owner = session.apiForId(song.id);
+      owner?.scrobble(MultiServerLibrary.remoteIdOf(song.id), submission: false).catchError((_) {});
     };
     player.onListenThresholdReached = (song) {
-      api.scrobble(song.id, submission: true).catchError((_) {});
+      final owner = session.apiForId(song.id);
+      owner?.scrobble(MultiServerLibrary.remoteIdOf(song.id), submission: true).catchError((_) {});
     };
 
-    // Favourites converge both ways: server stars appear on this device,
-    // device-only hearts are pushed to the server.
+    // Favourites converge both ways, per server: every server's stars appear
+    // on this device (qualified with the server's namespace); device-only
+    // hearts are pushed back to the server that owns the song.
     try {
-      final starred = await api.starredSongIds();
-      if (!identical(session.api, api)) return; // server switched mid-merge
-      for (final id in starred) {
-        if (!appState.favoriteSongIds.contains(id)) appState.toggleFavoriteSong(id);
+      final starredByServer = <String, Set<String>>{};
+      await Future.wait(apis.entries.map((entry) async {
+        try {
+          starredByServer[entry.key] = await entry.value.starredSongIds();
+        } catch (_) {
+          // That server is down — its stars are simply unknown right now.
+        }
+      }));
+      for (final entry in starredByServer.entries) {
+        for (final remoteId in entry.value) {
+          final qualified = MultiServerLibrary.qualify(entry.key, remoteId);
+          if (!appState.favoriteSongIds.contains(qualified)) appState.toggleFavoriteSong(qualified);
+        }
       }
       for (final id in appState.favoriteSongIds.toList()) {
-        if (!starred.contains(id)) api.star(id).catchError((_) {});
+        final serverId = MultiServerLibrary.serverIdOf(id);
+        if (serverId == null) continue; // legacy un-migrated id — next bind covers it
+        final target = apis[serverId];
+        if (target == null) continue;
+        if (starredByServer[serverId]?.contains(MultiServerLibrary.remoteIdOf(id)) ?? false) continue;
+        target.star(MultiServerLibrary.remoteIdOf(id)).catchError((_) {});
       }
     } catch (_) {
       // Offline blip mid-merge — keep the local state as it is.
@@ -120,9 +144,12 @@ class Favorites {
     final willBeFavorite = !appState.isFavoriteSong(songId);
     appState.toggleFavoriteSong(songId);
 
-    final api = context.read<ServerSession>().api;
+    // Route to the song's OWN server (multi-server libraries mix servers in
+    // one queue); the remote id goes out in that server's namespace.
+    final api = context.read<ServerSession>().apiForId(songId);
     if (api == null) return;
-    final request = willBeFavorite ? api.star(songId) : api.unstar(songId);
+    final remoteId = MultiServerLibrary.remoteIdOf(songId);
+    final request = willBeFavorite ? api.star(remoteId) : api.unstar(remoteId);
     request.catchError((_) {});
   }
 }

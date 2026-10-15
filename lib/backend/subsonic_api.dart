@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/audio_info.dart';
+import '../services/multi_server.dart';
 import '../models/song.dart';
 import 'music_repository.dart';
 
@@ -390,6 +391,7 @@ class SubsonicSearchResult {
 /// as "server actions unavailable", not as an error.
 class ServerSession extends ChangeNotifier {
   SubsonicApi? _api;
+  final Map<String, SubsonicApi> _apis = {};
 
   SubsonicApi? get api => _api;
 
@@ -398,12 +400,43 @@ class ServerSession extends ChangeNotifier {
   /// Replaces the session (on connect / server switch) and drops the old
   /// client's HTTP pool.
   void attach(SubsonicApi api) {
+    for (final existing in _apis.values) {
+      if (!identical(existing, api)) existing.dispose();
+    }
+    _apis.clear();
     _api?.dispose();
     _api = api;
     notifyListeners();
   }
 
+  /// Multi-server attach: one client per connected server. [primaryId] is the
+  /// server that [api] points at (legacy callers keep working).
+  void attachAll(Map<String, SubsonicApi> byServer, {String? primaryId}) {
+    for (final existing in _apis.values) {
+      if (!byServer.values.any((a) => identical(a, existing))) existing.dispose();
+    }
+    _api?.dispose();
+    _apis
+      ..clear()
+      ..addAll(byServer);
+    _api = (primaryId != null ? _apis[primaryId] : null) ?? (byServer.isEmpty ? null : byServer.values.first);
+    notifyListeners();
+  }
+
+  /// The client that owns [songId] — routing for favourites, scrobble and
+  /// anything else that must reach the item's own server. Bare (legacy) ids
+  /// fall back to the primary server.
+  SubsonicApi? apiForId(String songId) {
+    final serverId = MultiServerLibrary.serverIdOf(songId);
+    if (serverId == null) return _api;
+    return _apis[serverId] ?? _api;
+  }
+
   void detach() {
+    for (final existing in _apis.values) {
+      existing.dispose();
+    }
+    _apis.clear();
     _api?.dispose();
     _api = null;
     notifyListeners();

@@ -54,6 +54,24 @@ class MultiServerLibrary {
   static String adopt(String serverId, String id) =>
       serverIdOf(id) == null ? qualify(serverId, id) : id;
 
+  /// A repository-ready copy of [song]: ids back in the owning server's own
+  /// namespace. Repositories build request URLs from `song.id` — a qualified
+  /// (`server::42`) id would leak the namespace into the HTTP call. Used on
+  /// the way IN to a per-server repository (stream URLs, embedded lyrics);
+  /// everything crossing back out keeps qualified ids.
+  static Song localizeSong(String serverId, Song song) => Song(
+        id: remoteIdOf(song.id),
+        title: song.title,
+        artist: song.artist,
+        artistId: remoteIdOf(song.artistId),
+        albumId: remoteIdOf(song.albumId),
+        duration: song.duration,
+        gradientColors: song.gradientColors,
+        artwork: song.artwork,
+        audioInfo: song.audioInfo,
+        localFilePath: song.localFilePath,
+      );
+
   static String _norm(String value) =>
       value.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
 
