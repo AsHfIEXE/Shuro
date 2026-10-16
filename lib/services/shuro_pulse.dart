@@ -25,6 +25,18 @@ import '../state/app_state.dart';
 class ShuroPulse {
   ShuroPulse._();
 
+  /// Session salt — generated once per app launch. Every Pulse list gets a
+  /// fresh ordering per session (the core fix for "always the same songs in
+  /// the same order") while staying stable *within* a session, so saving or
+  /// sharing a mix doesn't rot under you mid-listen.
+  static final int _sessionSalt = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
+
+  /// Day bucket — even a long-lived session drifts across midnight.
+  static int _dayBucket() => DateTime.now().difference(DateTime(2024)).inDays;
+
+  static Random _randomFor(int extra) =>
+      Random(_sessionSalt ^ (_dayBucket() * 7919) ^ extra);
+
   /// Deterministic 0..1 stand-in for an audio "energy" feature (tempo,
   /// loudness, density) a real implementation would read from the file or
   /// an analysis service. Hashed from the song id so it's stable across
@@ -60,16 +72,64 @@ class ShuroPulse {
   /// from the product doc, implemented here as a simple weighted sort
   /// rather than a tunable slider (a real version would expose that ratio
   /// as a setting feeding straight into this scoring step).
-  static List<Song> forYou(AppState appState, {int limit = 12}) {
+  static List<Song> forYou(AppState appState, {int limit = 12, Random? random}) {
+    final rng = random ?? _randomFor(11);
     final songs = _allSongs(appState);
+    final hour = DateTime.now().hour;
+    final history = appState.listeningHistory;
+    final historyPos = <String, int>{};
+    for (var i = 0; i < history.length; i++) {
+      historyPos.putIfAbsent(history[i], () => i);
+    }
     final scored = songs.map((s) {
       double score = _affinityOf(s, appState);
-      if (!appState.listeningHistory.contains(s.id)) score += 0.8; // discovery nudge
-      if (_recentlyPlayed(s, appState, withinLast: 6)) score -= 2; // don't just repeat what's on now
+      final pos = historyPos[s.id];
+      if (pos != null) {
+        // Recency decay: the last few plays are demoted hard, older plays
+        // progressively less — you can hear it again, just not right now.
+        if (pos < 20) score -= 2.6 - pos * 0.12;
+      } else {
+        score += 0.8; // discovery nudge for never-played tracks
+      }
+      // Time-of-day context: late night leans mellow, evening leans energy.
+      final energy = _energyOf(s);
+      if (hour >= 23 || hour < 6) {
+        score += (1 - energy) * 0.6;
+      } else if (hour >= 18) {
+        score += energy * 0.35;
+      }
+      // Jitter — small per-session noise so equal-taste candidates rotate
+      // instead of freezing into one eternal list.
+      score += rng.nextDouble() * 1.2;
       return (song: s, score: score);
     }).toList();
     scored.sort((a, b) => b.score.compareTo(a.score));
-    return scored.map((e) => e.song).take(limit).toList();
+    // Artist-diversity pass: max 2 per artist until every artist had a turn.
+    return _diversify(scored.map((e) => e.song).toList(), limit, perArtistCap: 2);
+  }
+
+  /// Greedy pick with a per-artist cap; over-cap tracks are deferred and
+  /// only used to top up when the cap starved the list (single-artist
+  /// libraries must still fill).
+  static List<Song> _diversify(List<Song> ranked, int limit, {required int perArtistCap}) {
+    final counts = <String, int>{};
+    final picked = <Song>[];
+    final deferred = <Song>[];
+    for (final s in ranked) {
+      if (picked.length >= limit) break;
+      final c = counts[s.artistId] ?? 0;
+      if (c >= perArtistCap) {
+        deferred.add(s);
+      } else {
+        counts[s.artistId] = c + 1;
+        picked.add(s);
+      }
+    }
+    for (final s in deferred) {
+      if (picked.length >= limit) break;
+      picked.add(s);
+    }
+    return picked;
   }
 
   // --- Discover: Tonight's Flow -------------------------------------------
@@ -79,8 +139,9 @@ class ShuroPulse {
   /// sequence doesn't front-load all the familiar songs and dump the
   /// unfamiliar ones at the end (a crude stand-in for real transition/
   /// sequence optimization).
-  static List<Song> tonightsFlow(AppState appState, {int length = 20}) {
-    final songs = _allSongs(appState);
+  static List<Song> tonightsFlow(AppState appState, {int length = 20, Random? random}) {
+    final rng = random ?? _randomFor(22);
+    final songs = [..._allSongs(appState)]..shuffle(rng);
     final favorites = songs.where((s) => appState.isFavoriteSong(s.id)).toList();
     final favoriteArtistTracks = songs
         .where((s) => appState.isFavoriteArtist(s.artistId) && !appState.isFavoriteSong(s.id))
@@ -89,25 +150,37 @@ class ShuroPulse {
         .where((s) => !appState.isFavoriteSong(s.id) && !appState.isFavoriteArtist(s.artistId))
         .toList();
 
-    final pools = [
-      favorites,
-      [...favoriteArtistTracks, ...favoriteArtistTracks],
-      everythingElse,
-      favorites,
-      everythingElse,
-    ];
-
-    final result = <Song>[];
+    // Interleave shuffled pools in a familiar↔fresh pattern. Both the pool
+    // contents AND the walking order change every session, so the flow is a
+    // real mix — never the same sequence twice.
+    final pools = [favorites, favoriteArtistTracks, everythingElse, favorites, everythingElse];
     final used = <String>{};
+    final result = <Song>[];
+    String? lastArtistId;
+
+    Song? pickFrom(List<Song> pool) {
+      Song? fallback;
+      for (final s in pool) {
+        if (used.contains(s.id)) continue;
+        // Prefer not to place the same artist twice in a row.
+        if (s.artistId == lastArtistId) {
+          fallback ??= s;
+          continue;
+        }
+        return s;
+      }
+      return fallback;
+    }
+
     var round = 0;
-    while (result.length < length && round < 50) {
-      final pool = pools[round % pools.length];
-      if (pool.isNotEmpty) {
-        final candidate = pool[round % pool.length];
-        if (used.add(candidate.id)) result.add(candidate);
+    while (result.length < length && round < pools.length * 3) {
+      final pick = pickFrom(pools[round % pools.length]);
+      if (pick != null) {
+        used.add(pick.id);
+        result.add(pick);
+        lastArtistId = pick.artistId;
       }
       round++;
-      if (used.length >= songs.length) break;
     }
     return result;
   }
@@ -157,7 +230,7 @@ class ShuroPulse {
           .where((s) => similarArtistIds.contains(s.artistId))
           .toList();
       if (songs.isEmpty) continue;
-      songs.shuffle(Random(artistId.hashCode));
+      songs.shuffle(_randomFor(artistId.hashCode));
       rows.add((artistId: artistId, artistName: artist.name, songs: songs.take(8).toList()));
     }
     return rows;
@@ -173,7 +246,7 @@ class ShuroPulse {
       final liked = appState.isFavoriteSong(s.id) || (appState.artistAffinity[s.artistId] ?? 0) > 0;
       return liked && !_recentlyPlayed(s, appState, withinLast: 30);
     }).toList();
-    candidates.shuffle(Random(DateTime.now().day));
+    candidates.shuffle(_randomFor(33));
     return candidates.take(limit).toList();
   }
 
@@ -196,7 +269,7 @@ class ShuroPulse {
     final songs = appState.catalogSongs
         .where((s) => likedArtistIds.contains(s.artistId) && !topPlayed.contains(s.id) && !appState.isFavoriteSong(s.id))
         .toList();
-    songs.shuffle(Random(7));
+    songs.shuffle(_randomFor(44));
     return songs.take(limit).toList();
   }
 
@@ -223,10 +296,10 @@ class ShuroPulse {
       case SmartPlaylistPreset.deepCuts:
         return deepCuts(appState, limit: 25);
       case SmartPlaylistPreset.lateNight:
-        final list = songs.where((s) => _energyOf(s) < 0.45).toList()..shuffle(Random(1));
+        final list = songs.where((s) => _energyOf(s) < 0.45).toList()..shuffle(_randomFor(101));
         return list.take(25).toList();
       case SmartPlaylistPreset.favoritesMix:
-        final list = songs.where((s) => appState.isFavoriteSong(s.id)).toList()..shuffle(Random(2));
+        final list = songs.where((s) => appState.isFavoriteSong(s.id)).toList()..shuffle(_randomFor(102));
         return list;
       case SmartPlaylistPreset.recentlyAdded:
         return freshFromYourLibrary(appState, limit: 25);
@@ -239,7 +312,7 @@ class ShuroPulse {
         final list = songs.where((s) => _energyOf(s) >= 0.6).toList()..sort((a, b) => _energyOf(b).compareTo(_energyOf(a)));
         return list.take(25).toList();
       case SmartPlaylistPreset.chill:
-        final list = songs.where((s) => _energyOf(s) < 0.5).toList()..shuffle(Random(3));
+        final list = songs.where((s) => _energyOf(s) < 0.5).toList()..shuffle(_randomFor(103));
         return list.take(25).toList();
       case SmartPlaylistPreset.focus:
         final list = songs.where((s) => _energyOf(s) < 0.55).toList()..sort((a, b) => _energyOf(a).compareTo(_energyOf(b)));
@@ -283,7 +356,7 @@ class ShuroPulse {
     }
 
     pool = pool.toSet().toList(); // de-dupe while preserving a stable-ish order
-    pool.shuffle(Random(seed.id.hashCode ^ mode.index));
+    pool.shuffle(_randomFor(seed.id.hashCode ^ mode.index));
 
     final result = <Song>[seed];
     Duration total = seed.duration;
