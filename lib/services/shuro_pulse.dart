@@ -81,8 +81,24 @@ class ShuroPulse {
     for (var i = 0; i < history.length; i++) {
       historyPos.putIfAbsent(history[i], () => i);
     }
+    // Genre-affinity graph: each genre scores as the average taste signal of
+    // the songs living in it, so a genre full of favorited artists pulls its
+    // lesser-known residents up too.
+    final genreScoreOf = <String, double>{};
+    appState.catalogGenres.forEach((genre, songIds) {
+      double sum = 0;
+      for (final id in songIds) {
+        final s = appState.songById(id);
+        if (s != null) sum += _affinityOf(s, appState);
+      }
+      final avg = sum / (songIds.isEmpty ? 1 : songIds.length);
+      for (final id in songIds) {
+        genreScoreOf[id] = (genreScoreOf[id] ?? 0) + avg;
+      }
+    });
     final scored = songs.map((s) {
       double score = _affinityOf(s, appState);
+      score += (genreScoreOf[s.id] ?? 0) * 0.3; // taste for the genres this song lives in
       final pos = historyPos[s.id];
       if (pos != null) {
         // Recency decay: the last few plays are demoted hard, older plays
@@ -200,38 +216,76 @@ class ShuroPulse {
     // graph — a local-only library has neither, so there's nothing honest
     // to show here rather than fabricating rows from nothing.
     if (!appState.hasServer) return const [];
+    // Genre-affinity graph: score every genre by the taste signals of the
+    // songs and artists living in it, then walk that graph — for each artist
+    // you like, recommend songs from its strongest genres by artists you
+    // DON'T already listen to heavily. Discovery, not an echo chamber.
+    final genreAffinity = <String, double>{};
+    final artistsByGenre = <String, Set<String>>{};
+    appState.catalogGenres.forEach((genre, songIds) {
+      double g = 0;
+      final artists = <String>{};
+      for (final id in songIds) {
+        final s = appState.songById(id);
+        if (s == null) continue;
+        artists.add(s.artistId);
+        g += _affinityOf(s, appState);
+        if (appState.listeningHistory.contains(s.id)) g += 0.25;
+      }
+      genreAffinity[genre] = g;
+      artistsByGenre[genre] = artists;
+    });
+
     final likedArtistIds = <String>{
       ...appState.favoriteArtistIds,
       ...appState.artistAffinity.entries.where((e) => e.value > 0).map((e) => e.key),
     };
+    final listenedArtists = <String, int>{};
+    for (final id in appState.listeningHistory) {
+      final song = appState.songById(id);
+      if (song == null) continue;
+      listenedArtists[song.artistId] = (listenedArtists[song.artistId] ?? 0) + 1;
+    }
     if (likedArtistIds.isEmpty) {
       // Fall back to whoever shows up most in listening history.
-      final counts = <String, int>{};
-      for (final id in appState.listeningHistory) {
-        final song = appState.songById(id);
-        if (song == null) continue;
-        counts[song.artistId] = (counts[song.artistId] ?? 0) + 1;
-      }
-      final sorted = counts.keys.toList()..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+      final sorted = listenedArtists.keys.toList()
+        ..sort((a, b) => (listenedArtists[b] ?? 0).compareTo(listenedArtists[a] ?? 0));
       likedArtistIds.addAll(sorted.take(artistLimit));
     }
 
     final rows = <({String artistId, String artistName, List<Song> songs})>[];
+    final rng = _randomFor(55);
     for (final artistId in likedArtistIds.take(artistLimit)) {
       final artist = appState.artistById(artistId);
       if (artist == null) continue;
-      // "Similar" artists = other artists sharing a genre bucket with this one.
-      final genres = appState.catalogGenres.entries.where((e) => e.value.contains(artistId));
-      final similarArtistIds = <String>{
-        for (final g in genres) ...g.value,
-      }..remove(artistId);
-
-      final songs = appState.catalogSongs
-          .where((s) => similarArtistIds.contains(s.artistId))
-          .toList();
-      if (songs.isEmpty) continue;
-      songs.shuffle(_randomFor(artistId.hashCode));
-      rows.add((artistId: artistId, artistName: artist.name, songs: songs.take(8).toList()));
+      // The genres this artist lives in, strongest-affinity first.
+      final seedGenres = appState.catalogGenres.entries
+          .where((e) => (artistsByGenre[e.key] ?? const {}).contains(artistId))
+          .toList()
+        ..sort((a, b) => (genreAffinity[b.key] ?? 0).compareTo(genreAffinity[a.key] ?? 0));
+      if (seedGenres.isEmpty) continue;
+      // Candidate songs from those genres by OTHER artists — under-listened
+      // artists first, session jitter breaking ties differently each time.
+      final candidates = <Song>[];
+      final seen = <String>{};
+      for (final g in seedGenres) {
+        for (final id in g.value) {
+          final s = appState.songById(id);
+          if (s == null || s.artistId == artistId || !seen.add(s.id)) continue;
+          if ((listenedArtists[s.artistId] ?? 0) > 5 && rng.nextDouble() < 0.5) {
+            continue; // don't echo artists you already hear constantly
+          }
+          candidates.add(s);
+        }
+        if (candidates.length >= 24) break;
+      }
+      if (candidates.isEmpty) continue;
+      candidates.sort((a, b) {
+        final pa = (listenedArtists[a.artistId] ?? 0) + rng.nextDouble() * 2;
+        final pb = (listenedArtists[b.artistId] ?? 0) + rng.nextDouble() * 2;
+        return pa.compareTo(pb);
+      });
+      rows.add((artistId: artistId, artistName: artist.name, songs: candidates.take(8).toList()));
     }
     return rows;
   }
