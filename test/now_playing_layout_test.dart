@@ -35,37 +35,42 @@ void main() {
     FlutterError.onError = errors.add;
 
     await tester.binding.setSurfaceSize(size);
-    addTearDown(() async {
-      await tester.binding.setSurfaceSize(null);
+    // try/finally — NOT addTearDown: when the expect below throws, the
+    // handler must be restored IMMEDIATELY, or every later test in this file
+    // runs with the stale override and the whole run cascades into the
+    // "overrode FlutterError.onError" binding failure + 10-minute timeout
+    // (exactly what CI hit on the 320×568 case).
+    try {
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AppState()),
+            ChangeNotifierProvider(create: (_) => PlayerController()),
+            ChangeNotifierProvider(create: (_) => AppearanceSettings()),
+          ],
+          // With a song: exercises the title block, transport and lyrics affordance,
+          // not just the empty state.
+          child: MaterialApp(home: NowPlayingScreen(initialSong: song(1))),
+        ),
+      );
+      // Two fixed pumps instead of pumpAndSettle: with a song on screen the
+      // backdrop's idle breathing repeats forever, which pumpAndSettle would
+      // wait on indefinitely. Layout — and therefore any overflow — is complete
+      // after the first frame; the second pump flushes one animation tick.
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(seconds: 1));
+
+      final overflows = errors.where((e) => e.exception.toString().contains('overflowed'));
+      expect(
+        overflows,
+        isEmpty,
+        reason: 'Now Playing overflowed at ${size.width}×${size.height}:\n'
+            '${overflows.map((e) => e.toString()).join('\n')}',
+      );
+    } finally {
       FlutterError.onError = previousOnError;
-    });
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => AppState()),
-          ChangeNotifierProvider(create: (_) => PlayerController()),
-          ChangeNotifierProvider(create: (_) => AppearanceSettings()),
-        ],
-        // With a song: exercises the title block, transport and lyrics affordance,
-        // not just the empty state.
-        child: MaterialApp(home: NowPlayingScreen(initialSong: song(1))),
-      ),
-    );
-    // Two fixed pumps instead of pumpAndSettle: with a song on screen the
-    // backdrop's idle breathing repeats forever, which pumpAndSettle would
-    // wait on indefinitely. Layout — and therefore any overflow — is complete
-    // after the first frame; the second pump flushes one animation tick.
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.pump(const Duration(seconds: 1));
-
-    final overflows = errors.where((e) => e.exception.toString().contains('overflowed'));
-    expect(
-      overflows,
-      isEmpty,
-      reason: 'Now Playing overflowed at ${size.width}×${size.height}:\n'
-          '${overflows.map((e) => e.toString()).join('\n')}',
-    );
+      await tester.binding.setSurfaceSize(null);
+    }
   }
 
   testWidgets('Now Playing fits a 1920×1080 window (the reported bug)', (tester) async {

@@ -38,7 +38,7 @@ const double kNowPlayingWideBreakpoint = 1024;
 /// title block, transport, quick actions and the lyrics affordance, plus their
 /// paddings. The ring is sized from what is *left*, which is what keeps this
 /// screen from overflowing on a short or landscape window.
-const double _kPhoneChromeHeight = 430;
+const double _kPhoneChromeHeight = 470;
 
 /// "09. Now Playing" — artwork, metadata, a drag-to-seek progress ring,
 /// transport controls, and quick access to Queue / Lyrics / Audio info.
@@ -229,14 +229,16 @@ class NowPlayingScreen extends StatelessWidget {
         .min(constraints.maxWidth * 0.79, math.max(160.0, constraints.maxHeight - _kPhoneChromeHeight))
         .clamp(160.0, 360.0);
 
-    return CustomScrollView(
-      // `hasScrollBody: false` hands the column at least the viewport height, so
-      // spaceBetween still separates the groups on a tall screen — and when the
-      // content is taller than the viewport the sliver simply scrolls instead of
-      // drawing an overflow banner over the controls.
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
+    return LayoutBuilder(
+      builder: (context, viewport) => SingleChildScrollView(
+        // Real scrolling: ConstrainedBox(minHeight) lets the column stretch to
+        // the viewport on tall phones (spaceBetween still separates the
+        // groups), while content taller than the viewport (small phones, with
+        // the title heart + output line that the old fixed-height sliver
+        // overflowed on) now SCROLLS instead of drawing an overflow — the
+        // sliver variant overflowed the moment the content grew.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: viewport.maxHeight),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -331,7 +333,7 @@ class NowPlayingScreen extends StatelessWidget {
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -364,8 +366,8 @@ class NowPlayingScreen extends StatelessWidget {
     // past the column and clip at the screen edge (the reported screenshot).
     final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
     final artworkSize = math
-        .min(math.min(constraints.maxHeight * (compact ? 0.40 : 0.44), columnWidth), compact ? 230.0 : 340.0)
-        .clamp(150.0, compact ? 230.0 : 340.0);
+        .min(math.min(constraints.maxHeight * (compact ? 0.36 : 0.44), columnWidth), compact ? 210.0 : 340.0)
+        .clamp(compact ? 110.0 : 160.0, compact ? 210.0 : 340.0);
 
     return Column(
       children: [
@@ -404,14 +406,14 @@ class NowPlayingScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _ring(context, player, song, progress, colors, 'artwork_${song.id}', artworkSize),
-                            SizedBox(height: compact ? 10 : 30),
+                            SizedBox(height: compact ? 6 : 30),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _TimesRow(position: position, total: total, format: _formatDuration),
-                                  SizedBox(height: compact ? 5 : 14),
+                                  SizedBox(height: compact ? 4 : 14),
                                   // Title + artist stay visible in landscape
                                   // too — only the controls dissolve.
                                   _TrackTitleBlock(
@@ -424,9 +426,10 @@ class NowPlayingScreen extends StatelessWidget {
                                     onRepeatToggle: player.cycleRepeatMode,
                                     isFavorite: isFav,
                                     onToggleFavorite: () => Favorites.toggle(context, song.id),
+                                    dense: compact,
                                   ),
-                                  SizedBox(height: compact ? 4 : 14),
-                                  _transport(player, song, isPlaying, isCurrent, accent),
+                                  SizedBox(height: compact ? 3 : 14),
+                                  _transport(player, song, isPlaying, isCurrent, accent, compact: compact),
                                   SizedBox(height: compact ? 2 : 10),
                                   // Landscape volume: the phone's own buttons
                                   // are across the device in this orientation.
@@ -504,11 +507,12 @@ class NowPlayingScreen extends StatelessWidget {
     );
   }
 
-  Widget _transport(PlayerController player, Song song, bool isPlaying, bool isCurrent, Color accent) {
+  Widget _transport(PlayerController player, Song song, bool isPlaying, bool isCurrent, Color accent, {bool compact = false}) {
     return PlaybackControls(
       isPlaying: isPlaying,
       isBuffering: isCurrent && player.isBuffering,
       accentColor: accent,
+      compact: compact,
       onPlayPause: () async {
         if (isCurrent) {
           await player.togglePlayPause();
@@ -838,6 +842,9 @@ class _TrackTitleBlock extends StatelessWidget {
   final bool? isFavorite;
   final VoidCallback? onToggleFavorite;
 
+  /// Short-window sizing passthrough (see TrackInfoRow.dense).
+  final bool dense;
+
   const _TrackTitleBlock({
     required this.song,
     required this.accent,
@@ -848,6 +855,7 @@ class _TrackTitleBlock extends StatelessWidget {
     required this.onRepeatToggle,
     this.isFavorite,
     this.onToggleFavorite,
+    this.dense = false,
   });
 
   @override
@@ -881,6 +889,7 @@ class _TrackTitleBlock extends StatelessWidget {
         onRepeatToggle: onRepeatToggle,
         isFavorite: isFavorite,
         onToggleFavorite: onToggleFavorite,
+        dense: dense,
       ),
     );
   }

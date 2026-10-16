@@ -26,6 +26,10 @@ class TrackInfoRow extends StatelessWidget {
   final bool? isFavorite;
   final VoidCallback? onToggleFavorite;
 
+  /// Short-window sizing (landscape phones): smaller type and heart so the
+  /// whole player column fits the viewport without clipping.
+  final bool dense;
+
   const TrackInfoRow({
     super.key,
     required this.song,
@@ -36,6 +40,7 @@ class TrackInfoRow extends StatelessWidget {
     required this.onRepeatToggle,
     this.isFavorite,
     this.onToggleFavorite,
+    this.dense = false,
   });
 
   @override
@@ -60,30 +65,30 @@ class TrackInfoRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 22, height: 28 / 22, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: dense ? 18 : 22, height: dense ? 24 / 18 : 28 / 22, fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: dense ? 2 : 4),
                 Text(
                   song.artist,
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 14, height: 20 / 14, fontWeight: FontWeight.w500),
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: dense ? 12.5 : 14, height: dense ? 17 / 12.5 : 20 / 14, fontWeight: FontWeight.w500),
                 ),
                 if (isFavorite != null && onToggleFavorite != null) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: dense ? 2 : 6),
                   // The favourite sweet spot: heart under the artist, one tap
                   // from the thumb's natural arc while the transport plays.
                   InkWell(
                     borderRadius: BorderRadius.circular(12),
                     onTap: onToggleFavorite,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: dense ? 1 : 3),
                       child: AnimatedFavoriteIcon(
                         isFavorite: isFavorite!,
                         activeColor: accent,
                         inactiveColor: Colors.white38,
-                        size: 20,
+                        size: dense ? 17 : 20,
                         onTap: onToggleFavorite!,
                       ),
                     ),
@@ -125,6 +130,12 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
+  /// Smaller footprint for short (landscape phone) windows, where the
+  /// 80 dp disc plus default icon padding was the element that pushed the
+  /// whole column past the viewport and clipped the transport at the
+  /// screen's bottom edge.
+  final bool compact;
+
   const PlaybackControls({
     super.key,
     required this.isPlaying,
@@ -133,10 +144,14 @@ class PlaybackControls extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     this.isBuffering = false,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final discSize = compact ? 56.0 : 80.0;
+    final iconSize = compact ? 24.0 : 30.0;
+    final gap = compact ? 18.0 : 26.0;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -144,12 +159,13 @@ class PlaybackControls extends StatelessWidget {
           button: true,
           label: 'Previous track',
           child: IconButton(
-            icon: const ShuroIcon(ShuroGlyph.previous, size: 30, color: Colors.white),
+            visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+            icon: ShuroIcon(ShuroGlyph.previous, size: iconSize, color: Colors.white),
             onPressed: onPrevious,
             tooltip: 'Previous',
           ),
         ),
-        const SizedBox(width: 26),
+        SizedBox(width: gap),
         GestureDetector(
           onTap: onPlayPause,
           child: Semantics(
@@ -158,8 +174,8 @@ class PlaybackControls extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
-              width: 80,
-              height: 80,
+              width: discSize,
+              height: discSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.7)]),
@@ -171,27 +187,28 @@ class PlaybackControls extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
                 child: isBuffering
-                    ? const Padding(
-                        key: ValueKey('buffering'),
-                        padding: EdgeInsets.all(26),
-                        child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
+                    ? Padding(
+                        key: const ValueKey('buffering'),
+                        padding: EdgeInsets.all(compact ? 17 : 26),
+                        child: const CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
                       )
                     : ShuroIcon(
                         isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
                         key: ValueKey(isPlaying),
                         color: Colors.white,
-                        size: 34,
+                        size: compact ? 24 : 34,
                       ),
               ),
             ),
           ),
         ),
-        const SizedBox(width: 26),
+        SizedBox(width: gap),
         Semantics(
           button: true,
           label: 'Next track',
           child: IconButton(
-            icon: const ShuroIcon(ShuroGlyph.next, size: 30, color: Colors.white),
+            visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+            icon: ShuroIcon(ShuroGlyph.next, size: iconSize, color: Colors.white),
             onPressed: onNext,
             tooltip: 'Next',
           ),
