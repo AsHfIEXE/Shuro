@@ -766,21 +766,27 @@ class _QuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sleepActive = sleepActiveUntil != null;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _QuickAction(icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
-        const SizedBox(width: 36),
-        _QuickAction(
-          icon: Icons.bedtime_rounded,
-          label: sleepActive
-              ? 'Sleep · ${TimeOfDay.fromDateTime(sleepActiveUntil!).format(context)}'
-              : 'Sleep',
-          onTap: onSleep,
-        ),
-        const SizedBox(width: 36),
-        _QuickAction(icon: Icons.info_outline_rounded, label: 'Audio info', onTap: onAudioInfo),
-      ],
+    // FittedBox: three actions + gaps never overflow a narrow screen (or the
+    // test renderer's wider fallback glyphs) — the row scales down only when
+    // it would otherwise clip.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _QuickAction(icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
+          const SizedBox(width: 36),
+          _QuickAction(
+            icon: Icons.bedtime_rounded,
+            label: sleepActive
+                ? 'Sleep · ${TimeOfDay.fromDateTime(sleepActiveUntil!).format(context)}'
+                : 'Sleep',
+            onTap: onSleep,
+          ),
+          const SizedBox(width: 36),
+          _QuickAction(icon: Icons.info_outline_rounded, label: 'Audio info', onTap: onAudioInfo),
+        ],
+      ),
     );
   }
 }
