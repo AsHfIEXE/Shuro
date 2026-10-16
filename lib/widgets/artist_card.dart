@@ -26,14 +26,18 @@ class ArtistCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: ArtworkThumb(
-              gradientColors: artist.gradientColors,
-              artwork: artist.artwork,
-              radius: 999,
-              icon: Icons.person_rounded,
-              iconSize: 34,
+          // Same rule as AlbumCard: the cover gives way to the text's
+          // intrinsic height (font scale) instead of overflowing the cell.
+          Flexible(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: ArtworkThumb(
+                gradientColors: artist.gradientColors,
+                artwork: artist.artwork,
+                radius: 999,
+                icon: Icons.person_rounded,
+                iconSize: 34,
+              ),
             ),
           ),
           const SizedBox(height: 8),
