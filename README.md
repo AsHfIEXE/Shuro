@@ -97,6 +97,12 @@ Rediscover · Deep Cuts · Fresh From Your Library.
   what's playing, Shuro detects and resyncs itself in the background.
 - **Scrobbles that count** — now-playing broadcast and proper submissions,
   so your server's play counts and Last.fm are accurate.
+- **A queue that survives** — your queue and position persist across
+  launches; play-next, reorder, remove, clear, shuffle the queue itself —
+  and when it ends, **autoplay suggestions** keep the session going.
+- **Quality tiers on demand** — original by default, with explicit
+  High/Medium/Low transcode tiers for metered connections.
+- **Immersive mode** — Now Playing fades its chrome away while you listen.
 
 ### 🔒 Privacy that isn't a promise, it's a design
 
@@ -115,18 +121,32 @@ Rediscover · Deep Cuts · Fresh From Your Library.
 
 | Screen | What you'll see |
 |---|---|
+| **Splash → Onboarding** | Animated dark launch, a welcome flow, a first-run consent screen, and guided server setup |
 | **Home** | Pulse-powered rows that change every session, your recent queues, quick jumps into every library section |
 | **Library** | Songs · Albums · Artists · Genres · Playlists · Local — responsive from phones to TVs, with sort and Play/Shuffle on every list |
-| **Now Playing** | The palette-lit centerpiece: breathing backdrop, karaoke lyrics, scrubbing ring, quick actions (Queue · Sleep · Volume · Audio info) |
+| **Album & Artist detail** | Full discographies and artist pages with server artwork, inline Play/Shuffle, per-item actions |
+| **Collections** | Curated groupings from your server, browsed like native playlists |
+| **Now Playing** | The palette-lit centerpiece: breathing backdrop, karaoke lyrics, scrubbing ring, quick actions (Queue · Sleep · Volume · Audio info) — immersive mode hides the chrome |
 | **Lyrics** | Full-screen word-fill karaoke with a sync nudge, or a live preview under the ring |
-| **Queue** | Reorder, remove, jump — with up-next intelligence from Pulse |
+| **Queue** | Reorder, remove, play-next, clear, shuffle — and it resumes exactly where you left off, even after a reboot |
 | **Discover** | Six Pulse rows + Smart Playlists + Build with Shuro |
+| **Favorites & Downloads** | Two-way-synced favourites with your server; a downloads hub with real progress and storage control |
+| **Playlists** | Create locally, edit server playlists (owner-gated), save your queue as a playlist |
 | **Search** | Instant, across songs, albums, artists, genres and playlists |
-| **Settings** | Servers, quality, playback, appearance (fonts, artwork styles, motion, blur), downloads, About with device facts and licenses |
+| **Settings** | Servers (add/remove/enable per server), quality tiers, playback, appearance — fonts, artwork styles, motion, blur — downloads, About with device facts and licenses |
 
 Dark-only by design — because a music player should disappear into the
 music. Reduce-animations honoured everywhere; every loading state is a real
 skeleton, never a spinner stuck in the void.
+
+**Personalization:** pick your own font family, choose how artwork is
+cropped (artwork styles), tune backdrop blur and motion per taste, and set a
+profile avatar in the built-in avatar editor. Adaptive launcher icon and an
+animated dark splash out of the box.
+
+**Local files are first-class:** import a folder (recursive scan), and Shuro
+enriches it with ID3v2 / FLAC Vorbis tags — real artwork, real palettes,
+same player pipeline as your server tracks.
 
 ---
 
