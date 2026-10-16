@@ -1175,6 +1175,17 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     notifyListeners();
   }
 
+  /// Player-level output level (0..1). Used by the volume sheet's honest
+  /// fallback when the system-volume plugin is unavailable (browsers): a
+  /// REAL control of the player's own volume, never a fake one.
+  double get playerVolume => _audioPlayer.volume;
+
+  Future<void> setPlayerVolume(double value) async {
+    try {
+      await _audioPlayer.setVolume(value.clamp(0.0, 1.0));
+    } catch (_) {}
+  }
+
   /// Sleep timer: fade (optionally), pause, restore volume. The UI reads
   /// [sleepUntil] to show what's armed; presets, a CUSTOM picker, end of
   /// track, and +10-minute extension are offered by the sheet.

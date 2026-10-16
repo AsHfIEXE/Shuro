@@ -338,6 +338,7 @@ class NowPlayingScreen extends StatelessWidget {
                     onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
                     onAudioInfo: () => showAudioInfoSheet(context, song),
                     onSleep: () => showSleepTimerSheet(context, player),
+                    onVolume: () => showVolumeSheet(context, player),
                     sleepActiveUntil: player.sleepUntil,
                   ),
                   const SizedBox(height: 14),
@@ -786,12 +787,14 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onQueue;
   final VoidCallback onAudioInfo;
   final VoidCallback onSleep;
+  final VoidCallback onVolume;
   final DateTime? sleepActiveUntil;
 
   const _QuickActions({
     required this.onQueue,
     required this.onAudioInfo,
     required this.onSleep,
+    required this.onVolume,
     this.sleepActiveUntil,
   });
 
@@ -815,6 +818,8 @@ class _QuickActions extends StatelessWidget {
                 : 'Sleep',
             onTap: onSleep,
           ),
+          const SizedBox(width: 36),
+          _QuickAction(icon: Icons.volume_up_rounded, label: 'Volume', onTap: onVolume),
           const SizedBox(width: 36),
           _QuickAction(icon: Icons.info_outline_rounded, label: 'Audio info', onTap: onAudioInfo),
         ],
@@ -1065,6 +1070,179 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
       ),
     ),
   );
+}
+
+/// Volume control, available in every mode (the slider used to exist only
+/// inline in the landscape column, so portrait and web users had NO volume
+/// control at all). System media volume when the platform allows it; a real
+/// player-volume fallback otherwise — never a fake.
+Future<void> showVolumeSheet(BuildContext context, PlayerController player) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: kSurfaceColor,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (_) => SafeArea(child: _VolumeSheet(player: player)),
+  );
+}
+
+class _VolumeSheet extends StatefulWidget {
+  final PlayerController player;
+  const _VolumeSheet({required this.player});
+
+  @override
+  State<_VolumeSheet> createState() => _VolumeSheetState();
+}
+
+class _VolumeSheetState extends State<_VolumeSheet> {
+  double? _systemVolume;
+  StreamSubscription<double>? _sub;
+  bool _systemWorking = false;
+  bool _systemTried = false;
+  late double _playerVolume = widget.player.playerVolume;
+  double _preMute = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      _systemTried = true; // browsers: player-volume fallback immediately
+      return;
+    }
+    try {
+      VolumeController.instance.showSystemUI = false;
+      _sub = VolumeController.instance.addListener((v) {
+        if (mounted) {
+          setState(() {
+            _systemVolume = v;
+            _systemWorking = true;
+          });
+        }
+      });
+      VolumeController.instance.getVolume().then((v) {
+        if (mounted) {
+          setState(() {
+            _systemVolume = v;
+            _systemWorking = true;
+          });
+        }
+      }).catchError((_) {});
+    } catch (_) {}
+    // No answer shortly → honest fallback to the player's own volume.
+    Future.delayed(const Duration(milliseconds: 1200), () {
+      if (mounted && !_systemWorking) setState(() => _systemTried = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sub?.cancel());
+    try {
+      unawaited(VolumeController.instance.removeListener());
+    } catch (_) {}
+    super.dispose();
+  }
+
+  bool get _useSystem => !kIsWeb && _systemWorking;
+  bool get _unknown => !_useSystem && !_systemTried && !kIsWeb;
+
+  Future<void> _set(double v) async {
+    if (_useSystem) {
+      try {
+        await VolumeController.instance.setVolume(v);
+      } catch (_) {}
+    } else {
+      await widget.player.setPlayerVolume(v);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _useSystem ? (_systemVolume ?? 0.5) : _playerVolume;
+    final percent = '${(value * 100).round()}%';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Volume', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              if (!_unknown)
+                Text(percent, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (_unknown)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Row(
+                children: [
+                  const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kBrandColor)),
+                  const SizedBox(width: 12),
+                  Text('Reading system volume…', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
+                ],
+              ),
+            )
+          else
+            Row(
+              children: [
+                IconButton(
+                  tooltip: value == 0 ? 'Unmute' : 'Mute',
+                  icon: Icon(value == 0 ? Icons.volume_off_rounded : Icons.volume_mute_rounded, color: Colors.white70),
+                  onPressed: () async {
+                    if (value == 0) {
+                      setState(() {
+                        _playerVolume = _preMute;
+                        _systemVolume = _preMute;
+                      });
+                      await _set(_preMute);
+                    } else {
+                      _preMute = value;
+                      setState(() {
+                        _playerVolume = 0;
+                        _systemVolume = 0;
+                      });
+                      await _set(0);
+                    }
+                  },
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3.5,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                    ),
+                    child: Slider(
+                      value: value.clamp(0.0, 1.0),
+                      onChanged: (v) {
+                        setState(() {
+                          _systemVolume = v;
+                          _playerVolume = v;
+                        });
+                        _set(v);
+                      },
+                    ),
+                  ),
+                ),
+                const Icon(Icons.volume_up_rounded, color: Colors.white70),
+              ],
+            ),
+          const SizedBox(height: 4),
+          Text(
+            _useSystem
+                ? 'System media volume'
+                : (kIsWeb
+                    ? 'Player volume — in a browser the tab/speaker volume is the system control'
+                    : 'Player volume — this device did not expose its system control'),
+            style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// "Playing from <device>" — the current audio output route, exactly what
