@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 
 import '../../models/download_state.dart';
@@ -792,7 +793,7 @@ class _QuickActions extends StatelessWidget {
           _QuickAction(
             icon: Icons.bedtime_rounded,
             label: sleepActive
-                ? 'Sleep · ${TimeOfDay.fromDateTime(sleepActiveUntil!).format(context)}'
+                ? 'Sleep · ${formatSleepCountdown(sleepActiveUntil!.difference(DateTime.now()))}'
                 : 'Sleep',
             onTap: onSleep,
           ),
@@ -942,55 +943,107 @@ class _QuickAction extends StatelessWidget {
 
 /// Sleep timer picker: Off / preset minutes / end of track. Shows what's
 /// armed with the time it will pause.
-Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) {
-  Color? rowColor(BuildContext c) => Theme.of(c).scaffoldBackgroundColor == Colors.transparent ? null : null;
+Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) async {
+  // The fade preference persists (the timer itself never does — spec rule).
+  final prefs = await SharedPreferences.getInstance();
+  var fade = prefs.getBool('shuro_sleep_fade') ?? true;
+
+  if (!context.mounted) return;
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: kSurfaceColor,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-    builder: (sheetContext) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-            child: Text(
-              'Sleep timer',
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (player.sleepUntil != null)
-            ListTile(
-              leading: const Icon(Icons.timer_off_rounded, color: Colors.redAccent),
-              title: Text(
-                'Cancel timer (pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!).format(context)})',
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+                child: Text(
+                  'Sleep timer',
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                ),
               ),
-              onTap: () {
-                player.cancelSleepTimer();
-                Navigator.of(sheetContext).pop();
-              },
-            ),
-          for (final minutes in const [15, 30, 45, 60, 90])
-            ListTile(
-              leading: const Icon(Icons.bedtime_rounded, color: kBrandColor),
-              title: Text('$minutes minutes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-              onTap: () {
-                player.startSleepTimer(Duration(minutes: minutes));
-                Navigator.of(sheetContext).pop();
-              },
-            ),
-          ListTile(
-            leading: const Icon(Icons.music_note_rounded, color: kBrandColor),
-            title: Text('End of current track', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-            onTap: () {
-              player.startSleepTimerEndOfTrack();
-              Navigator.of(sheetContext).pop();
-            },
+              if (player.sleepUntil != null) ...[
+                ListTile(
+                  leading: const Icon(Icons.exposure_plus_1_rounded, color: kBrandColor),
+                  title: Text(
+                    '+10 minutes (now pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!.add(const Duration(minutes: 10))).format(sheetContext)})',
+                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                  ),
+                  onTap: () {
+                    player.extendSleepTimer();
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.timer_off_rounded, color: Colors.redAccent),
+                  title: Text(
+                    'Cancel timer (pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!).format(sheetContext)})',
+                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                  ),
+                  onTap: () {
+                    player.cancelSleepTimer();
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+              ],
+              for (final minutes in const [15, 30, 45, 60, 90])
+                ListTile(
+                  leading: const Icon(Icons.bedtime_rounded, color: kBrandColor),
+                  title: Text('$minutes minutes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                  onTap: () {
+                    player.startSleepTimer(Duration(minutes: minutes), fadeOut: fade);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.schedule_rounded, color: kBrandColor),
+                title: Text('Custom…', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Pick hours and minutes', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: sheetContext,
+                    helpText: 'Sleep after',
+                    initialTime: const TimeOfDay(hour: 1, minute: 0),
+                    // Hours + minutes in the clock UI: any 24h time maps to a
+                    // duration of exactly h×60+m minutes.
+                    initialEntryMode: TimePickerEntryMode.dial,
+                  );
+                  if (picked == null) return;
+                  final minutes = picked.hour * 60 + picked.minute;
+                  if (minutes <= 0) return;
+                  player.startSleepTimer(Duration(minutes: minutes), fadeOut: fade);
+                  if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.music_note_rounded, color: kBrandColor),
+                title: Text('End of current track', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                onTap: () {
+                  player.startSleepTimerEndOfTrack(fadeOut: fade);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.graphic_eq_rounded, color: kBrandColor),
+                title: Text('Fade out before pausing', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('10 seconds, player volume only', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                value: fade,
+                activeThumbColor: kBrandColor,
+                onChanged: (value) async {
+                  setSheetState(() => fade = value);
+                  final p = await SharedPreferences.getInstance();
+                  await p.setBool('shuro_sleep_fade', value);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     ),
   );

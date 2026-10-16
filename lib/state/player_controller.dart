@@ -1148,33 +1148,68 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     notifyListeners();
   }
 
-  /// Sleep timer: pause playback when it fires. The UI reads [sleepUntil]
-  /// to show what's armed, and offers Off / 15 / 30 / 45 / 60 / 90 minutes
-  /// / end of track.
+  /// Sleep timer: fade (optionally), pause, restore volume. The UI reads
+  /// [sleepUntil] to show what's armed; presets, a CUSTOM picker, end of
+  /// track, and +10-minute extension are offered by the sheet.
   Timer? _sleepTimer;
   DateTime? _sleepUntil;
+  bool _sleepFadeOut = true;
+  int _sleepFadeSeconds = 10;
 
   DateTime? get sleepUntil => _sleepUntil;
+  bool get sleepFadeOut => _sleepFadeOut;
+  int get sleepFadeSeconds => _sleepFadeSeconds;
 
-  void startSleepTimer(Duration duration) {
+  void startSleepTimer(Duration duration, {bool? fadeOut, int? fadeSeconds}) {
     cancelSleepTimer();
+    if (fadeOut != null) _sleepFadeOut = fadeOut;
+    if (fadeSeconds != null) _sleepFadeSeconds = fadeSeconds.clamp(0, 60);
     _sleepUntil = DateTime.now().add(duration);
-    _sleepTimer = Timer(duration, () async {
-      _sleepUntil = null;
-      try {
-        await _audioPlayer.pause();
-      } catch (_) {}
-      _isPlaying = false;
-      notifyListeners();
-    });
+    _sleepTimer = Timer(duration, _fireSleepTimer);
     notifyListeners();
   }
 
-  void startSleepTimerEndOfTrack() {
+  /// "+10 minutes" while a timer is running: the deadline moves out by [by].
+  void extendSleepTimer([Duration by = const Duration(minutes: 10)]) {
+    final until = _sleepUntil;
+    if (until == null) return;
+    final remaining = until.difference(DateTime.now());
+    startSleepTimer(remaining + by);
+  }
+
+  Future<void> _fireSleepTimer() async {
+    _sleepTimer = null;
+    _sleepUntil = null;
+    try {
+      if (_sleepFadeOut && _sleepFadeSeconds > 0 && _isPlaying) {
+        // Player-volume ramp only (never the SYSTEM volume — the prompt's
+        // explicit rule), then pause, then put the level back so the next
+        // manual play isn't silent.
+        final target = _audioPlayer.volume;
+        final steps = _sleepFadeSeconds * 4; // 250 ms ticks
+        for (var i = 1; i <= steps; i++) {
+          await Future.delayed(const Duration(milliseconds: 250));
+          try {
+            await _audioPlayer.setVolume(target * (1 - i / steps));
+          } catch (_) {}
+        }
+        await _audioPlayer.pause();
+        try {
+          await _audioPlayer.setVolume(target);
+        } catch (_) {}
+      } else {
+        await _audioPlayer.pause();
+      }
+    } catch (_) {}
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  void startSleepTimerEndOfTrack({bool? fadeOut}) {
     final remaining = _audioPlayer.duration != null
         ? _audioPlayer.duration! - position
         : Duration.zero;
-    startSleepTimer(remaining > Duration.zero ? remaining : Duration(seconds: 1));
+    startSleepTimer(remaining > Duration.zero ? remaining : Duration(seconds: 1), fadeOut: fadeOut);
   }
 
   void cancelSleepTimer() {
@@ -1306,4 +1341,15 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final match = RegExp(r'^(\d+)\s*ch').firstMatch(lower);
     return match == null ? null : int.tryParse(match.group(1)!);
   }
+}
+
+/// mm:ss (or h:mm:ss past an hour) for the Sleep chip's live countdown.
+/// Public + pure so the timing math is unit-testable without a player.
+String formatSleepCountdown(Duration d) {
+  final safe = d.isNegative ? Duration.zero : d;
+  final seconds = (safe.inSeconds % 60).toString().padLeft(2, '0');
+  if (safe.inHours > 0) {
+    return '${safe.inHours}:${(safe.inMinutes % 60).toString().padLeft(2, '0')}:$seconds';
+  }
+  return '${safe.inMinutes}:$seconds';
 }
