@@ -231,6 +231,10 @@ class NowPlayingScreen extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, viewport) => SingleChildScrollView(
+        // A stable storage identity: the scroll offset survives every rebuild
+        // (the player notifies ~1×/s while playing), so the page can never
+        // silently jump position mid-playback.
+        key: const PageStorageKey('npv_portrait'),
         // Real scrolling: ConstrainedBox(minHeight) lets the column stretch to
         // the viewport on tall phones (spaceBetween still separates the
         // groups), while content taller than the viewport (small phones, with
@@ -308,8 +312,17 @@ class NowPlayingScreen extends StatelessWidget {
                       child: ScrollConfiguration(
                         // The preview is a passive glance, not a document: no
                         // scrollbar thumb (web/desktop draw one by default,
-                        // and Android flashes one while scrolling).
-                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        // and Android flashes one while scrolling). And its
+                        // list ALWAYS absorbs drag gestures (AlwaysScrollable
+                        // + clamping): without this, once the auto-scrolling
+                        // list reached an edge, a drag/drag-end propagated to
+                        // the portrait page's outer scroll view and nudged the
+                        // whole screen a few pixels — the reported "NPV scrolls
+                        // down a little when lyrics change line".
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          scrollbars: false,
+                          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                        ),
                         child: LyricsScreen(initialSong: song, embedded: true, compact: true),
                       ),
                     ),
