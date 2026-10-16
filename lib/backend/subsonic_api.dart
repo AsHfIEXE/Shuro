@@ -168,12 +168,12 @@ class SubsonicApi {
 
   // --- favourites & ratings --------------------------------------------------
 
-  Future<void> star(String id) => _call('star', {'id': id});
+  Future<void> star(String id) => _call('star', {'id': id}).then((_) {});
 
-  Future<void> unstar(String id) => _call('unstar', {'id': id});
+  Future<void> unstar(String id) => _call('unstar', {'id': id}).then((_) {});
 
   Future<void> setRating(String id, int rating) =>
-      _call('setRating', {'id': id, 'rating': '$rating'});
+      _call('setRating', {'id': id, 'rating': '$rating'}).then((_) {});
 
   /// One song's live server state (userRating, starred, playCount) — used to
   /// show real values in the action sheet instead of stale copies.
@@ -197,7 +197,7 @@ class SubsonicApi {
   /// scrobble: [submission] true = a finished listen (Navidrome counts a play);
   /// false = "now playing" broadcast (what shows in other clients' dashboards).
   Future<void> scrobble(String songId, {required bool submission}) =>
-      _call('scrobble', {'id': songId, 'submission': submission ? 'true' : 'false'});
+      _call('scrobble', {'id': songId, 'submission': submission ? 'true' : 'false'}).then((_) {});
 
   /// An artist's biography and picture from the server's own metadata
   /// (OpenSubsonic getArtistInfo2 — Navidrome fills the image from its
@@ -269,7 +269,7 @@ class SubsonicApi {
   Future<void> createPlaylist(String name, {List<String> songIds = const []}) => _call('createPlaylist', {
         'name': name,
         'songId': songIds,
-      });
+      }).then((_) {});
 
   Future<void> updatePlaylist({
     required String id,
@@ -282,9 +282,9 @@ class SubsonicApi {
         if (name != null) 'name': name,
         'songIdToAdd': songIdsToAdd,
         'songIndexToRemove': songIndexesToRemove.map((i) => '$i'),
-      });
+      }).then((_) {});
 
-  Future<void> deletePlaylist(String id) => _call('deletePlaylist', {'id': id});
+  Future<void> deletePlaylist(String id) => _call('deletePlaylist', {'id': id}).then((_) {});
 
   // --- play queue sync ---------------------------------------------------------
 
@@ -298,7 +298,7 @@ class SubsonicApi {
         'current': currentId,
         'position': '$positionMs',
         'id': songIds,
-      });
+      }).then((_) {});
 
   // --- server maintenance ------------------------------------------------------
 

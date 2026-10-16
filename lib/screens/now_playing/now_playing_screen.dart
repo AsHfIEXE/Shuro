@@ -391,6 +391,8 @@ class NowPlayingScreen extends StatelessWidget {
           onMore: () => showSongActionsSheet(context, song),
           onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
           onAudioInfo: () => showAudioInfoSheet(context, song),
+          onSleep: () => showSleepTimerSheet(context, player),
+          sleepActive: player.sleepUntil != null,
         ),
         Expanded(
           child: Row(
@@ -616,12 +618,19 @@ class _Header extends StatelessWidget {
   final VoidCallback? onQueue;
   final VoidCallback? onAudioInfo;
 
+  /// Sleep timer entry — portrait has it in the quick-actions row; landscape
+  /// had NO way to arm or cancel a timer at all.
+  final VoidCallback? onSleep;
+  final bool sleepActive;
+
   const _Header({
     required this.song,
     required this.accent,
     required this.onMore,
     this.onQueue,
     this.onAudioInfo,
+    this.onSleep,
+    this.sleepActive = false,
   });
 
   @override
@@ -647,6 +656,15 @@ class _Header extends StatelessWidget {
           ),
           // (No favourite here: the heart lives in its sweet spot under the
           // artist — a second one in the header was duplicate clutter.)
+          if (onSleep != null)
+            IconButton(
+              onPressed: onSleep,
+              icon: Icon(
+                Icons.bedtime_rounded,
+                color: sleepActive ? accent : Colors.white70,
+              ),
+              tooltip: sleepActive ? 'Sleep timer running' : 'Sleep timer',
+            ),
           if (onQueue != null)
             IconButton(
               onPressed: onQueue,

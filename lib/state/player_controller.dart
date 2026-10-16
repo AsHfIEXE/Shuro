@@ -393,6 +393,28 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     unawaited(_applyPlaybackTweaks(song));
     onTrackStarted?.call(song);
     notifyListeners();
+    _verifyNativeTrack();
+  }
+
+  bool _resyncing = false;
+
+  /// The engine's ACTUAL playing track (read from the MediaItem tag we
+  /// attach) versus what the app believes is playing. Any divergence — an
+  /// engine-side index/shuffle mapping quirk, a stale native window, an
+  /// initialIndex edge in the audio stack — is repaired by reloading at the
+  /// app's index, instead of letting the wrong audio play under the right
+  /// UI (the "UI shows Moonlight, ears hear another track" report).
+  /// Mechanism-agnostic on purpose: whatever caused the desync, the tag
+  /// check catches it.
+  void _verifyNativeTrack() {
+    if (_resyncing || _isLoading || !_nativeQueueActive) return;
+    final tag = _audioPlayer.sequenceState?.currentSource?.tag;
+    if (tag is! MediaItem) return;
+    final expected = _currentSong?.id;
+    if (expected == null || tag.id == expected) return;
+    _resyncing = true;
+    debugPrint('[playback] engine/app desync: engine="${tag.id}" ui="$expected" — resyncing');
+    unawaited(_jumpTo(_queueIndex, startPlaying: _isPlaying).whenComplete(() => _resyncing = false));
   }
 
   // --- advanced playback settings (Settings → Playback) ----------------------
@@ -646,6 +668,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         // _nativeQueueActive is still false, which left the engine un-shuffled
         // on the first native load.
         await _syncNativeModes();
+        // The engine's sequence can settle a beat after the load call returns;
+        // verify the track it ACTUALLY landed on once it has.
+        Future.delayed(const Duration(milliseconds: 700), () {
+          if (generation == _loadGeneration) _verifyNativeTrack();
+        });
       } else {
         _nativeQueueIds = null;
         _nativeSource = null;
@@ -1156,6 +1183,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   bool _sleepFadeOut = true;
   int _sleepFadeSeconds = 10;
 
+  /// Bumped on every start/cancel: an in-flight fade-out checks it each tick
+  /// and aborts (restoring volume) when the user cancels or arms a new one —
+  /// previously a cancel during the fade still paused several seconds later.
+  int _sleepGeneration = 0;
+
   DateTime? get sleepUntil => _sleepUntil;
   bool get sleepFadeOut => _sleepFadeOut;
   int get sleepFadeSeconds => _sleepFadeSeconds;
@@ -1164,8 +1196,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     cancelSleepTimer();
     if (fadeOut != null) _sleepFadeOut = fadeOut;
     if (fadeSeconds != null) _sleepFadeSeconds = fadeSeconds.clamp(0, 60);
+    final generation = ++_sleepGeneration;
     _sleepUntil = DateTime.now().add(duration);
-    _sleepTimer = Timer(duration, _fireSleepTimer);
+    _sleepTimer = Timer(duration, () => _fireSleepTimer(generation));
     notifyListeners();
   }
 
@@ -1177,7 +1210,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     startSleepTimer(remaining + by);
   }
 
-  Future<void> _fireSleepTimer() async {
+  Future<void> _fireSleepTimer(int generation) async {
+    if (generation != _sleepGeneration) return;
     _sleepTimer = null;
     _sleepUntil = null;
     try {
@@ -1189,6 +1223,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         final steps = _sleepFadeSeconds * 4; // 250 ms ticks
         for (var i = 1; i <= steps; i++) {
           await Future.delayed(const Duration(milliseconds: 250));
+          if (generation != _sleepGeneration) {
+            // Cancelled/re-armed mid-fade: restore the level and leave
+            // playback alone.
+            try {
+              await _audioPlayer.setVolume(target);
+            } catch (_) {}
+            return;
+          }
           try {
             await _audioPlayer.setVolume(target * (1 - i / steps));
           } catch (_) {}
@@ -1213,6 +1255,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   }
 
   void cancelSleepTimer() {
+    _sleepGeneration++; // aborts any in-flight fade-out
     _sleepTimer?.cancel();
     _sleepTimer = null;
     if (_sleepUntil != null) {
