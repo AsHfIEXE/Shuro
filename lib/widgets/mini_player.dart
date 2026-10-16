@@ -64,7 +64,7 @@ class _MiniPlayerBar extends StatelessWidget {
     final wide = width >= MiniPlayer._kWideBreakpoint;
 
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(risingRoute(NowPlayingScreen(initialSong: song))),
+      onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
       // Swipe left/right skips — a shortcut on top of (not instead of) the tap
       // and the transport buttons. Deliberately not the *only* way to skip: it
       // would be unreachable on a TV remote.
@@ -84,7 +84,7 @@ class _MiniPlayerBar extends StatelessWidget {
         final velocity = details.primaryVelocity ?? 0;
         if (velocity < -350) {
           HapticFeedback.lightImpact();
-          Navigator.of(context).push(risingRoute(NowPlayingScreen(initialSong: song)));
+          pushRisingOnce(context, NowPlayingScreen(initialSong: song));
         }
       },
       child: Container(
@@ -148,7 +148,7 @@ class _MiniPlayerBar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Queue',
                       icon: const Icon(Icons.queue_music_rounded, color: Colors.white70, size: 22),
-                      onPressed: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
+                      onPressed: () => pushRisingOnce(context, const QueueScreen()),
                     ),
                   _TransportButton(
                     icon: ShuroGlyph.previous,
@@ -190,7 +190,11 @@ class _SeekBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = player.currentSong?.id == song.id;
-    final total = isActive ? player.duration : song.duration;
+    // Live only when the engine has audio for THIS song loaded — during the
+    // load window the engine still reports the outgoing track's duration,
+    // which must not size this bar (audit finding F6-1).
+    final live = isActive && player.loadedSongId == song.id;
+    final total = live ? player.duration : song.duration;
     final totalMs = total.inMilliseconds == 0 ? 1 : total.inMilliseconds;
 
     return LayoutBuilder(
@@ -239,7 +243,8 @@ class SmoothProgressBar extends StatelessWidget {
       stream: player.smoothPositionStream,
       builder: (context, snapshot) {
         final isActive = player.currentSong?.id == songId;
-        final position = isActive ? (snapshot.data ?? player.position) : Duration.zero;
+        final live = isActive && player.loadedSongId == songId;
+        final position = live ? (snapshot.data ?? player.position) : Duration.zero;
         final value = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
         return LinearProgressIndicator(
           value: value,

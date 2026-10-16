@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../app_info.dart';
 import '../../models/download_state.dart';
+import '../../playback/event_log.dart';
 import '../../backend/subsonic_api.dart';
 import '../../services/server_secret_store.dart';
 import '../../services/download_service.dart';
@@ -286,6 +287,11 @@ class SettingsScreen extends StatelessWidget {
               label: 'Terms & privacy',
               onTap: () => _showTermsSheet(context),
             ),
+            _NavRow(
+              icon: Icons.bug_report_rounded,
+              label: 'Report a problem',
+              onTap: () => _showReportSheet(context),
+            ),
             // Flutter collects licence text for every package the app links
             // (pub packages plus engine components) into one OBS-compliant
             // page — this is the standard, complete way to satisfy the MIT/BSD
@@ -315,6 +321,72 @@ class SettingsScreen extends StatelessWidget {
 
   /// Device & app basics — the exact facts the consent screen discloses,
   /// shown in plain sight in About. On-device only, nothing transmitted.
+  /// "Report a problem" — exports the redacted event log (last 300
+  /// playback/UI events) with the same device facts About already shows.
+  /// Nothing leaves the device unless the user copies or shares it.
+  Future<void> _showReportSheet(BuildContext context) async {
+    final basics = await DeviceBasics.collect();
+    if (!context.mounted) return;
+    final report = PlaybackEventLog.instance.exportText(device: basics);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCardColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Report a problem', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(
+                'The last ${PlaybackEventLog.kMaxEvents} playback events, redacted — no credentials, no URLs. Copy it and send it when a bug appears.',
+                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kSurfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      report,
+                      style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 11, height: 1.35),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('Copy report'),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: report));
+                    if (sheetContext.mounted) {
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(content: Text('Report copied')),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showDeviceInfoSheet(BuildContext context) async {
     final basics = await DeviceBasics.collect();
     final screen = DeviceBasics.screenParts(context);

@@ -94,8 +94,13 @@ class NowPlayingScreen extends StatelessWidget {
     final player = context.watch<PlayerController>();
     final appState = context.watch<AppState>();
 
-    final song = player.currentSong ?? initialSong;
-    if (song == null) {
+    final current = player.currentSong;
+    final song = current ?? initialSong;
+    if (song == null || (current == null && player.everHadSong)) {
+      // Never played anything: the placeholder track renders for the first
+      // frames. Queue emptied while open: the mini player hides itself, so
+      // a ghost track here would disagree with it (audit finding F5-1) —
+      // show the empty state instead.
       return Scaffold(
         backgroundColor: kSurfaceColor,
         appBar: AppBar(backgroundColor: kSurfaceColor, elevation: 0, leading: const BackButton(color: Colors.white)),
@@ -105,11 +110,16 @@ class NowPlayingScreen extends StatelessWidget {
       );
     }
 
-    final isCurrent = player.currentSong?.id == song.id;
+    final isCurrent = current?.id == song.id;
+    // Live only when the engine has audio for THIS song loaded — during the
+    // load window the engine still reports the outgoing track's position and
+    // duration, which must not render under the new title (audit finding
+    // F6-1, the "progress ring jumping on track change" symptom).
+    final live = isCurrent && player.loadedSongId == song.id;
     final isPlaying = isCurrent && player.isPlaying;
-    final total = isCurrent ? player.duration : song.duration;
-    final position = isCurrent ? player.position : Duration.zero;
-    final progress = isCurrent ? player.progress : 0.0;
+    final total = live ? player.duration : song.duration;
+    final position = live ? player.position : Duration.zero;
+    final progress = live ? player.progress : 0.0;
     final isFav = appState.isFavoriteSong(song.id);
 
     return ImmersiveScope(
@@ -336,7 +346,7 @@ class NowPlayingScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _QuickActions(
-                    onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
+                    onQueue: () => pushRisingOnce(context, const QueueScreen()),
                     onAudioInfo: () => showAudioInfoSheet(context, song),
                     onSleep: () => showSleepTimerSheet(context, player),
                     onVolume: () => showVolumeSheet(context, player),
@@ -391,7 +401,7 @@ class NowPlayingScreen extends StatelessWidget {
           song: song,
           accent: accent,
           onMore: () => showSongActionsSheet(context, song),
-          onQueue: () => Navigator.of(context).push(risingRoute(const QueueScreen())),
+          onQueue: () => pushRisingOnce(context, const QueueScreen()),
           onAudioInfo: () => showAudioInfoSheet(context, song),
           onSleep: () => showSleepTimerSheet(context, player),
           sleepActive: player.sleepUntil != null,
