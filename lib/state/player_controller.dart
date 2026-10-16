@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import '../playback/event_log.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
 import '../playback/audio_diagnostics.dart';
@@ -351,6 +352,20 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   // --- internals -------------------------------------------------------
 
   void _onPlayerStateChanged(PlayerState state) {
+    PlaybackEventLog.instance.add('engine.state', {
+      'processing': state.processingState.name,
+      'playing': state.playing,
+    });
+    // Debug-only state-machine checks (brief §1B): illegal transitions must
+    // be impossible — assert in debug, log the event everywhere.
+    if (state.playing && _loadedSongId == null && !_isLoading) {
+      PlaybackEventLog.instance.add('illegal.playOverSilence');
+      assert(false, 'playing=true but no source is loaded');
+    }
+    if (state.processingState == ProcessingState.completed && _isLoading) {
+      PlaybackEventLog.instance.add('illegal.completedDuringLoad');
+      assert(false, 'completed fired while a load was still in flight');
+    }
     final playingChanged = _isPlaying != state.playing;
     _isPlaying = state.playing;
     final processingChanged = _lastNotifiedProcessingState != state.processingState;
@@ -430,6 +445,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (expected == null || tag.id == expected) return;
     _resyncing = true;
     debugPrint('[playback] engine/app desync: engine="${tag.id}" ui="$expected" — resyncing');
+    PlaybackEventLog.instance.add('desync.heal', {'engine': tag.id, 'ui': expected});
     unawaited(_jumpTo(_queueIndex, startPlaying: _isPlaying).whenComplete(() => _resyncing = false));
   }
 
@@ -565,6 +581,12 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     _queueIndex = clamped;
     final song = _queue[clamped];
     final generation = ++_loadGeneration;
+    PlaybackEventLog.instance.add('load.start', {
+      'gen': generation,
+      'song': song.id,
+      'index': clamped,
+      'queue': _queue.length,
+    });
 
     _currentSong = song;
     _everHadSong = true;
@@ -881,6 +903,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// jump there"). With no [queue], an already-queued song just becomes the
   /// current one (keeping the queue intact); otherwise it plays on its own.
   Future<void> playSong(Song song, {List<Song>? queue, Duration? startAt}) async {
+    PlaybackEventLog.instance.add('cmd.play', {
+      'song': song.id,
+      'queue': queue?.length,
+      'startAt': startAt?.inSeconds,
+    });
     if (queue != null) {
       _queue = List.of(queue);
     } else if (!_queue.any((s) => s.id == song.id)) {
@@ -917,6 +944,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   }
 
   Future<void> togglePlayPause() async {
+    PlaybackEventLog.instance.add('cmd.toggle');
     final song = _currentSong;
     if (song == null) return;
     if (_isPlaying) {
@@ -961,6 +989,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   }
 
   Future<void> seekTo(Duration target) async {
+    PlaybackEventLog.instance.add('cmd.seek', {'to': target.inSeconds});
     final song = _currentSong;
     if (song == null) return;
     var t = target;
@@ -1031,6 +1060,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// if paused, and — with autoplay on — keeps going past the end of the
   /// queue instead of doing nothing.
   Future<void> next() async {
+    PlaybackEventLog.instance.add('cmd.next');
     // Native queue: the engine owns the order (it honours shuffle and loop),
     // so the in-app button must ask it, not run the app's own index math —
     // otherwise the two disagree and skips jump against what's playing.
@@ -1053,6 +1083,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// "previous" restart the track the user had just moved to instead of
   /// going back.
   Future<void> previous() async {
+    PlaybackEventLog.instance.add('cmd.prev');
     if (_queue.isEmpty) return;
     final song = _currentSong;
     final loadedForCurrent = song != null && !_isLoading && _loadedSongId == song.id;
@@ -1372,6 +1403,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   @override
   Future<void> pause() async {
+    PlaybackEventLog.instance.add('cmd.pause');
     if (_isPlaying) await togglePlayPause();
   }
 

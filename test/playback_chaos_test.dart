@@ -46,16 +46,13 @@ class _ErrorSink {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('chaos: seeds 1-3 x 300 actions keep the engine invariants', () async {
-    for (final seed in [1, 2, 3]) {
-      await _runSeed(seed, 300);
-    }
-  }, timeout: const Timeout(Duration(minutes: 4)));
-
-  test('chaos: long run seed 42 x 2000 actions keeps the invariants',
-      () async {
-    await _runSeed(42, 2000);
-  }, timeout: const Timeout(Duration(minutes: 6)));
+  // Performance brief §1C exit gate: 20 seeds × 2,000 actions. One test per
+  // seed so a failure isolates and prints its own seed + action trace.
+  for (var seed = 1; seed <= 20; seed++) {
+    test('chaos seed $seed × 2000 actions keeps the engine invariants',
+        () => _runSeed(seed, 2000),
+        timeout: const Timeout(Duration(minutes: 4)));
+  }
 }
 
 Future<void> _runSeed(int seed, int actionCount) async {
