@@ -1061,6 +1061,15 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                   Navigator.of(sheetContext).pop();
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.queue_music_rounded, color: kBrandColor),
+                title: Text('End of queue', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Plays everything queued, then pauses', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                onTap: () {
+                  player.startSleepTimerEndOfQueue();
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
               SwitchListTile(
                 secondary: const Icon(Icons.graphic_eq_rounded, color: kBrandColor),
                 title: Text('Fade out before pausing', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),

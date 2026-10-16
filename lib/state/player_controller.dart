@@ -782,6 +782,19 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   Future<void> _advance({required bool fromTrackEnd}) async {
     if (_queue.isEmpty) return;
+    // Sleep "end of queue": when armed and the LAST queued track finishes,
+    // pause instead of advancing/repeating. Survives skips and seeks; only a
+    // manual cancel disarms it.
+    if (_sleepEndOfQueue && fromTrackEnd && _queueIndex >= _queue.length - 1) {
+      _sleepEndOfQueue = false;
+      _sleepTimer?.cancel();
+      try {
+        await _audioPlayer.pause();
+      } catch (_) {}
+      _isPlaying = false;
+      notifyListeners();
+      return;
+    }
 
     if (fromTrackEnd && _repeatMode == PlayerRepeatMode.one) {
       await _audioPlayer.seek(Duration.zero);
@@ -1265,8 +1278,24 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     startSleepTimer(remaining > Duration.zero ? remaining : Duration(seconds: 1), fadeOut: fadeOut);
   }
 
+  /// "End of queue": let playback run to the end of the LAST queued track,
+  /// then pause. Survives skips and seeks; disarms after it fires or on a
+  /// manual cancel.
+  bool _sleepEndOfQueue = false;
+  bool get sleepEndOfQueueArmed => _sleepEndOfQueue;
+
+  void startSleepTimerEndOfQueue() {
+    _sleepGeneration++; // abort any in-flight fade-out
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepUntil = null;
+    _sleepEndOfQueue = true;
+    notifyListeners();
+  }
+
   void cancelSleepTimer() {
     _sleepGeneration++; // aborts any in-flight fade-out
+    _sleepEndOfQueue = false;
     _sleepTimer?.cancel();
     _sleepTimer = null;
     if (_sleepUntil != null) {
