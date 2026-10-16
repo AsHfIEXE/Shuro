@@ -76,7 +76,8 @@ class BlurredArtworkBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         const ColoredBox(color: kSurfaceColor),
-        AnimatedSwitcher(
+        RepaintBoundary(
+          child: AnimatedSwitcher(
           // Full-screen opacity layers on web/CanvasKit can exceed GPU
           // texture limits at TV widths (black-region artifacts) — swap
           // instantly there, crossfade everywhere else.
@@ -96,6 +97,7 @@ class BlurredArtworkBackdrop extends StatelessWidget {
             blurScale: appearance.backdropBlurScale,
             motion: appearance.backdropMotion,
           ),
+        ),
         ),
         _ColourWash(palette: palette, style: style),
         _Scrim(style: style),

@@ -449,9 +449,18 @@ class NowPlayingScreen extends StatelessWidget {
                                   SizedBox(height: compact ? 3 : 14),
                                   _transport(player, song, isPlaying, isCurrent, accent, compact: compact),
                                   SizedBox(height: compact ? 2 : 10),
-                                  // Landscape volume: the phone's own buttons
-                                  // are across the device in this orientation.
-                                  const _VolumeSlider(),
+                                  // Landscape volume: same animated control as
+                                  // portrait — a slim chip opening the full
+                                  // volume sheet. The old inline slider was a
+                                  // second seek-bar lookalike and cost layout
+                                  // height this column doesn't have.
+                                  Center(
+                                    child: _QuickAction(
+                                      icon: Icons.volume_up_rounded,
+                                      label: 'Volume',
+                                      onTap: () => showVolumeSheet(context, player),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1466,87 +1475,4 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
         RouteKind.builtIn => Icons.smartphone_rounded,
         _ => Icons.speaker_rounded,
       };
-}
-
-/// Landscape volume: a media-volume slider with speaker icons, for the
-/// orientation where the phone's own volume rocker sits across the device.
-/// Web has no volume plugin — the widget hides itself there.
-class _VolumeSlider extends StatefulWidget {
-  const _VolumeSlider();
-
-  @override
-  State<_VolumeSlider> createState() => _VolumeSliderState();
-}
-
-class _VolumeSliderState extends State<_VolumeSlider> {
-  double? _volume;
-
-  @override
-  void initState() {
-    super.initState();
-    if (kIsWeb) return;
-    try {
-      VolumeController.instance.showSystemUI = false;
-      // fetchInitialVolume: true → the first event delivers the current
-      // value, so no separate getVolume round trip is needed.
-      _sub = VolumeController.instance.addListener((v) {
-        if (mounted) setState(() => _volume = v);
-      });
-    } catch (_) {
-      _volume = null;
-    }
-  }
-
-  StreamSubscription<double>? _sub;
-
-  void _onVolume(double v) {
-    if (mounted) setState(() => _volume = v);
-  }
-
-  @override
-  void dispose() {
-    unawaited(_sub?.cancel());
-    try {
-      unawaited(VolumeController.instance.removeListener());
-    } catch (_) {}
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (kIsWeb) return const SizedBox.shrink();
-    final value = (_volume ?? 0.5).clamp(0.0, 1.0);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SizedBox(
-        height: 30,
-        child: Row(
-          children: [
-            Icon(Icons.volume_down_rounded, size: 16, color: Colors.white54),
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2.5,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                ),
-                child: Slider(
-                  value: value,
-                  onChanged: _volume == null
-                      ? null
-                      : (v) async {
-                          setState(() => _volume = v);
-                          try {
-                            await VolumeController.instance.setVolume(v);
-                          } catch (_) {}
-                        },
-                ),
-              ),
-            ),
-            Icon(Icons.volume_up_rounded, size: 16, color: Colors.white54),
-          ],
-        ),
-      ),
-    );
-  }
 }
