@@ -182,6 +182,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   );
 
   Song? _currentSong;
+
+  /// True once any song has been current this session — see [everHadSong].
+  bool _everHadSong = false;
+
   List<Song> _queue = [];
   int _queueIndex = 0;
   bool _isPlaying = false;
@@ -275,6 +279,17 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   bool get shuffle => _shuffle;
   PlayerRepeatMode get repeatMode => _repeatMode;
   bool get hasSong => _currentSong != null;
+
+  /// True once any song has been current this session. Lets Now Playing
+  /// tell "placeholder before the first notify" apart from "queue was
+  /// emptied while open" (audit finding F5-1).
+  bool get everHadSong => _everHadSong;
+
+  /// Song id the engine has actually loaded audio for — null during a load
+  /// window or after a failure. UI time/progress reads gate on this so the
+  /// outgoing track's position never renders under the incoming track's
+  /// title (audit finding F6-1).
+  String? get loadedSongId => _loadedSongId;
 
   /// True while the current song's audio is still being loaded or the
   /// engine is refilling its buffer — lets a screen show a spinner instead
@@ -382,6 +397,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     _queueIndex = appIndex;
     final song = _queue[appIndex];
     _currentSong = song;
+    _everHadSong = true;
     _loadedSongId = song.id;
     _lastNotifiedSecond = -1;
     _lastError = null;
@@ -551,6 +567,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final generation = ++_loadGeneration;
 
     _currentSong = song;
+    _everHadSong = true;
     _lastNotifiedSecond = -1;
     _lastError = null;
     _pendingSeek = null;
@@ -724,8 +741,15 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final pending = _pendingSeek;
     _pendingSeek = null;
     if (pending != null) {
+      // Re-clamp against the NEW source: the pending seek may have been
+      // computed against the outgoing track's (longer) duration, and a seek
+      // past the new end reads as instant completed → an unwanted
+      // auto-advance (audit finding F6-2).
+      var target = pending;
+      final max = _audioPlayer.duration;
+      if (max != null && target > max) target = max;
       try {
-        await _audioPlayer.seek(pending);
+        await _audioPlayer.seek(target);
       } catch (_) {
         // A seek that fails here isn't worth failing the whole load over.
       }

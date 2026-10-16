@@ -10,7 +10,7 @@ bool reduceMotionEnabled = false;
 /// shared curve/duration rather than a different animation per screen, and
 /// built on Flutter's own PageRouteBuilder (no extra animation packages,
 /// nothing running once the transition finishes).
-Route<T> risingRoute<T>(Widget page) {
+PageRouteBuilder<T> risingRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
     transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 320),
     reverseTransitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 260),
@@ -26,6 +26,29 @@ Route<T> risingRoute<T>(Widget page) {
       );
     },
   );
+}
+
+/// Destination currently animating in (its widget type name), or null.
+String? _risingInFlight;
+
+/// Pushes [page] with the rising transition unless a copy of the same
+/// destination is already animating in on top of the current route, or the
+/// current route is already covered by something else. Guards every rise
+/// push site against the fast double-tap that used to stack two copies of
+/// Now Playing / Queue / Lyrics (audit findings F4-1 … F4-5).
+void pushRisingOnce(BuildContext context, Widget page) {
+  final route = ModalRoute.of(context);
+  if (route != null && !route.isCurrent) return; // already covered
+  final key = page.runtimeType.toString();
+  if (_risingInFlight == key) return; // same destination still animating in
+  final nav = Navigator.of(context);
+  final r = risingRoute<Object?>(page);
+  _risingInFlight = key;
+  // ignore: discarded_futures
+  r.completed.whenComplete(() {
+    if (_risingInFlight == key) _risingInFlight = null;
+  });
+  nav.push(r);
 }
 
 /// The second (and only other) transition style: a subtle slide-in from the

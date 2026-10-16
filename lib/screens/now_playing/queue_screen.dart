@@ -77,7 +77,13 @@ class QueueScreen extends StatelessWidget {
                         ),
                         IconButton(
                           icon: const Icon(Icons.more_vert_rounded, color: kMutedTextColor, size: 20),
-                          onPressed: () => showSongActionsSheet(context, player.currentSong!),
+                          // Guard at tap time: the row was built while a song
+                          // existed, but the queue can empty between build
+                          // and tap (audit finding F3-1).
+                          onPressed: () {
+                            final s = player.currentSong;
+                            if (s != null) showSongActionsSheet(context, s);
+                          },
                         ),
                       ],
                     ),

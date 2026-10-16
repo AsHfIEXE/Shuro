@@ -1,5 +1,7 @@
 # Playback / UI state audit — Shuro Flutter app
 
+**Fix status (same branch):** F3-1, F4-1…F4-5, F5-1, F6-1, F6-2 are FIXED — `pushRisingOnce` guard on every rise push, `loadedSongId` gate on NPV + mini-bar time reads, pending-seek re-clamp, tap-time null guard in Queue, NPV ghost-track empty state (`everHadSong`). Chaos suite + full tests green after the fixes.
+
 **Branch:** `perf/phase-1-playback-stability` (verified with `git branch --show-current`)
 **Date:** 2026-10-16 · **Scope:** UI layer only (screens + widgets + the lyrics/palette providers they call)
 **Method:** Read-only line-by-line review of the audited files plus the `PlayerController` contract they consume. Every finding cites `file:line` with the quoted code. `lib/` was not modified.

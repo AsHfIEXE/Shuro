@@ -27,7 +27,8 @@ import '../../widgets/shuro_icons.dart';
 void openLyricsScreen(BuildContext context, Song song) {
   // Wrapped at the route level so the immersive mode (when the setting is on)
   // lasts exactly as long as this screen exists and is always undone on pop.
-  Navigator.of(context).push(risingRoute(ImmersiveScope(child: LyricsScreen(initialSong: song))));
+  // pushRisingOnce: a fast double-tap used to stack two copies (audit F4-5).
+  pushRisingOnce(context, ImmersiveScope(child: LyricsScreen(initialSong: song)));
 }
 
 /// One track's lyrics, or the reason there are none. The screen renders the
