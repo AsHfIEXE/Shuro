@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240"><g id="body1"><rect width="720" height="240" x="0" y="0" fill="rgb(11, 15, 20)"/><g id="mark" transform="translate(99.9826 56.0069)">
+      <defs color="rgb(0, 0, 0)" fill="rgb(0, 0, 0)" stroke="none">
+        <linearGradient id="gA2" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#A78BFA"/>
+          <stop offset="100%" stop-color="#7C3AED"/>
+        </linearGradient>
+        <linearGradient id="gB2" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#7C3AED"/>
+          <stop offset="100%" stop-color="#00D4FF"/>
+        </linearGradient>
+      </defs>
+      <rect x="-38.4" y="-16.64" width="76.8" height="33.28" rx="16.64" ry="16.64" fill="url(#gA2)" transform="matrix(0.659983, -0.75128, 0.75128, 0.659983, 65.691, 36.8623)" color="rgb(0, 0, 0)" stroke="none"/>
+      <rect x="-38.4" y="-16.64" width="76.8" height="33.28" rx="16.64" ry="16.64" fill="url(#gB2)" transform="matrix(0.659983, -0.75128, 0.75128, 0.659983, 62.309, 91.1377)" color="rgb(0, 0, 0)" stroke="none"/>
+    </g><g id="wordmark"><text color="rgb(232, 232, 240)" dominant-baseline="text-after-edge" font-family="Sora, sans-serif" font-size="68px" font-weight="700" letter-spacing="-0.68px" fill="rgb(232, 232, 240)"><tspan x="259.965" y="144.67">Shuro</tspan></text><text color="rgba(255, 255, 255, 0.55)" dominant-baseline="text-after-edge" font-family="Inter, sans-serif" font-size="20px" font-weight="500" letter-spacing="0.2px" fill="rgba(255, 255, 255, 0.55)"><tspan x="259.965" y="170.45">Your music. Your server. Your sound.</tspan></text></g></g></svg>

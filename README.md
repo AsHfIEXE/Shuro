@@ -1,4 +1,6 @@
-# 🎵 Shuro
+<p align="center">
+  <img src="docs/brand/shuro-banner.svg" alt="Shuro — Your music. Your server. Your sound." width="540" />
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20desktop%20%C2%B7%20web-8A5CF6" alt="platform" />

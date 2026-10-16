@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512"><g id="svg1" mask="url(#mask-for-svg11)"><mask id="mask-for-svg11"><rect width="512" height="512" x="0" y="0" fill="#ffffff"/></mask><g transform="matrix(0.999993 0 0 0.999993 0 0)">
+    <defs color="rgb(0, 0, 0)" fill="rgb(0, 0, 0)" stroke="none">
+      <linearGradient id="gA" x1="0%" y1="50%" x2="100%" y2="50%">
+        <stop offset="0%" stop-color="#A78BFA"/>
+        <stop offset="100%" stop-color="#7C3AED"/>
+      </linearGradient>
+      <linearGradient id="gB" x1="0%" y1="50%" x2="100%" y2="50%">
+        <stop offset="0%" stop-color="#7C3AED"/>
+        <stop offset="100%" stop-color="#00D4FF"/>
+      </linearGradient>
+    </defs>
+
+    <rect x="0" y="0" width="512" height="512" rx="0" ry="0" fill="rgb(11, 15, 20)" color="rgb(0, 0, 0)" stroke="none"/>
+
+    <rect x="-153.6" y="-66.56" width="307.2" height="133.12" rx="66.56" ry="66.56" fill="url(#gA)" transform="matrix(0.659983, -0.75128, 0.75128, 0.659983, 262.764, 147.449)" color="rgb(0, 0, 0)" stroke="none"/>
+    <rect x="-153.6" y="-66.56" width="307.2" height="133.12" rx="66.56" ry="66.56" fill="url(#gB)" transform="matrix(0.659983, -0.75128, 0.75128, 0.659983, 249.236, 364.551)" color="rgb(0, 0, 0)" stroke="none"/>
+  </g></g></svg>
