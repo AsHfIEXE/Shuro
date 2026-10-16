@@ -12,6 +12,7 @@ import '../../models/download_state.dart';
 import '../../playback/event_log.dart';
 import '../../backend/subsonic_api.dart';
 import '../../services/server_secret_store.dart';
+import '../../services/device_profile.dart';
 import '../../services/download_service.dart';
 import '../../services/playback_prefs.dart';
 import '../../state/app_state.dart';
@@ -270,6 +271,9 @@ class SettingsScreen extends StatelessWidget {
               'Signs out, forgets servers, favorites, playlists, downloads and every setting, '
               'then closes the app. Nothing on your Navidrome server is touched.',
             ),
+
+            const _SectionLabel('PERFORMANCE'),
+            const _PerformanceTile(),
 
             const _SectionLabel('ABOUT'),
             const _AboutBlock(),
@@ -1078,6 +1082,124 @@ class _SectionLabel extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _PerformanceTile extends StatefulWidget {
+  const _PerformanceTile();
+
+  @override
+  State<_PerformanceTile> createState() => _PerformanceTileState();
+}
+
+/// Performance-profile picker (brief §3A): Auto / Performance / Balanced /
+/// Quality, each with a live summary of the effects it actually changes.
+class _PerformanceTileState extends State<_PerformanceTile> {
+  ShuroProfile _choice = ShuroProfile.auto;
+  ShuroProfile _effective = ShuroProfile.balanced;
+  DeviceClass? _deviceClass;
+  int? _ramMb;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final r = await DeviceProfileService.resolve();
+    if (!mounted) return;
+    setState(() {
+      _choice = r.choice;
+      _effective = r.effective;
+      _deviceClass = r.deviceClass;
+      _ramMb = r.totalRamMb;
+    });
+  }
+
+  String get _subtitle {
+    final preset = DeviceProfileService.presetFor(_effective);
+    final label = _choice == ShuroProfile.auto
+        ? 'Auto → ${preset.name}'
+        : preset.name;
+    return '$label · ${DeviceProfileService.describeDevice(_ramMb, _deviceClass)}';
+  }
+
+  Future<void> _openSheet(BuildContext context) async {
+    final appearance = context.read<AppearanceSettings>();
+    final appState = context.read<AppState>();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCardColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Performance profile', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(
+                'Auto picks a preset from this device (${DeviceProfileService.describeDevice(_ramMb, _deviceClass)}). Choosing a preset applies it instantly.',
+                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              for (final profile in ShuroProfile.values)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    profile == _choice ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                    color: profile == _choice ? kBrandColor : kMutedTextColor,
+                    size: 20,
+                  ),
+                  title: Text(
+                    profile == ShuroProfile.auto
+                        ? 'Auto (recommended)'
+                        : DeviceProfileService.presetFor(profile).name,
+                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                  ),
+                  subtitle: Text(
+                    profile == ShuroProfile.auto
+                        ? 'Follows this device: currently ${DeviceProfileService.presetFor(_effective).name}'
+                        : DeviceProfileService.presetFor(profile).tagline,
+                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5),
+                  ),
+                  onTap: () async {
+                    Navigator.of(sheetContext).pop();
+                    await DeviceProfileService.apply(
+                      profile,
+                      appearance,
+                      setReduceAnimations: appState.updateReduceAnimations,
+                    );
+                    await _refresh();
+                  },
+                ),
+              const Divider(color: kDividerColor, height: 18),
+              Text('What this changes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              for (final line in DeviceProfileService.presetFor(_effective).changes)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text('· $line', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 12)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _NavRow(
+      icon: Icons.speed_rounded,
+      label: 'Performance profile',
+      value: _subtitle,
+      onTap: () => _openSheet(context),
+    );
+  }
 }
 
 class _NavRow extends StatelessWidget {

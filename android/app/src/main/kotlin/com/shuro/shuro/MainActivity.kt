@@ -23,15 +23,19 @@ import io.flutter.embedding.engine.FlutterEngine
  */
 class MainActivity : AudioServiceActivity() {
     private var capabilityBridge: AudioCapabilityBridge? = null
+    private var deviceProfileBridge: DeviceProfileBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         capabilityBridge = AudioCapabilityBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger).also { it.attach() }
+        deviceProfileBridge = DeviceProfileBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onDestroy() {
         capabilityBridge?.detach()
         capabilityBridge = null
+        deviceProfileBridge?.detach()
+        deviceProfileBridge = null
         super.onDestroy()
     }
 }

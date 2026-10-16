@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
+import 'services/device_profile.dart';
 import 'services/download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
@@ -22,6 +23,10 @@ Future<void> main() async {
   // talks to platform channels during init) — and JustAudioBackground
   // itself must be initialized before any AudioPlayer is created.
   WidgetsFlutterBinding.ensureInitialized();
+  // Performance profile (brief §3): apply the stored choice's image-cache
+  // limits before any artwork decodes. Non-fatal — a missing prefs store
+  // must never block boot.
+  unawaited(DeviceProfileService.applyStoredOnBoot());
   debugPrint('[boot] binding ready');
 
   // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
