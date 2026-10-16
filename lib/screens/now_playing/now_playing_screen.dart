@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1145,6 +1146,10 @@ class _VolumeSheetState extends State<_VolumeSheet> {
   bool get _useSystem => !kIsWeb && _systemWorking;
   bool get _unknown => !_useSystem && !_systemTried && !kIsWeb;
 
+  bool _dragging = false;
+  bool _hitZero = false;
+  bool _hitFull = false;
+
   Future<void> _set(double v) async {
     if (_useSystem) {
       try {
@@ -1155,82 +1160,171 @@ class _VolumeSheetState extends State<_VolumeSheet> {
     }
   }
 
+  void _onDrag(double v, double width) {
+    final value = (v / width).clamp(0.0, 1.0);
+    setState(() {
+      _systemVolume = value;
+      _playerVolume = value;
+      if (value <= 0.001 && !_hitZero) {
+        _hitZero = true;
+        HapticFeedback.selectionClick();
+      } else if (value > 0.001) {
+        _hitZero = false;
+      }
+      if (value >= 0.999 && !_hitFull) {
+        _hitFull = true;
+        HapticFeedback.selectionClick();
+      } else if (value < 0.999) {
+        _hitFull = false;
+      }
+    });
+    _set(value);
+  }
+
+  IconData _levelIcon(double v) {
+    if (v == 0) return Icons.volume_off_rounded;
+    if (v < 0.5) return Icons.volume_down_rounded;
+    return Icons.volume_up_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final value = _useSystem ? (_systemVolume ?? 0.5) : _playerVolume;
+    final value = (_useSystem ? (_systemVolume ?? 0.5) : _playerVolume).clamp(0.0, 1.0);
     final percent = '${(value * 100).round()}%';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Volume', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(scale: Tween<double>(begin: 0.85, end: 1).animate(anim), child: child),
+              ),
+              child: _unknown
+                  ? const SizedBox.shrink(key: ValueKey('unknown'))
+                  : Text(percent, key: ValueKey(percent), style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_unknown)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Row(
+              children: [
+                const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kBrandColor)),
+                const SizedBox(width: 12),
+                Text('Reading system volume…', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
+              ],
+            ),
+          )
+        else ...[
+          // The smart control: a pill track that breathes taller while you
+          // drag, a white translucent fill, NO thumb — the fill edge IS the
+          // handle. A floating percentage bubble rides the edge and fades
+          // away on release. Accent stays reserved for the seek bar.
+          LayoutBuilder(
+            builder: (context, c) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
+                onHorizontalDragStart: (_) => setState(() => _dragging = true),
+                onHorizontalDragUpdate: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
+                onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+                onHorizontalDragCancel: () => setState(() => _dragging = false),
+                child: SizedBox(
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 7, end: _dragging ? 14 : 7),
+                        duration: const Duration(milliseconds: 160),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, h, _) => Container(
+                          height: h,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(h),
+                          ),
+                        ),
+                      ),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: value),
+                        duration: const Duration(milliseconds: 160),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, v, _) => FractionallySizedBox(
+                          widthFactor: v.clamp(0.0, 1.0),
+                          child: Container(
+                            height: _dragging ? 14 : 7,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Floating bubble at the fill edge while dragging.
+                      Positioned(
+                        left: (value * c.maxWidth - 26).clamp(0.0, c.maxWidth - 52),
+                        top: -26,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: _dragging ? 1 : 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                            child: Text(percent, style: GoogleFonts.getFont(currentFontFamily, color: Colors.black87, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Volume', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-              if (!_unknown)
-                Text(percent, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+              _VolumeIconButton(
+                icon: value == 0 ? Icons.volume_off_rounded : Icons.volume_mute_rounded,
+                tooltip: value == 0 ? 'Unmute' : 'Mute',
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  if (value == 0) {
+                    setState(() {
+                      _playerVolume = _preMute;
+                      _systemVolume = _preMute;
+                    });
+                    await _set(_preMute);
+                  } else {
+                    _preMute = value;
+                    setState(() {
+                      _playerVolume = 0;
+                      _systemVolume = 0;
+                    });
+                    await _set(0);
+                  }
+                },
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                child: Icon(_levelIcon(value), key: ValueKey(_levelIcon(value)), color: Colors.white70, size: 22),
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          if (_unknown)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Row(
-                children: [
-                  const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kBrandColor)),
-                  const SizedBox(width: 12),
-                  Text('Reading system volume…', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
-                ],
-              ),
-            )
-          else
-            Row(
-              children: [
-                IconButton(
-                  tooltip: value == 0 ? 'Unmute' : 'Mute',
-                  icon: Icon(value == 0 ? Icons.volume_off_rounded : Icons.volume_mute_rounded, color: Colors.white70),
-                  onPressed: () async {
-                    if (value == 0) {
-                      setState(() {
-                        _playerVolume = _preMute;
-                        _systemVolume = _preMute;
-                      });
-                      await _set(_preMute);
-                    } else {
-                      _preMute = value;
-                      setState(() {
-                        _playerVolume = 0;
-                        _systemVolume = 0;
-                      });
-                      await _set(0);
-                    }
-                  },
-                ),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3.5,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                    ),
-                    child: Slider(
-                      value: value.clamp(0.0, 1.0),
-                      onChanged: (v) {
-                        setState(() {
-                          _systemVolume = v;
-                          _playerVolume = v;
-                        });
-                        _set(v);
-                      },
-                    ),
-                  ),
-                ),
-                const Icon(Icons.volume_up_rounded, color: Colors.white70),
-              ],
-            ),
-          const SizedBox(height: 4),
           Text(
             _useSystem
                 ? 'System media volume'
@@ -1240,6 +1334,60 @@ class _VolumeSheetState extends State<_VolumeSheet> {
             style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5),
           ),
         ],
+      ],
+    );
+
+    // Entrance: a short rise + fade so the sheet feels composed, not popped.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        builder: (context, t, child) => Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, 14 * (1 - t)), child: child),
+        ),
+        child: body,
+      ),
+    );
+  }
+}
+
+/// Small icon button with a tactile scale-down on press — used by the
+/// volume sheet's mute control.
+class _VolumeIconButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _VolumeIconButton({required this.icon, required this.tooltip, required this.onTap});
+
+  @override
+  State<_VolumeIconButton> createState() => _VolumeIconButtonState();
+}
+
+class _VolumeIconButtonState extends State<_VolumeIconButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: Tooltip(
+        message: widget.tooltip,
+        child: AnimatedScale(
+          scale: _pressed ? 0.85 : 1.0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(widget.icon, color: Colors.white70, size: 22),
+          ),
+        ),
       ),
     );
   }
