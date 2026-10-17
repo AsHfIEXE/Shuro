@@ -30,10 +30,14 @@ com.shuro.shuro/.MainActivity`, three runs, take the median `TotalTime`.
 
 | Metric | Value |
 |---|---|
-| Cold start (median of 3) | PENDING |
+| Cold start (median of 3) | **3028 ms** (runs: 3084 · 3028 · 3025) |
 | Warm start | PENDING |
 
-Brief target: **cold start < 2.5 s.** Current architecture: cache-first
+Measured 2026-10-17 on the A13 with the installed 2.4.0 build.
+
+Brief target: **cold start < 2.5 s.** Current measurement misses by ~0.5 s — kept
+as the honest baseline; the lazy-tab shell (one screen built at start instead
+of five) is the lever to re-measure once this build is installed. Current architecture: cache-first
 library load, parallel state restore, every boot dependency hard-timeout
 guarded (worst case = retryable error, never a hang).
 
@@ -44,8 +48,12 @@ after 5,000-item scroll.
 
 | State | PSS |
 |---|---|
-| Idle after fresh start | PENDING |
-| During playback | PENDING |
+| Idle after fresh start | **70.2 MB** (71,874 KB PSS) |
+| During playback | PENDING (no track playing during this run) |
+| After 2 minutes open | **71.6 MB** (73,283 KB PSS) |
+
+Measured 2026-10-17 on the A13. Target **PSS < 250 MB during playback** —
+idle sits at ≈29% of that budget.
 
 Brief target: **PSS < 250 MB during playback on Performance profile.**
 Wired lever: image cache limits per profile (Performance 40 MB / Balanced

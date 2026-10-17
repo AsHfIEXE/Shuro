@@ -6,6 +6,7 @@ import '../models/download_state.dart';
 import '../models/lyrics.dart';
 import '../models/song.dart';
 import '../services/lyrics_service.dart';
+import '../services/device_profile.dart';
 import 'music_repository.dart';
 import 'navidrome_api_client.dart';
 
@@ -60,7 +61,6 @@ class NavidromeMusicRepository extends MusicRepository {
   /// connect feel slow on any library bigger than a handful of albums —
   /// this bounds concurrency instead of firing every request at once
   /// (which could overwhelm a small self-hosted server) or one at a time.
-  static const int _albumFetchConcurrency = 8;
 
   @override
   Future<MusicLibrarySnapshot> fetchLibrary() async {
@@ -96,7 +96,9 @@ class NavidromeMusicRepository extends MusicRepository {
     // otherwise-healthy library unreachable.
     final albumDetails = await _mapWithConcurrency<Map<String, dynamic>, Map<String, dynamic>?>(
       rawAlbums,
-      _albumFetchConcurrency,
+      // Profile-driven parallelism (brief §2D): 2 on Performance,
+      // 4 on Balanced, 6 on Quality — profile resolved once and cached.
+      await DeviceProfileService.syncConcurrency(),
       (a) async {
         try {
           return await _client.getAlbum('${a['id']}');

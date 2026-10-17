@@ -83,7 +83,7 @@ void main() {
     test('every preset has a non-empty summary and changes list', () {
       for (final p in [DeviceProfileService.performancePreset, DeviceProfileService.balancedPreset, DeviceProfileService.qualityPreset]) {
         expect(p.summary, isNotEmpty);
-        expect(p.changes.length, 5);
+        expect(p.changes.length, 6);
       }
     });
 
