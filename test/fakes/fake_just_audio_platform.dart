@@ -134,7 +134,12 @@ class FakeAudioPlayerPlatform extends AudioPlayerPlatform {
   Future<PlayResponse> play(PlayRequest request) async {
     await _delay();
     _playing = true;
-    if (!_clock.isRunning) _clock.start();
+    // Reset before starting: Stopwatch.start() RESUMES an accumulated
+    // elapsed time, which after a pause would re-add the previous play span
+    // to every subsequent position the fake reports.
+    _clock
+      ..reset()
+      ..start();
     _state = ProcessingStateMessage.ready;
     _emit();
     return PlayResponse();
@@ -145,7 +150,9 @@ class FakeAudioPlayerPlatform extends AudioPlayerPlatform {
     await _delay();
     _base = position;
     _playing = false;
-    _clock.stop();
+    _clock
+      ..stop()
+      ..reset();
     _emit();
     return PauseResponse();
   }

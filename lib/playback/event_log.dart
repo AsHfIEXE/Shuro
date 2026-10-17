@@ -57,11 +57,14 @@ class PlaybackEventLog {
     final now = DateTime.now();
     final buf = StringBuffer()
       ..writeln('Shuro diagnostics (redacted)')
-      ..writeln('generated: $now')
-      ..writeln('app: ${device['version'] ?? 'unknown'}')
-      ..writeln('device: ${device['model'] ?? '?'} · '
-          'Android ${device['osVersion'] ?? '?'} · '
-          'RAM ${device['ram'] ?? '?'}')
+      ..writeln('generated: $now');
+    // Render whatever DeviceBasics collected by label ('App version',
+    // 'Operating system', ...) instead of guessing fixed key names - the old
+    // version printed '?' for every field it guessed wrong.
+    for (final entry in device.entries) {
+      buf.writeln('${entry.key.toLowerCase()}: ${entry.value}');
+    }
+    buf
       ..writeln('events: ${_entries.length} shown, $_dropped dropped (ring of $kMaxEvents)')
       ..writeln('--- last events ---');
     for (final line in _entries) {

@@ -189,12 +189,19 @@ class ShuroPulse {
     }
 
     var round = 0;
-    while (result.length < length && round < pools.length * 3) {
+    var emptyRounds = 0;
+    // Keep pulling until the list is full or every pool has run dry. (The
+    // previous cap of `pools.length * 3` silently truncated every flow to 15
+    // tracks — Tonight's Flow asked for 20, Long Drive for 40.)
+    while (result.length < length && emptyRounds < pools.length) {
       final pick = pickFrom(pools[round % pools.length]);
       if (pick != null) {
+        emptyRounds = 0;
         used.add(pick.id);
         result.add(pick);
         lastArtistId = pick.artistId;
+      } else {
+        emptyRounds++;
       }
       round++;
     }

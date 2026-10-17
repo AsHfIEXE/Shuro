@@ -197,8 +197,22 @@ class DeviceProfileService {
   ///  * the global transition flag read by page_transitions,
   ///  * the Flutter image cache limits.
   static Future<void> apply(ShuroProfile profile, AppearanceSettings appearance, {void Function(bool)? setReduceAnimations}) async {
-    final resolved = await resolve();
-    final effective = profile == ShuroProfile.auto ? resolved.effective : profile;
+    // Resolve the EFFECTIVE preset for the profile being applied. For Auto
+    // this must classify the device directly — calling resolve() here would
+    // return the previously stored choice (e.g. Quality), so choosing "Auto"
+    // after Quality would silently re-apply Quality (bug found in audit).
+    ShuroProfile effective;
+    if (profile == ShuroProfile.auto) {
+      final caps = await readCapabilities();
+      final ramMb = (caps?['totalRamMb'] as num?)?.toInt();
+      final lowRam = (caps?['isLowRamDevice'] as bool?) ?? false;
+      final deviceClass = ramMb != null
+          ? classify(totalRamMb: ramMb, isLowRamDevice: lowRam)
+          : (lowRam ? DeviceClass.low : null);
+      effective = deviceClass == null ? ShuroProfile.balanced : presetProfileFor(deviceClass);
+    } else {
+      effective = profile;
+    }
     final preset = presetFor(effective);
 
     await appearance.setBackgroundStyle(preset.backgroundStyle);
