@@ -11,6 +11,7 @@ import 'models/server_config.dart';
 import 'models/song.dart';
 import 'playback/audio_capability.dart';
 import 'playback/audio_diagnostics.dart';
+import 'playback/event_log.dart';
 import 'playback/playback_engine.dart';
 import 'services/app_persistence.dart';
 import 'services/download_service.dart';
@@ -498,6 +499,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// AppState itself decides whether either toggle is actually on —
   /// this just reports the current playback state unconditionally.
   @override
+  @override
+  void didHaveMemoryPressure() {
+    super.didHaveMemoryPressure();
+    // Brief §2B: on Android's onTrimMemory the caches must yield before the
+    // OS kills the app — playback itself must not be touched. Dropping the
+    // image cache costs a re-decode of visible art, nothing more.
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    PlaybackEventLog.instance.add('memory.pressure', {'cacheCleared': true});
+  }
+
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // The output route may have changed while the app was backgrounded (a
