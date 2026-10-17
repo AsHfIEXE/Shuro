@@ -61,6 +61,7 @@ class ProfilePreset {
         'Backdrop motion: ${backdropMotion.name}',
         'Backdrop blur: ${backdropBlurScale <= 0.01 ? 'off' : '${(backdropBlurScale * 100).round()}%'}',
         'Image cache: ${(imageCacheBytes / (1024 * 1024)).round()} MB',
+        'Library sync: $syncConcurrency parallel requests',
       ];
 }
 
