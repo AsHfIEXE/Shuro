@@ -61,3 +61,8 @@ android/.gradle/
 
 .flutter_tool_state
 _refs/
+
+# Release signing material - never commit (Play upload keystore).
+android/key.properties
+android/*.jks
+android/app/*.jks

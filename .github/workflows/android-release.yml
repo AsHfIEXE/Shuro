@@ -48,6 +48,14 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      # Play Store upload artifact: an App Bundle alongside the APK. Debug-
+      # signed (no upload keystore in CI) — Play rejects it until the owner
+      # provisions android/key.properties + the keystore, which is what makes
+      # the app publishable. The .aab is still built every run so the path
+      # is proven to work.
+      - name: Build release App Bundle
+        run: flutter build appbundle --release
+
       - name: Read version
         id: version
         run: |
@@ -91,6 +99,12 @@ jobs:
           name: Shuro_v${{ steps.version.outputs.version }}-apk
           path: Shuro_v${{ steps.version.outputs.version }}.apk
 
+      - name: Upload App Bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shuro_v${{ steps.version.outputs.version }}-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
       - name: Publish prerelease
         uses: softprops/action-gh-release@v2
         with:
@@ -99,3 +113,27 @@ jobs:
           body_path: release_notes.md
           prerelease: true
           files: Shuro_v${{ steps.version.outputs.version }}.apk
+
+      # Keeps the Releases page at five prereleases. Runs AFTER publishing so
+      # a failed publish never deletes anything, and uses github-script's
+      # implicit auth — no credential literal appears in this file.
+      - name: Prune old prereleases (keep latest 5)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const keep = 5;
+            const { owner, repo } = context.repo;
+            const releases = await github.paginate(
+              github.rest.repos.listReleases,
+              { owner, repo, per_page: 100 }
+            );
+            const ours = releases
+              .filter(r => r.prerelease && /^Shuro_v.*-build\.\d+$/.test(r.tag_name))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            for (const r of ours.slice(keep)) {
+              core.info(`Deleting old release: ${r.tag_name}`);
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: r.id });
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${r.tag_name}` })
+                .catch(() => {});
+            }
