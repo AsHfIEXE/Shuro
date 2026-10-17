@@ -36,8 +36,27 @@ com.shuro.shuro/.MainActivity`, three runs, take the median `TotalTime`.
 Measured 2026-10-17 on the A13 with the installed 2.4.0 build.
 
 Brief target: **cold start < 2.5 s.** Current measurement misses by ~0.5 s — kept
-as the honest baseline; the lazy-tab shell (one screen built at start instead
-of five) is the lever to re-measure once this build is installed. Current architecture: cache-first
+as the honest baseline.
+
+### After the startup pass (same day, rebuilt from main)
+
+| Build | Cold start (median of 3) | PSS idle |
+|---|---|---|
+| Baseline (2.4.0 as installed earlier) | 3028 ms | 70.2 MB |
+| + lazy tab shell, profiles, boot cache limits | 3025 ms | 79.1 MB* |
+| + DNS probe no longer awaited pre-frame | 3029 ms | — |
+
+**Conclusion (measured, not guessed):** the ~3.0 s is dominated by
+Flutter-engine / audio-service host initialisation, not by Dart boot work —
+removing an awaited call with a 6 s ceiling changed cold start by ~0 ms, and
+building one tab instead of five changed it by ~3 ms. Hitting <2.5 s needs
+engine-level work (e.g. dropping `AudioServiceActivity` as the host, which
+`just_audio_background` requires), not more Dart tuning. Logged as a known
+gap rather than chased with unverifiable tweaks.
+
+\* PSS increase is likely first-run JIT/verification work after a fresh
+install — re-measure after several launches before treating it as a
+regression. Current architecture: cache-first
 library load, parallel state restore, every boot dependency hard-timeout
 guarded (worst case = retryable error, never a hang).
 

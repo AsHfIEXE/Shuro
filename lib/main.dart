@@ -40,12 +40,22 @@ Future<void> main() async {
     // answers in milliseconds and the default (TLS-safe) connect path is kept;
     // only a genuinely broken resolver gets the DoH treatment. Time-boxed with
     // an outer guard as well — startup must never stall on it.
-    try {
-      await StreamProxy.checkDeviceDns().timeout(const Duration(seconds: 6));
-    } catch (_) {
-      // Leave DoH disabled (healthy default); DNS itself is unchanged.
-    }
-    debugPrint('[boot] dns check done');
+    // DNS health check — deliberately NOT awaited before runApp. It only
+    // decides whether the DoH fallback engages, and awaiting it put a call
+    // with a 6 s ceiling on the path to the first frame (a genuine worst-case
+    // stall on a broken resolver). Measurement note: deferring it changed
+    // cold start by ~0 ms — the ~3.0 s on the A13 is engine/audio-service
+    // host init, not Dart boot — so this is a worst-case guard, not a
+    // claimed speed-up. Requests started before the probe finishes take the
+    // default TLS-safe path.
+    unawaited(
+      StreamProxy.checkDeviceDns()
+          .timeout(const Duration(seconds: 6))
+          .catchError((Object _) {
+        // Leave DoH disabled (healthy default); DNS itself is unchanged.
+      }),
+    );
+    debugPrint('[boot] dns check dispatched (not awaited)');
 
     // Loopback stream proxy: audio streams are rewritten to 127.0.0.1 and
     // forwarded, so playback survives device DNS failures for DDNS/server
