@@ -297,13 +297,39 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   PlayerController? _boundPlayer;
   String? _lastRecordedSongId;
 
-  static const _tabs = [
-    HomeScreen(),
-    LibraryScreen(),
-    SearchScreen(),
-    DiscoverScreen(),
-    FavoritesScreen(),
-  ];
+  /// Tabs materialize on first visit (brief §2B): the shell used to build all
+  /// five screens — with their library listeners and lists — before the user
+  /// had seen any of them. Visited tabs stay alive in the IndexedStack (scroll
+  /// state preserved, exactly as before); unvisited ones cost a const
+  /// SizedBox until first opened.
+  final Set<int> _visitedTabs = {0};
+
+  static Widget _tabAt(int index) {
+    switch (index) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const LibraryScreen();
+      case 2:
+        return const SearchScreen();
+      case 3:
+        return const DiscoverScreen();
+      default:
+        return const FavoritesScreen();
+    }
+  }
+
+  List<Widget> get _tabChildren => List<Widget>.generate(
+        5,
+        (i) => _visitedTabs.contains(i) ? _tabAt(i) : const SizedBox.shrink(),
+      );
+
+  void _selectTab(int index) {
+    setState(() {
+      _tabIndex = index;
+      _visitedTabs.add(index);
+    });
+  }
 
   @override
   void initState() {
@@ -612,13 +638,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           children: [
             ShuroRail(
               currentIndex: _tabIndex,
-              onTap: (i) => setState(() => _tabIndex = i),
+              onTap: _selectTab,
             ),
             const VerticalDivider(width: 1, color: kDividerColor),
             Expanded(
               child: Column(
                 children: [
-                  Expanded(child: IndexedStack(index: _tabIndex, children: _tabs)),
+                  Expanded(child: IndexedStack(index: _tabIndex, children: _tabChildren)),
                   const MiniPlayer(),
                 ],
               ),
@@ -630,10 +656,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
-      body: IndexedStack(index: _tabIndex, children: _tabs),
+      body: IndexedStack(index: _tabIndex, children: _tabChildren),
       bottomNavigationBar: ShuroNavBar(
         currentIndex: _tabIndex,
-        onTap: (i) => setState(() => _tabIndex = i),
+        onTap: _selectTab,
         header: const MiniPlayer(),
       ),
     );

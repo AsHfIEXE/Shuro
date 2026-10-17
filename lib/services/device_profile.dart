@@ -26,6 +26,7 @@ class ProfilePreset {
     required this.backdropBlurScale,
     required this.reduceMotion,
     required this.imageCacheBytes,
+    required this.syncConcurrency,
   });
 
   final String name;
@@ -35,6 +36,10 @@ class ProfilePreset {
   final double backdropBlurScale;
   final bool reduceMotion;
   final int imageCacheBytes;
+
+  /// Library-sync parallelism (brief §2D): concurrent album fetches while
+  /// connecting to a server. Low-end devices get fewer in-flight requests.
+  final int syncConcurrency;
 
   /// Plain-language live summary (brief §3A: "Animations: Reduced · Blur: Off ·
   /// Image cache: 40 MB").
@@ -73,6 +78,7 @@ class DeviceProfileService {
     backdropBlurScale: 0,
     reduceMotion: true,
     imageCacheBytes: 40 * 1024 * 1024,
+    syncConcurrency: 2,
   );
 
   static const ProfilePreset balancedPreset = ProfilePreset(
@@ -83,6 +89,7 @@ class DeviceProfileService {
     backdropBlurScale: 0.5,
     reduceMotion: false,
     imageCacheBytes: 80 * 1024 * 1024,
+    syncConcurrency: 4,
   );
 
   static const ProfilePreset qualityPreset = ProfilePreset(
@@ -93,6 +100,7 @@ class DeviceProfileService {
     backdropBlurScale: 1.0,
     reduceMotion: false,
     imageCacheBytes: 150 * 1024 * 1024,
+    syncConcurrency: 6,
   );
 
   static ProfilePreset presetFor(ShuroProfile profile) {
@@ -204,12 +212,27 @@ class DeviceProfileService {
       transitions.reduceMotionEnabled = preset.reduceMotion;
     }
     applyImageCacheBytes(preset.imageCacheBytes);
+    _cachedSyncConcurrency = preset.syncConcurrency;
     await storeProfile(profile);
   }
 
   /// The image-cache half, callable from boot before settings objects exist.
   static void applyImageCacheBytes(int bytes) {
     PaintingBinding.instance.imageCache.maximumSizeBytes = bytes;
+  }
+
+  static int? _cachedSyncConcurrency;
+
+  /// Library-sync parallelism for the profile in effect. Cached after the
+  /// first resolve (the value only changes via [apply], which clears it) so
+  /// the repository's hot path never re-reads prefs per sync.
+  static Future<int> syncConcurrency() async {
+    final cached = _cachedSyncConcurrency;
+    if (cached != null) return cached;
+    final resolved = await resolve();
+    final value = presetFor(resolved.effective).syncConcurrency;
+    _cachedSyncConcurrency = value;
+    return value;
   }
 
   /// Boot-time application: reads the stored choice, applies cache limits and

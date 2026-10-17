@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20desktop%20%C2%B7%20web-8A5CF6" alt="platform" />
   <img src="https://img.shields.io/badge/Flutter-3.47-02569B" alt="Flutter" />
-  <img src="https://img.shields.io/badge/tests-146%20passing%20%C2%B7%2040k%20chaos%20actions-2EA043" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-157%20passing%20%C2%B7%2040k%20chaos%20actions-2EA043" alt="tests" />
   <img src="https://img.shields.io/badge/telemetry-none-2EA043" alt="no telemetry" />
   <img src="https://img.shields.io/badge/quality-format%3Draw%20bitperfect-F5A623" alt="original quality" />
 </p>
@@ -154,7 +154,7 @@ same player pipeline as your server tracks.
 
 Shuro is developed with the tooling most apps never build:
 
-- 🧪 **146 tests**, including a **seeded chaos harness** that fires
+- 🧪 **157 tests**, including a **seeded chaos harness** that fires
   **40,000 random playback actions** (skips, seeks, queue edits, injected
   failures) against the real player and asserts the invariants after every
   single action — any failure reproduces from its seed.
@@ -184,7 +184,7 @@ desktop and web builds.
 
 ```bash
 flutter pub get
-flutter test                # 146 tests, chaos suite included
+flutter test                # 157 tests, chaos suite included
 flutter build apk --release # build/app/outputs/flutter-apk/app-release.apk
 ```
 
