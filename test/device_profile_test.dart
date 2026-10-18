@@ -28,14 +28,18 @@ void main() {
       );
     });
 
-    test('4 GB is Mid', () {
+    test('4 GB is Low (weak-CPU budget class)', () {
       expect(
         DeviceProfileService.classify(totalRamMb: 4096, isLowRamDevice: false),
-        DeviceClass.mid,
+        DeviceClass.low,
       );
     });
 
-    test('6 GB is Mid, 8 GB is High', () {
+    test('5 GB is Mid, 6 GB is Mid, 8 GB is High', () {
+      expect(
+        DeviceProfileService.classify(totalRamMb: 5120, isLowRamDevice: false),
+        DeviceClass.mid,
+      );
       expect(
         DeviceProfileService.classify(totalRamMb: 6144, isLowRamDevice: false),
         DeviceClass.mid,

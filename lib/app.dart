@@ -27,7 +27,9 @@ import 'screens/onboarding/welcome_screen.dart';
 import 'screens/onboarding/consent_screen.dart' show ConsentScreen, kTermsAcceptedKey;
 import 'screens/onboarding/server_setup_screen.dart';
 import 'screens/search/search_screen.dart';
+import 'services/device_profile.dart';
 import 'state/app_state.dart';
+import 'state/appearance_settings.dart';
 import 'state/player_controller.dart';
 import 'theme/app_theme.dart';
 import 'services/server_link.dart';
@@ -337,6 +339,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.initState();
     _reconnectTimer = Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
     WidgetsBinding.instance.addObserver(this);
+    // Performance profile, appearance half: applied once providers exist so a
+    // stored Performance choice actually stops painting the heavy backdrop
+    // (before this, only the image-cache limit was applied at boot).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final appearance = context.read<AppearanceSettings>();
+      final appState = context.read<AppState>();
+      unawaited(DeviceProfileService.applyStoredPresetOnBoot(
+        appearance,
+        setReduceAnimations: appState.updateReduceAnimations,
+      ));
+    });
     // Wire Settings → Behavior → Autoplay into the player, give it a real
     // (if simple) source of "what to play next" once the queue runs out,
     // and feed every played song into AppState's listening history so

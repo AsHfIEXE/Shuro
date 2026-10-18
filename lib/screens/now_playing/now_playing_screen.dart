@@ -627,10 +627,13 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
 
   void _commitSeek() {
     final target = _preview;
-    if (target != null) {
-      widget.player.seekToProgress(target);
-    }
-    setState(() => _preview = null);
+    if (target == null) return;
+    // Keep showing the preview until the engine confirms the seek: clearing
+    // it immediately made the ring snap back to the old position and then
+    // jump forward (visible on streamed tracks, where the seek takes a beat).
+    widget.player.seekToProgress(target).whenComplete(() {
+      if (mounted && _preview == target) setState(() => _preview = null);
+    });
   }
 
   @override

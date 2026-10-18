@@ -71,10 +71,33 @@ class StreamProxy {
 
   /// Rewrites an absolute http(s) URL to a loopback proxy URL. Non-http URLs
   /// (local file paths) are returned unchanged.
+  /// One reused client: the old code created (and closed) an HttpClient per
+  /// request, so every seek paid a fresh TCP+TLS handshake. Keep-alive now
+  /// works and repeated range reads reuse the connection.
+  static HttpClient? _upstreamClient;
+
+  static HttpClient _client() {
+    final existing = _upstreamClient;
+    if (existing != null) return existing;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+    if (_dohEnabled) {
+      client.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
+    }
+    _upstreamClient = client;
+    return client;
+  }
+
   static String wrap(String url) {
     final server = _server;
     if (server == null) return url;
     if (!url.startsWith('http://') && !url.startsWith('https://')) return url;
+    // The loopback proxy exists for ONE reason: a broken device resolver
+    // (see checkDeviceDns). On a healthy resolver it added a second hop and
+    // pushed every audio byte through the UI isolate — and because it did not
+    // forward Range, every seek re-downloaded from byte 0 (observed: a seek
+    // stuck buffering ~90 s). Healthy DNS now streams directly; the proxy is
+    // used only in the broken-resolver case it was built for.
+    if (!_dohEnabled) return url;
     return 'http://127.0.0.1:${server.port}/stream?u=${Uri.encodeComponent(url)}';
   }
 
@@ -87,17 +110,18 @@ class StreamProxy {
       }
       final target = Uri.parse(targetParam);
 
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 20);
-      // DoH-resolving connector only when the device resolver is broken
-      // (see checkDeviceDns). On a healthy resolver the default connect path
-      // must stay untouched — it owns socket lifecycle through the TLS
-      // handshake, and replacing it broke HTTPS on emulators.
-      if (_dohEnabled) {
-        client.connectionFactory = (uri, proxyHost, proxyPort) => connectResolvingDoh(uri);
-      }
+      final client = _client();
       try {
         final upstreamRequest = await client.openUrl('GET', target);
+        // Forward the range/conditional headers verbatim. Without Range the
+        // upstream answers 200 with the whole file, the player reads and
+        // discards everything before the seek target, and a seek into a long
+        // track takes tens of seconds — the proxy's doc comment already
+        // claimed this forwarding existed; it did not.
+        for (final name in const ['range', 'if-range', 'if-modified-since', 'if-none-match', 'accept']) {
+          final value = request.headers.value(name);
+          if (value != null) upstreamRequest.headers.set(name, value);
+        }
         final upstream = await upstreamRequest.close();
         final proxied = request.response;
         proxied.statusCode = upstream.statusCode;
@@ -108,7 +132,7 @@ class StreamProxy {
         await proxied.addStream(upstream);
         await proxied.close();
       } finally {
-        client.close(force: true);
+        // Shared client stays open; it is closed when the proxy stops.
       }
     } catch (_) {
       try {

@@ -123,7 +123,10 @@ class DeviceProfileService {
     required int totalRamMb,
     required bool isLowRamDevice,
   }) {
-    if (isLowRamDevice || totalRamMb <= 3 * 1024) return DeviceClass.low;
+    // 4 GB counts as Low: budget phones in this class (A13/Exynos 850)
+    // report ~3.6-3.8 GB usable and their CPU/GPU is the real bottleneck —
+    // Balanced's 0.5 blur + per-frame ring measured laggy there.
+    if (isLowRamDevice || totalRamMb <= 4 * 1024) return DeviceClass.low;
     if (totalRamMb <= 6 * 1024) return DeviceClass.mid;
     return DeviceClass.high;
   }
@@ -257,6 +260,26 @@ class DeviceProfileService {
     final resolved = await resolve();
     final preset = presetFor(resolved.effective);
     applyImageCacheBytes(preset.imageCacheBytes);
+  }
+
+  /// Applies the stored profile's APPEARANCE half after the first frame
+  /// (needs the AppearanceSettings instance). Before this existed only the
+  /// image cache was applied at boot, so a stored Performance choice still
+  /// painted the heavy animated backdrop until Settings was opened.
+  static Future<void> applyStoredPresetOnBoot(
+    AppearanceSettings appearance, {
+    void Function(bool)? setReduceAnimations,
+  }) async {
+    final resolved = await resolve();
+    final preset = presetFor(resolved.effective);
+    await appearance.setBackgroundStyle(preset.backgroundStyle);
+    await appearance.setBackdropMotion(preset.backdropMotion);
+    await appearance.setBackdropBlurScale(preset.backdropBlurScale);
+    if (setReduceAnimations != null) {
+      setReduceAnimations(preset.reduceMotion);
+    } else {
+      transitions.reduceMotionEnabled = preset.reduceMotion;
+    }
   }
 
   /// "Auto" explanation line for the settings UI.
