@@ -23,6 +23,7 @@ import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
+import '../../widgets/smooth_position_builder.dart';
 import '../../widgets/playback_controls.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/up_next_list.dart';
@@ -533,14 +534,23 @@ class NowPlayingScreen extends StatelessWidget {
   // --- shared pieces --------------------------------------------------------
 
   Widget _ring(BuildContext context, PlayerController player, Song song, double progress, List<Color> colors, String heroTag, double size, {bool showProgress = true}) {
-    return _ScrubbingRing(
-      player: player,
-      size: size,
-      song: song,
-      progress: progress,
-      colors: colors,
-      heroTag: heroTag,
-      showProgress: showProgress,
+    Widget buildRing(double p) => _ScrubbingRing(
+          player: player,
+          size: size,
+          song: song,
+          progress: p,
+          colors: colors,
+          heroTag: heroTag,
+          showProgress: showProgress,
+        );
+
+    // Per-frame interpolation while playing (the ring used to step at the
+    // ~1 Hz notify rate). SmoothPositionBuilder's ticker is muted whenever
+    // playback is paused, so a still screen costs nothing; reduce-motion (and
+    // therefore the Performance profile) keeps the plain 1 Hz value.
+    if (!showProgress || reduceMotionEnabled) return buildRing(progress);
+    return SmoothPositionBuilder(
+      builder: (context, player, position, smoothProgress) => buildRing(smoothProgress),
     );
   }
 
