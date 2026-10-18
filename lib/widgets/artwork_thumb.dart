@@ -47,12 +47,27 @@ class ArtworkThumb extends StatelessWidget {
           child: Center(child: Icon(icon, color: Colors.white70, size: iconSize)),
         );
 
+    // Decode at the drawn size (a row thumb is ~44-56 dp, not 500 px).
+    // cacheWidth cuts both decoded-image memory and the raster cost of every
+    // list; the server still serves the 500 px source for Now Playing, where
+    // artwork is drawn large.
+    int? decodeWidth;
+    if (size != null) {
+      final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+      decodeWidth = (size! * dpr).round().clamp(32, 1200);
+    }
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(effectiveRadius),
       child: artwork != null
           ? Image(
-              image: artwork!,
+              // ResizeImage (Image has no cacheWidth param for arbitrary
+              // providers): decode at the drawn size instead of the 500 px
+              // source.
+              image: decodeWidth != null
+                  ? ResizeImage(artwork!, width: decodeWidth, policy: ResizeImagePolicy.fit)
+                  : artwork!,
               fit: BoxFit.cover,
+              gaplessPlayback: true,
               errorBuilder: (context, error, stackTrace) => placeholder(),
             )
           : placeholder(),

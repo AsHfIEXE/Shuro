@@ -181,14 +181,27 @@ class _MiniPlayerBar extends StatelessWidget {
 
 /// The draggable progress bar. A thin line, but with a 20 px-tall hit area so it
 /// can actually be grabbed; drag anywhere on it to seek.
-class _SeekBar extends StatelessWidget {
+class _SeekBar extends StatefulWidget {
   final PlayerController player;
   final Song song;
 
   const _SeekBar({required this.player, required this.song});
 
   @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  /// Fraction being dragged, or null when not dragging. While non-null the
+  /// bar shows this instead of the live position and NO engine seek happens —
+  /// the seek fires once, on release. Seeking on every drag update re-buffered
+  /// the stream dozens of times per gesture.
+  double? _preview;
+
+  @override
   Widget build(BuildContext context) {
+    final player = widget.player;
+    final song = widget.song;
     final isActive = player.currentSong?.id == song.id;
     // Live only when the engine has audio for THIS song loaded — during the
     // load window the engine still reports the outgoing track's duration,
@@ -199,16 +212,26 @@ class _SeekBar extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        void seekTo(double dx) {
+        double fractionAt(double dx) => (dx / constraints.maxWidth).clamp(0.0, 1.0);
+
+        void commit(double fraction) {
           if (!isActive) return;
-          final fraction = (dx / constraints.maxWidth).clamp(0.0, 1.0);
           player.seekTo(Duration(milliseconds: (totalMs * fraction).round()));
         }
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => seekTo(details.localPosition.dx),
-          onHorizontalDragUpdate: (details) => seekTo(details.localPosition.dx),
+          onTapUp: (details) => commit(fractionAt(details.localPosition.dx)),
+          onHorizontalDragStart: (details) =>
+              setState(() => _preview = fractionAt(details.localPosition.dx)),
+          onHorizontalDragUpdate: (details) =>
+              setState(() => _preview = fractionAt(details.localPosition.dx)),
+          onHorizontalDragEnd: (_) {
+            final target = _preview;
+            setState(() => _preview = null);
+            if (target != null) commit(target);
+          },
+          onHorizontalDragCancel: () => setState(() => _preview = null),
           child: SizedBox(
             height: 20,
             child: Align(
@@ -218,6 +241,7 @@ class _SeekBar extends StatelessWidget {
                 songId: song.id,
                 totalMs: totalMs,
                 accent: song.gradientColors.last,
+                previewFraction: _preview,
               ),
             ),
           ),
@@ -235,7 +259,11 @@ class SmoothProgressBar extends StatelessWidget {
   final int totalMs;
   final Color accent;
 
-  const SmoothProgressBar({super.key, required this.player, required this.songId, required this.totalMs, required this.accent});
+  /// While dragging, the caller's preview fraction wins over the live stream
+  /// so the bar follows the finger without touching the engine.
+  final double? previewFraction;
+
+  const SmoothProgressBar({super.key, required this.player, required this.songId, required this.totalMs, required this.accent, this.previewFraction});
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +273,7 @@ class SmoothProgressBar extends StatelessWidget {
         final isActive = player.currentSong?.id == songId;
         final live = isActive && player.loadedSongId == songId;
         final position = live ? (snapshot.data ?? player.position) : Duration.zero;
-        final value = (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+        final value = previewFraction ?? (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
         return LinearProgressIndicator(
           value: value,
           minHeight: 2,
