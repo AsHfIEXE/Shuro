@@ -162,6 +162,53 @@ class AudioCapabilityBridge(
      * it as verified routing.
      */
     private fun readRoute(manager: AudioManager): Route {
+        fun routeOfDevice(device: AudioDeviceInfo): Route {
+            val name = device.productName?.toString()?.takeIf { it.isNotBlank() }
+            return when (device.type) {
+                AudioDeviceInfo.TYPE_USB_HEADSET,
+                AudioDeviceInfo.TYPE_USB_DEVICE,
+                AudioDeviceInfo.TYPE_USB_ACCESSORY -> Route("usb", name)
+
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                AudioDeviceInfo.TYPE_BLE_HEADSET,
+                AudioDeviceInfo.TYPE_BLE_SPEAKER -> Route("bluetooth", name)
+
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                AudioDeviceInfo.TYPE_LINE_ANALOG -> Route("wired", name)
+
+                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+                AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> Route("builtIn", null)
+
+                AudioDeviceInfo.TYPE_HDMI,
+                AudioDeviceInfo.TYPE_HDMI_ARC,
+                AudioDeviceInfo.TYPE_HDMI_EARC -> Route("other", "HDMI")
+
+                else -> Route("other", name)
+            }
+        }
+
+        // Android 13+ answers "where would music actually play" for the exact
+        // attributes we use - far more accurate than listing every attached
+        // output and guessing by priority (a plugged-in-but-inactive USB DAC
+        // used to win over the Bluetooth headset that was actually playing).
+        // Older platforms, or an empty answer, fall through to the list.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                val preferred = manager.getAudioDevicesForAttributes(attrs)
+                if (preferred.isNotEmpty()) {
+                    return routeOfDevice(preferred.first())
+                }
+            } catch (_: Exception) {
+                // fall through to the attached-device list
+            }
+        }
+
         val devices = try {
             manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         } catch (_: Exception) {
