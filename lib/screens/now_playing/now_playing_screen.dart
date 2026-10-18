@@ -1440,12 +1440,25 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
   void initState() {
     super.initState();
     _report = sharedAudioCapabilityMonitor.last;
-    // Re-read when the app returns (route may have changed while hidden);
-    // route changes while open are pushed by the Kotlin monitor via app.dart's
-    // lifecycle recheck.
-    unawaited(sharedAudioCapabilityMonitor.recheck().then((r) {
-      if (mounted) setState(() => _report = r);
-    }));
+    // Follow the monitor instead of reading once: a route change (headset
+    // plugged/unplugged, Bluetooth connected) now repaints this line live
+    // instead of waiting for the screen to be reopened (fixed 2026-10-18).
+    sharedAudioCapabilityMonitor.addListener(_onMonitorChanged);
+    unawaited(sharedAudioCapabilityMonitor.recheck());
+  }
+
+  @override
+  void dispose() {
+    sharedAudioCapabilityMonitor.removeListener(_onMonitorChanged);
+    super.dispose();
+  }
+
+  void _onMonitorChanged() {
+    if (!mounted) return;
+    final latest = sharedAudioCapabilityMonitor.last;
+    // Keep showing the previous route while a re-check is in flight - only a
+    // genuinely fresh answer replaces it, so the label never flickers empty.
+    if (latest != null) setState(() => _report = latest);
   }
 
   @override

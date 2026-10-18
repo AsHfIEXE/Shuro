@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'audio_diagnostics.dart';
@@ -227,7 +230,7 @@ class MethodChannelAudioCapabilitySource implements AudioCapabilitySource {
 /// [refresh] answers from cache; [recheck] forces a fresh read; [invalidate] is
 /// what a route change calls. Changing [queryFormat] also invalidates, because
 /// the answer is format-specific.
-class AudioCapabilityMonitor {
+class AudioCapabilityMonitor extends ChangeNotifier {
   final AudioCapabilitySource source;
 
   AudioCapabilityReport? _last;
@@ -275,6 +278,10 @@ class AudioCapabilityMonitor {
       if (generation == _generation) {
         _last = report;
         _readCount++;
+        // A fresh answer arrived: every listener (the Now Playing route line)
+        // re-renders. Cached refreshes never reach this branch, so they never
+        // notify — pinned by a test.
+        notifyListeners();
       }
       return report;
     }).whenComplete(() {
@@ -323,4 +330,15 @@ void attachNativeRouteListener([AudioCapabilityMonitor? monitor]) {
     }
     return null;
   });
+  // The native side only pushes `routeChanged` while monitoring is active,
+  // and nothing ever started it — which is why the Now Playing label stayed
+  // on "This device" until the screen was reopened (fixed 2026-10-18).
+  // Kick the monitor off, then take one fresh reading so the first label is
+  // accurate rather than whatever the cache held.
+  unawaited(
+    MethodChannelAudioCapabilitySource.channel
+        .invokeMethod<void>('startMonitoring')
+        .catchError((Object _) {}),
+  );
+  unawaited(target.recheck());
 }
