@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
+import 'app_info.dart';
 import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
@@ -23,6 +24,9 @@ Future<void> main() async {
   // talks to platform channels during init) — and JustAudioBackground
   // itself must be initialized before any AudioPlayer is created.
   WidgetsFlutterBinding.ensureInitialized();
+  // Real installed version for Settings → About (the hardcoded fallback had
+  // drifted three releases behind). Non-fatal and unawaited.
+  unawaited(resolveAppVersion());
   // Performance profile (brief §3): apply the stored choice's image-cache
   // limits before any artwork decodes. Non-fatal — a missing prefs store
   // must never block boot.

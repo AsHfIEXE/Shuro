@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon: brand background colour + the Shuro mark as a PNG
+     foreground. A vector with gradient STROKES rendered blank on some
+     launchers, so the foreground is a real bitmap at every density
+     (mipmap-*/ic_launcher_foreground.png), generated from the brand mark. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
 </adaptive-icon>

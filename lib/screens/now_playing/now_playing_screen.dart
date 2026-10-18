@@ -602,7 +602,14 @@ class _ScrubbingRing extends StatefulWidget {
 class _ScrubbingRingState extends State<_ScrubbingRing> {
   bool _scrubbing = false;
 
-  void _seekFrom(Offset localPosition) {
+  /// Drag preview: while the finger moves, only this local value changes and
+  /// the ring repaints. The engine is seeked ONCE, on release. The old code
+  /// seeked on every pan update — a 6-second drag produced 26 seeks and 26
+  /// re-buffers (seen in a real diagnostics export), which is why scrubbing
+  /// felt laggy and sometimes stuck.
+  double? _preview;
+
+  double _progressAt(Offset localPosition) {
     final center = Offset(widget.size / 2, widget.size / 2);
     final dx = localPosition.dx - center.dx;
     final dy = localPosition.dy - center.dy;
@@ -611,23 +618,44 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
     while (delta < 0) {
       delta += 2 * math.pi;
     }
-    final progress = (delta / (2 * math.pi)).clamp(0.0, 1.0);
-    widget.player.seekToProgress(progress);
+    return (delta / (2 * math.pi)).clamp(0.0, 1.0);
+  }
+
+  void _updatePreview(Offset localPosition) {
+    setState(() => _preview = _progressAt(localPosition));
+  }
+
+  void _commitSeek() {
+    final target = _preview;
+    if (target != null) {
+      widget.player.seekToProgress(target);
+    }
+    setState(() => _preview = null);
   }
 
   @override
   Widget build(BuildContext context) {
     return Listener(
       onPointerDown: (_) => setState(() => _scrubbing = true),
-      onPointerUp: (_) => setState(() => _scrubbing = false),
-      onPointerCancel: (_) => setState(() => _scrubbing = false),
+      onPointerUp: (_) {
+        if (_preview != null) _commitSeek();
+        setState(() => _scrubbing = false);
+      },
+      onPointerCancel: (_) {
+        if (_preview != null) _commitSeek();
+        setState(() => _scrubbing = false);
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onPanUpdate: (details) => _seekFrom(details.localPosition),
-        onTapUp: (details) => _seekFrom(details.localPosition),
+        onPanStart: (details) => _updatePreview(details.localPosition),
+        onPanUpdate: (details) => _updatePreview(details.localPosition),
+        onTapUp: (details) {
+          _updatePreview(details.localPosition);
+          _commitSeek();
+        },
         child: ArtworkRing(
           song: widget.song,
-          progress: widget.progress,
+          progress: _preview ?? widget.progress,
           colors: widget.colors,
           size: widget.size,
           heroTag: widget.heroTag,

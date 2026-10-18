@@ -1,7 +1,24 @@
-/// Single source of truth for the version shown in the app (Settings →
-/// About). Keep in step with `version:` in pubspec.yaml — bump both on
-/// every release ("2.0.3+1" in pubspec = [kAppVersion]+[kAppBuild]).
-const String kAppVersion = '2.3.0';
+import 'package:package_info_plus/package_info_plus.dart';
+
+/// Version shown in the app (Settings → About, consent, licences).
+///
+/// This used to be a hardcoded const and drifted (it still said 2.3.0 while
+/// 2.4.1 was installed). [resolveAppVersion] overwrites it at boot with the
+/// version actually installed, and the literal below is only the fallback for
+/// environments without plugin support (tests, web without the plugin).
+String kAppVersion = '2.4.1';
+
+/// Reads the running build's version from the platform. Call once at boot
+/// (non-fatal: a failure keeps the fallback).
+Future<void> resolveAppVersion() async {
+  try {
+    final info = await PackageInfo.fromPlatform();
+    kAppVersion = info.version;
+  } catch (_) {
+    // Keep the compile-time fallback.
+  }
+}
+
 const int kAppBuild = 1;
 
 // --- Brand identity -------------------------------------------------------

@@ -34,7 +34,7 @@ class MusicBrainzClient {
   /// instead of blocking the IP. Adding a real contact here is the one change
   /// worth making before shipping: a generic UA is the documented way to get
   /// rate-limited or blocked.
-  static const String userAgent = 'Shuro/$kAppVersion ( self-hosted Navidrome client )';
+  static final String userAgent = 'Shuro/$kAppVersion ( self-hosted Navidrome client )';
 
   /// Documented ceiling is one call per second; 1100 ms leaves headroom.
   static const Duration _minSpacing = Duration(milliseconds: 1100);

@@ -44,7 +44,7 @@ class LastFmConfig {
       'https://www.last.fm/api/auth/?api_key=${Uri.encodeQueryComponent(apiKey)}&token=${Uri.encodeQueryComponent(token)}';
 
   /// Last.fm asks for an identifiable User-Agent the same way MusicBrainz does.
-  static const Map<String, String> headers = {
+  static final Map<String, String> headers = {
     'User-Agent': 'Shuro/$kAppVersion ( self-hosted Navidrome client )',
   };
 }

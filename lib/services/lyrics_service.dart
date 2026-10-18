@@ -100,9 +100,9 @@ class LyricsService {
   /// version **and** a homepage/project link or an email address; Shuro ships
   /// without a public project URL, so this identifies the app and its version
   /// and is the single place to add a link or contact once one exists.
-  static const String clientIdentifier = 'Shuro/$kAppVersion (self-hosted Navidrome client)';
+  static final String clientIdentifier = 'Shuro/$kAppVersion (self-hosted Navidrome client)';
 
-  static const Map<String, String> _headers = {
+  static final Map<String, String> _headers = {
     'User-Agent': clientIdentifier,
     // LRCLIB's documented alternatives to User-Agent, sent as well so the
     // client is identifiable even behind a proxy that rewrites User-Agent.
