@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ generates a system splash from theme attributes. Point it
+         at the brand surface and the Shuro mark so the very first frame the
+         OS paints is on-brand (the default is the raw launcher icon). -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/shuro_surface</item>
+        <item name="android:windowSplashScreenBackground">@color/shuro_surface</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/shuro_surface</item>
+    </style>
+</resources>

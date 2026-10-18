@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The window shown while the process starts, before Flutter's first frame. -->
+<!-- The window shown while the process starts, before Flutter's first frame.
+     Brand surface plus the Shuro mark, so startup opens on the logo instead
+     of a blank dark rectangle; the Flutter splash then animates the same mark
+     in from the same composition. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/shuro_surface" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/launch_logo" />
+    </item>
 </layer-list>
-
