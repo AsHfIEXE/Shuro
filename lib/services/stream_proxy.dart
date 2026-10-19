@@ -41,16 +41,33 @@ class StreamProxy {
   static Future<void> checkDeviceDns() async {
     if (kIsWeb) {
       // The browser owns DNS on web — there is no device resolver to fix.
-      _dohEnabled = false;
+      _setDohEnabled(false);
       return;
     }
     try {
       final result =
           await InternetAddress.lookup('one.one.one.one').timeout(const Duration(seconds: 4));
-      _dohEnabled = result.isEmpty;
+      _setDohEnabled(result.isEmpty);
     } catch (_) {
-      _dohEnabled = true;
+      _setDohEnabled(true);
     }
+  }
+
+  /// Flips the DoH flag AND retires the shared upstream client when it changes:
+  /// the client's connector is fixed at creation, so a client created before
+  /// the (unawaited, boot-time) DNS probe finished would otherwise keep the
+  /// wrong resolver for the whole session.
+  static void _setDohEnabled(bool value) {
+    if (_dohEnabled == value) return;
+    _dohEnabled = value;
+    _retireClient();
+  }
+
+  static void _retireClient() {
+    final old = _upstreamClient;
+    _upstreamClient = null;
+    // Not forced: in-flight streams on the old client finish normally.
+    old?.close();
   }
 
   /// Starts the loopback server. Idempotent.
@@ -67,6 +84,10 @@ class StreamProxy {
   static void stop() {
     _server?.close(force: true);
     _server = null;
+    // The shared client holds keep-alive sockets; release them with the server.
+    final old = _upstreamClient;
+    _upstreamClient = null;
+    old?.close(force: true);
   }
 
   /// Rewrites an absolute http(s) URL to a loopback proxy URL. Non-http URLs
@@ -104,7 +125,8 @@ class StreamProxy {
   static Future<void> _handle(HttpRequest request) async {
     try {
       final targetParam = request.uri.queryParameters['u'];
-      if (request.method != 'GET' || targetParam == null) {
+      if ((request.method != 'GET' && request.method != 'HEAD') || targetParam == null) {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
         await request.response.close();
         return;
       }
@@ -112,7 +134,7 @@ class StreamProxy {
 
       final client = _client();
       try {
-        final upstreamRequest = await client.openUrl('GET', target);
+        final upstreamRequest = await client.openUrl(request.method, target);
         // Forward the range/conditional headers verbatim. Without Range the
         // upstream answers 200 with the whole file, the player reads and
         // discards everything before the seek target, and a seek into a long

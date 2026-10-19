@@ -641,9 +641,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// tablets, desktop windows and Android TV.
   static const double kWideShellBreakpoint = 1024;
 
+  /// Keeps the tab stack's state (scroll positions, search text) alive when a
+  /// rotation switches between the rail and bottom-bar layouts — the two
+  /// layouts put the stack at different spots in the tree, so without a
+  /// GlobalKey every tab would be rebuilt from scratch on rotate.
+  final GlobalKey _tabStackKey = GlobalKey();
+
+  /// A landscape phone is only ~360 dp tall; the bottom bar (74) plus the mini
+  /// player (~64) would take over a third of it. Use the rail there too.
+  static const double kLandscapeRailMaxHeight = 480;
+  static const double kLandscapeRailMinWidth = 560;
+
   @override
   Widget build(BuildContext context) {
-    final useRail = MediaQuery.of(context).size.width >= kWideShellBreakpoint;
+    final size = MediaQuery.sizeOf(context);
+    final useRail = size.width >= kWideShellBreakpoint ||
+        (size.height < kLandscapeRailMaxHeight && size.width >= kLandscapeRailMinWidth);
 
     // Wide layout: a rail down the side, content to the right, mini player at the
     // bottom of the content column. This is what makes a 1920×1080 window (or a
@@ -662,7 +675,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             Expanded(
               child: Column(
                 children: [
-                  Expanded(child: IndexedStack(index: _tabIndex, children: _tabChildren)),
+                  Expanded(child: IndexedStack(key: _tabStackKey, index: _tabIndex, children: _tabChildren)),
                   const MiniPlayer(),
                 ],
               ),
@@ -674,7 +687,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
-      body: IndexedStack(index: _tabIndex, children: _tabChildren),
+      body: IndexedStack(key: _tabStackKey, index: _tabIndex, children: _tabChildren),
       bottomNavigationBar: ShuroNavBar(
         currentIndex: _tabIndex,
         onTap: _selectTab,

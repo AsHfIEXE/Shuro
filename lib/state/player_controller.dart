@@ -1067,10 +1067,89 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (_queueIndex < 0 || _queueIndex >= _queue.length) _queueIndex = 0;
     _lastNotifiedSecond = -1;
     notifyListeners();
-    // The native playlist must shuffle too: with a whole queue loaded the
-    // engine decides what plays next, so an app-only flag would be ignored at
-    // exactly the moment shuffle matters.
-    unawaited(_syncNativeModes());
+    // The app owns the order ("Up next" shows it), so the native playlist must
+    // be re-laid in that same order — the engine's own shuffle is never used
+    // (see _syncNativeModes). The playing track is left untouched, so there is
+    // no gap or restart.
+    unawaited(_relayNativeWindow().whenComplete(_syncNativeModes));
+  }
+
+  int _relayGeneration = 0;
+
+  /// Re-lays the native playlist around the playing track from the CURRENT app
+  /// queue order, without touching the playing source: only the entries before
+  /// and after it are replaced. Used after shuffle on/off so what the engine
+  /// auto-advances to is exactly what "Up next" shows. Any failure falls back
+  /// to [_invalidateNativeQueue], which routes the next skip through the full
+  /// reload path (always correct, just with a short gap).
+  Future<void> _relayNativeWindow() async {
+    if (!_nativeInSync) return;
+    final native = _nativeSource;
+    final song = _currentSong;
+    final ids = _nativeQueueIds;
+    if (native == null || song == null || ids == null) return;
+    final generation = ++_relayGeneration;
+    try {
+      final curNative = _audioPlayer.currentIndex;
+      final tag = _audioPlayer.sequenceState?.currentSource?.tag;
+      if (curNative == null || curNative < 0 || curNative >= native.length || tag is! MediaItem || tag.id != song.id) {
+        _invalidateNativeQueue();
+        return;
+      }
+      // While the window is edited the index stream emits transient values;
+      // with the ids cleared the handler ignores them.
+      _nativeQueueIds = null;
+      if (curNative + 1 < native.length) await native.removeRange(curNative + 1, native.length);
+      if (curNative > 0) await native.removeRange(0, curNative);
+      if (generation != _relayGeneration) {
+        _invalidateNativeQueue();
+        return;
+      }
+      // Same window geometry as _jumpTo, around the (unchanged) current song.
+      final whole = _queue.length <= _kNativeWindowFullLimit;
+      final start = whole
+          ? 0
+          : (_queueIndex - _kNativeWindowBefore)
+              .clamp(0, max(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter)))
+              .toInt();
+      final end = whole
+          ? _queue.length
+          : min(_queue.length, start + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
+      AudioSource? childFor(Song q) {
+        final src = audioSourceResolver?.call(q);
+        if (src == null) return null;
+        final tagItem = _mediaItemFor(q, metadataResolver?.call(q));
+        return (src.startsWith('http://') || src.startsWith('https://'))
+            ? AudioSource.uri(Uri.parse(src), tag: tagItem)
+            : AudioSource.file(src, tag: tagItem);
+      }
+
+      final beforeIds = <String>[];
+      final beforeSources = <AudioSource>[];
+      for (var i = start; i < _queueIndex; i++) {
+        final c = childFor(_queue[i]);
+        if (c == null) continue;
+        beforeSources.add(c);
+        beforeIds.add(_queue[i].id);
+      }
+      final afterIds = <String>[];
+      final afterSources = <AudioSource>[];
+      for (var i = _queueIndex + 1; i < end; i++) {
+        final c = childFor(_queue[i]);
+        if (c == null) continue;
+        afterSources.add(c);
+        afterIds.add(_queue[i].id);
+      }
+      if (afterSources.isNotEmpty) await native.insertAll(1, afterSources);
+      if (beforeSources.isNotEmpty) await native.insertAll(0, beforeSources);
+      if (generation != _relayGeneration) {
+        _invalidateNativeQueue();
+        return;
+      }
+      _nativeQueueIds = [...beforeIds, song.id, ...afterIds];
+    } catch (_) {
+      _invalidateNativeQueue();
+    }
   }
 
   void cycleRepeatMode() {
@@ -1095,11 +1174,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         PlayerRepeatMode.all => LoopMode.all,
         PlayerRepeatMode.one => LoopMode.one,
       });
-      await _audioPlayer.setShuffleModeEnabled(_shuffle);
-      // The queue itself is shuffled app-side before this runs, and
-      // setShuffleModeEnabled makes the engine honour that order. (An extra
-      // platform shuffle() here desynchronised engine and app under the chaos
-      // harness — 15 seeds failed — so it is deliberately not called.)
+      // Engine shuffle stays OFF always. The app shuffles its own queue (so
+      // "Up next" shows the real order) and _relayNativeWindow lays the native
+      // playlist out in that order; turning the engine's shuffle on as well
+      // made it play its OWN random order, which disagreed with "Up next".
+      await _audioPlayer.setShuffleModeEnabled(false);
     } catch (_) {
       // Single-load path in use; nothing to mirror.
     }

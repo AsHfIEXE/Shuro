@@ -47,32 +47,58 @@ class ArtworkThumb extends StatelessWidget {
           child: Center(child: Icon(icon, color: Colors.white70, size: iconSize)),
         );
 
-    // Decode at the drawn size (a row thumb is ~44-56 dp, not 500 px).
-    // cacheWidth cuts both decoded-image memory and the raster cost of every
-    // list; the server still serves the 500 px source for Now Playing, where
-    // artwork is drawn large.
-    int? decodeWidth;
-    if (size != null) {
+    // Decode — and, for Subsonic cover URLs, DOWNLOAD — at the drawn size. A
+    // row thumb is ~44-56 dp; it used to fetch the 500 px source and only
+    // shrink it after the transfer. Now Playing (large artwork) keeps 500.
+    Widget imageAt(double logical) {
       final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-      decodeWidth = (size! * dpr).round().clamp(32, 1200);
+      final px = (logical * dpr).round().clamp(32, 1200);
+      return Image(
+        // ResizeImage (Image has no cacheWidth param for arbitrary
+        // providers): decode at the drawn size instead of the source size.
+        image: ResizeImage(_sizedForTransfer(artwork!, px), width: px, policy: ResizeImagePolicy.fit),
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (context, error, stackTrace) => placeholder(),
+      );
     }
+
+    Widget image() {
+      if (size != null) return imageAt(size!);
+      // No fixed size (grid cells): measure the box the parent gives us.
+      return LayoutBuilder(builder: (context, constraints) {
+        final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+        if (w <= 0) return Image(image: artwork!, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (c, e, s) => placeholder());
+        return imageAt(w);
+      });
+    }
+
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(effectiveRadius),
-      child: artwork != null
-          ? Image(
-              // ResizeImage (Image has no cacheWidth param for arbitrary
-              // providers): decode at the drawn size instead of the 500 px
-              // source.
-              image: decodeWidth != null
-                  ? ResizeImage(artwork!, width: decodeWidth, policy: ResizeImagePolicy.fit)
-                  : artwork!,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (context, error, stackTrace) => placeholder(),
-            )
-          : placeholder(),
+      child: artwork != null ? image() : placeholder(),
     );
     if (size == null) return content;
     return SizedBox(width: size, height: size, child: content);
   }
+}
+
+/// For a Subsonic `getCoverArt` URL, asks the server for a smaller image when
+/// the thumb is drawn small. Sizes snap to 150/300/500 so the on-disk image
+/// cache (keyed by URL) is shared between rows of similar size instead of
+/// holding one copy per pixel width. Never upsizes, and leaves any other
+/// provider (file, MusicBrainz, artist portraits) untouched.
+ImageProvider _sizedForTransfer(ImageProvider provider, int neededPx) {
+  if (provider is! NetworkImage) return provider;
+  final uri = Uri.tryParse(provider.url);
+  if (uri == null || !uri.path.contains('getCoverArt')) return provider;
+  final current = int.tryParse(uri.queryParameters['size'] ?? '');
+  if (current == null) return provider;
+  final bucket = neededPx <= 150 ? 150 : (neededPx <= 300 ? 300 : 500);
+  if (bucket >= current) return provider;
+  final params = Map<String, String>.of(uri.queryParameters)..['size'] = '$bucket';
+  return NetworkImage(
+    uri.replace(queryParameters: params).toString(),
+    scale: provider.scale,
+    headers: provider.headers,
+  );
 }
