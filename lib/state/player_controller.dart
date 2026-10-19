@@ -1018,12 +1018,36 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     return seekTo(Duration(milliseconds: (duration.inMilliseconds * value).round()));
   }
 
+  /// Queue order saved when shuffle turned ON, so switching it OFF restores
+  /// the album order instead of leaving a scrambled queue (the old behaviour —
+  /// users read it as "shuffle is broken").
+  List<Song>? _preShuffleQueue;
+  int _preShuffleIndex = 0;
+
   void toggleShuffle() {
     _shuffle = !_shuffle;
+    PlaybackEventLog.instance.add('cmd.shuffle', {'on': _shuffle});
+    if (_shuffle) {
+      _preShuffleQueue = List<Song>.of(_queue);
+      _preShuffleIndex = _queueIndex;
+      // Shuffle only what's AHEAD of the playhead; the current track stays put
+      // and history keeps its order, which is what users expect.
+      final upcoming = _queue.sublist(_queueIndex + 1);
+      upcoming.shuffle(_random);
+      _queue = [..._queue.sublist(0, _queueIndex + 1), ...upcoming];
+    } else {
+      final saved = _preShuffleQueue;
+      if (saved != null && saved.length == _queue.length) {
+        final currentId = _currentSong?.id;
+        _queue = List<Song>.of(saved);
+        final idx = currentId == null ? -1 : _queue.indexWhere((s) => s.id == currentId);
+        if (idx >= 0) _queueIndex = idx;
+      }
+      _preShuffleQueue = null;
+    }
     notifyListeners();
-    // The native playlist must shuffle too: with a whole queue loaded, the
-    // engine itself decides what plays next (that is what makes track-end and
-    // notification skips work), so an app-only flag would be ignored at
+    // The native playlist must shuffle too: with a whole queue loaded the
+    // engine decides what plays next, so an app-only flag would be ignored at
     // exactly the moment shuffle matters.
     unawaited(_syncNativeModes());
   }
@@ -1051,6 +1075,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         PlayerRepeatMode.one => LoopMode.one,
       });
       await _audioPlayer.setShuffleModeEnabled(_shuffle);
+      // Enabling the flag alone keeps the engine's existing (linear) order on
+      // some platforms; ask it to generate a fresh shuffle order and then
+      // re-verify that the engine and the app still agree on the track.
+      if (_shuffle) {
+        await _audioPlayer.shuffle();
+        _verifyNativeTrack();
+      }
     } catch (_) {
       // Single-load path in use; nothing to mirror.
     }

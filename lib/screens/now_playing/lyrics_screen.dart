@@ -125,6 +125,12 @@ class _LyricsScreenState extends State<LyricsScreen> {
   Duration _offset = Duration.zero;
   bool _autoScrollEnabled = true;
 
+  /// True while the reader has scrolled UP into earlier lines. Auto-scroll
+  /// stays completely off in that state — the old 6-second timer jumped the
+  /// view back to the sung line and stole the reader's position repeatedly.
+  bool _readingUp = false;
+  double? _scrollStart;
+
   /// Set while the user is scrolling by hand: auto-scroll stands down so the
   /// two aren't fighting over the same scroll position, and a "Resume" chip
   /// appears instead of the view silently snapping back mid-read.
@@ -256,6 +262,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
 
   void _autoScrollTo(int index) {
     if (index < 0 || index == _lastAutoScrolledLine || !_autoScrollEnabled || _manualScrolling) return;
+    if (_readingUp) return; // the reader owns the position while reading up
     _lastAutoScrolledLine = index;
     // After the frame that built this line, so its rendered box exists to
     // measure against.
@@ -274,21 +281,36 @@ class _LyricsScreenState extends State<LyricsScreen> {
     });
   }
 
-  void _onUserScroll() {
+  void _onUserScrollStart() {
     _manualScrollTimer?.cancel();
+    _scrollStart = _scroll.hasClients ? _scroll.offset : 0;
     if (!_manualScrolling) setState(() => _manualScrolling = true);
-    // Give up the override a few seconds after the user stops, so the view
-    // follows the song again by itself.
-    _manualScrollTimer = Timer(const Duration(seconds: 6), () {
+  }
+
+  void _onUserScrollUpdate(double offset) {
+    final start = _scrollStart;
+    if (start != null) {
+      if (offset < start - 8) {
+        _readingUp = true; // reading earlier lines: never yank the view
+      } else if (offset > start + 24) {
+        _readingUp = false; // moved back down: following may resume
+      }
+    }
+    _manualScrollTimer?.cancel();
+    _manualScrollTimer = Timer(const Duration(seconds: 4), () {
       if (!mounted) return;
       setState(() => _manualScrolling = false);
       _lastAutoScrolledLine = -1;
-      _autoScrollTo(_currentLine.value);
+      // No forced jump on resume: it only re-enables following, so the view
+      // moves on the NEXT line change. Jumping here was the "it keeps
+      // auto-scrolling me away" bug.
+      if (!_readingUp) _autoScrollTo(_currentLine.value);
     });
   }
 
   void _resumeAutoScroll() {
     _manualScrollTimer?.cancel();
+    _readingUp = false;
     setState(() => _manualScrolling = false);
     _lastAutoScrolledLine = -1;
     _autoScrollTo(_currentLine.value);
@@ -437,7 +459,12 @@ class _LyricsScreenState extends State<LyricsScreen> {
       children: [
         NotificationListener<ScrollStartNotification>(
           onNotification: (notification) {
-            if (notification.dragDetails != null) _onUserScroll();
+            if (notification.dragDetails != null) _onUserScrollStart();
+            return false;
+          },
+          child: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (notification) {
+            if (_manualScrolling) _onUserScrollUpdate(notification.metrics.pixels);
             return false;
           },
           child: SingleChildScrollView(
@@ -470,6 +497,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
                   ),
               ],
             ),
+          ),
           ),
         ),
         if (_manualScrolling)
