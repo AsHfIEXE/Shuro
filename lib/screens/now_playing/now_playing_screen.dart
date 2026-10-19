@@ -1086,21 +1086,29 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                 ),
               ListTile(
                 leading: const Icon(Icons.schedule_rounded, color: kBrandColor),
-                title: Text('Custom…', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-                subtitle: Text('Pick hours and minutes', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                title: Text('Custom time…', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Pause at a specific clock time', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
                 onTap: () async {
+                  final now = DateTime.now();
                   final picked = await showTimePicker(
                     context: sheetContext,
-                    helpText: 'Sleep after',
-                    initialTime: const TimeOfDay(hour: 1, minute: 0),
-                    // Hours + minutes in the clock UI: any 24h time maps to a
-                    // duration of exactly h×60+m minutes.
+                    helpText: 'Pause at',
+                    initialTime: TimeOfDay(hour: now.hour, minute: (now.minute + 30) % 60),
                     initialEntryMode: TimePickerEntryMode.dial,
                   );
                   if (picked == null) return;
-                  final minutes = picked.hour * 60 + picked.minute;
-                  if (minutes <= 0) return;
-                  player.startSleepTimer(Duration(minutes: minutes), fadeOut: fade);
+                  // A clock time, not a duration: 12:17 AM means "at 12:17",
+                  // and if that moment has already passed today it means
+                  // tomorrow. (The old code read the picked hour/minute as
+                  // h*60+m minutes — picking 12:17 scheduled +17 minutes,
+                  // which is exactly why a 12:17 setting fired at 12:33.)
+                  var target = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+                  if (!target.isAfter(now)) {
+                    target = target.add(const Duration(days: 1));
+                  }
+                  final remaining = target.difference(now);
+                  if (remaining <= Duration.zero) return;
+                  player.startSleepTimer(remaining, fadeOut: fade);
                   if (sheetContext.mounted) Navigator.of(sheetContext).pop();
                 },
               ),
