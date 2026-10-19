@@ -18,6 +18,9 @@ void showPlaylistActionsSheet(BuildContext context, Playlist playlist) {
   final songs = playlist.isSmart ? ShuroPulse.smartPlaylistSongs(playlist.smartPreset!, appState) : appState.songsByIds(playlist.songIds);
 
   showModalBottomSheet(
+    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
+    // the screen, which overflows in landscape (yellow/black stripes).
+    isScrollControlled: true,
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(

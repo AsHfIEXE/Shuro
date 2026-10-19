@@ -5,6 +5,9 @@ import '../../theme/app_theme.dart';
 
 Future<ArtworkStyle?> showArtworkStyleSheet(BuildContext context, ArtworkStyle current) {
   return showModalBottomSheet<ArtworkStyle>(
+    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
+    // the screen, which overflows in landscape (yellow/black stripes).
+    isScrollControlled: true,
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(

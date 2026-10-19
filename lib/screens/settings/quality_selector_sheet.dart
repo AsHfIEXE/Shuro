@@ -11,6 +11,9 @@ Future<StreamingQuality?> showQualitySelectorSheet(
   required StreamingQuality current,
 }) {
   return showModalBottomSheet<StreamingQuality>(
+    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
+    // the screen, which overflows in landscape (yellow/black stripes).
+    isScrollControlled: true,
     context: context,
     builder: (sheetContext) => _QualitySelectorSheet(title: title, current: current),
   );
