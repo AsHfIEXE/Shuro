@@ -205,22 +205,32 @@ class _SeekBarState extends State<_SeekBar> {
       builder: (context, constraints) {
         double fractionAt(double dx) => (dx / constraints.maxWidth).clamp(0.0, 1.0);
 
-        void commit(double fraction) {
-          if (!isActive) return;
-          player.seekTo(Duration(milliseconds: (totalMs * fraction).round()));
+        Future<void> commit(double fraction) {
+          if (!isActive) return Future<void>.value();
+          return player.seekTo(Duration(milliseconds: (totalMs * fraction).round()));
         }
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapUp: (details) => commit(fractionAt(details.localPosition.dx)),
+          onTapUp: (details) {
+            final target = fractionAt(details.localPosition.dx);
+            setState(() => _preview = target);
+            commit(target).whenComplete(() {
+              if (mounted && _preview == target) setState(() => _preview = null);
+            });
+          },
           onHorizontalDragStart: (details) =>
               setState(() => _preview = fractionAt(details.localPosition.dx)),
           onHorizontalDragUpdate: (details) =>
               setState(() => _preview = fractionAt(details.localPosition.dx)),
           onHorizontalDragEnd: (_) {
             final target = _preview;
-            setState(() => _preview = null);
-            if (target != null) commit(target);
+            if (target == null) return;
+            // Hold the preview until the engine confirms, exactly like the
+            // ring: clearing first made the bar snap back then jump.
+            commit(target).whenComplete(() {
+              if (mounted && _preview == target) setState(() => _preview = null);
+            });
           },
           onHorizontalDragCancel: () => setState(() => _preview = null),
           child: SizedBox(

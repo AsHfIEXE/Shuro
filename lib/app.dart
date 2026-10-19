@@ -339,18 +339,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.initState();
     _reconnectTimer = Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
     WidgetsBinding.instance.addObserver(this);
-    // Performance profile, appearance half: applied once providers exist so a
-    // stored Performance choice actually stops painting the heavy backdrop
-    // (before this, only the image-cache limit was applied at boot).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final appearance = context.read<AppearanceSettings>();
-      final appState = context.read<AppState>();
-      unawaited(DeviceProfileService.applyStoredPresetOnBoot(
-        appearance,
-        setReduceAnimations: appState.updateReduceAnimations,
-      ));
-    });
+    // Deliberately NOT re-applying the performance preset here: the preset is
+    // applied when the user picks a profile, and re-applying it at boot
+    // overwrote hand-tuned Appearance settings — and could switch
+    // reduce-animations back off against an accessibility choice.
     // Wire Settings → Behavior → Autoplay into the player, give it a real
     // (if simple) source of "what to play next" once the queue runs out,
     // and feed every played song into AppState's listening history so

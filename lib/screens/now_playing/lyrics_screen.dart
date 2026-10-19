@@ -500,7 +500,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
           ),
           ),
         ),
-        if (_manualScrolling)
+        if (_manualScrolling || _readingUp)
           Positioned(
             left: 0,
             right: 0,
@@ -519,6 +519,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// (async!) and then seeked immediately, so the seek landed on whatever was
   /// loaded at that instant (usually the previous track, or nothing).
   void _seekToLine(LyricsLine line, bool isCurrent) {
+    // Tapping a line is an explicit "follow the song" action: leave reading
+    // mode and re-arm auto-scroll.
+    _readingUp = false;
+    _manualScrollTimer?.cancel();
+    _manualScrolling = false;
     final song = _song;
     if (song == null) return;
     if (isCurrent) {

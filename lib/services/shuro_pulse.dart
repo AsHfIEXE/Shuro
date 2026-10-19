@@ -51,7 +51,8 @@ class ShuroPulse {
     final songs = appState.allSongs;
     final tail = songs.isEmpty ? '' : songs.last.id;
     return '$kind|${songs.length}|$tail|${appState.listeningHistory.length}|'
-        '${appState.artistAffinity.length}|${_dayBucket()}|$limit';
+        '${appState.artistAffinity.length}|${appState.favoriteSongIds.length}|'
+        '${_dayBucket()}|${DateTime.now().hour}|$limit';
   }
 
   static List<Song> _memoized(
@@ -62,10 +63,10 @@ class ShuroPulse {
   ) {
     final key = _rowKey(kind, appState, limit);
     final hit = _rowMemo[key];
-    if (hit != null) return hit;
+    if (hit != null) return List<Song>.of(hit); // never hand out the cached list
     final value = compute();
     if (_rowMemo.length > 24) _rowMemo.clear();
-    _rowMemo[key] = value;
+    _rowMemo[key] = List<Song>.of(value);
     return value;
   }
 

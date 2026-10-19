@@ -1090,10 +1090,11 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                 subtitle: Text('Pause at a specific clock time', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
                 onTap: () async {
                   final now = DateTime.now();
+                  final soon = now.add(const Duration(minutes: 30));
                   final picked = await showTimePicker(
                     context: sheetContext,
                     helpText: 'Pause at',
-                    initialTime: TimeOfDay(hour: now.hour, minute: (now.minute + 30) % 60),
+                    initialTime: TimeOfDay(hour: soon.hour, minute: soon.minute),
                     initialEntryMode: TimePickerEntryMode.dial,
                   );
                   if (picked == null) return;
