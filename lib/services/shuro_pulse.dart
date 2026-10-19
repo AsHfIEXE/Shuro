@@ -38,6 +38,37 @@ class ShuroPulse {
   static Random _randomFor(int extra) =>
       Random(_sessionSalt ^ (_dayBucket() * 7919) ^ extra);
 
+  // --- row memo -----------------------------------------------------------
+  // Home/Discover call these from build(), and the genre-affinity map walks
+  // every song in the library each time. Measured in a real vivo log as
+  // Choreographer skipping 30-100 frames. The memo is keyed by a cheap
+  // library signature (size + last id + history length + day) and the limit,
+  // so a sync, a new play or midnight recomputes once — everything else is a
+  // list lookup.
+  static final Map<String, List<Song>> _rowMemo = {};
+
+  static String _rowKey(String kind, AppState appState, int limit) {
+    final songs = appState.allSongs;
+    final tail = songs.isEmpty ? '' : songs.last.id;
+    return '$kind|${songs.length}|$tail|${appState.listeningHistory.length}|'
+        '${appState.artistAffinity.length}|${_dayBucket()}|$limit';
+  }
+
+  static List<Song> _memoized(
+    String kind,
+    AppState appState,
+    int limit,
+    List<Song> Function() compute,
+  ) {
+    final key = _rowKey(kind, appState, limit);
+    final hit = _rowMemo[key];
+    if (hit != null) return hit;
+    final value = compute();
+    if (_rowMemo.length > 24) _rowMemo.clear();
+    _rowMemo[key] = value;
+    return value;
+  }
+
   /// Deterministic 0..1 stand-in for an audio "energy" feature (tempo,
   /// loudness, density) a real implementation would read from the file or
   /// an analysis service. Hashed from the song id so it's stable across
@@ -74,7 +105,12 @@ class ShuroPulse {
   /// rather than a tunable slider (a real version would expose that ratio
   /// as a setting feeding straight into this scoring step).
   static List<Song> forYou(AppState appState, {int limit = 12, Random? random}) {
-    final rng = random ?? _randomFor(11);
+    if (random != null) return _forYouInner(appState, limit: limit, rng: random);
+    return _memoized('forYou', appState, limit, () => _forYouInner(appState, limit: limit));
+  }
+
+  static List<Song> _forYouInner(AppState appState, {int limit = 12, Random? rng}) {
+    final rngLocal = rng ?? _randomFor(11);
     final songs = _allSongs(appState);
     final hour = DateTime.now().hour;
     final history = appState.listeningHistory;
@@ -117,7 +153,7 @@ class ShuroPulse {
       }
       // Jitter — small per-session noise so equal-taste candidates rotate
       // instead of freezing into one eternal list.
-      score += rng.nextDouble() * 1.2;
+      score += rngLocal.nextDouble() * 1.2;
       return (song: s, score: score);
     }).toList();
     scored.sort((a, b) => b.score.compareTo(a.score));
@@ -168,8 +204,13 @@ class ShuroPulse {
   /// unfamiliar ones at the end (a crude stand-in for real transition/
   /// sequence optimization).
   static List<Song> tonightsFlow(AppState appState, {int length = 20, Random? random}) {
-    final rng = random ?? _randomFor(22);
-    final songs = [..._allSongs(appState)]..shuffle(rng);
+    if (random != null) return _tonightsFlowInner(appState, length: length, rng: random);
+    return _memoized('flow', appState, length, () => _tonightsFlowInner(appState, length: length));
+  }
+
+  static List<Song> _tonightsFlowInner(AppState appState, {int length = 20, Random? rng}) {
+    final rngLocal = rng ?? _randomFor(22);
+    final songs = [..._allSongs(appState)]..shuffle(rngLocal);
     final favorites = songs.where((s) => appState.isFavoriteSong(s.id)).toList();
     final favoriteArtistTracks = songs
         .where((s) => appState.isFavoriteArtist(s.artistId) && !appState.isFavoriteSong(s.id))
@@ -218,7 +259,7 @@ class ShuroPulse {
       round++;
     }
     if (result.length < length) {
-      final rest = songs.where((s) => !used.contains(s.id)).toList()..shuffle(rng);
+      final rest = songs.where((s) => !used.contains(s.id)).toList()..shuffle(rngLocal);
       for (final s in rest) {
         if (result.length >= length) break;
         used.add(s.id);
