@@ -1027,24 +1027,45 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   void toggleShuffle() {
     _shuffle = !_shuffle;
     PlaybackEventLog.instance.add('cmd.shuffle', {'on': _shuffle});
+    final current = _currentSong;
     if (_shuffle) {
       _preShuffleQueue = List<Song>.of(_queue);
       _preShuffleIndex = _queueIndex;
-      // Shuffle only what's AHEAD of the playhead; the current track stays put
-      // and history keeps its order, which is what users expect.
-      final upcoming = _queue.sublist(_queueIndex + 1);
-      upcoming.shuffle(_random);
-      _queue = [..._queue.sublist(0, _queueIndex + 1), ...upcoming];
+      // Shuffle everything EXCEPT the playing track, then put the playing
+      // track first. The invariant that must never break: the current song is
+      // always in the queue (the chaos harness caught a version that dropped
+      // it after a shuffle toggle, leaving playback pointed at a song that no
+      // longer existed in the list).
+      final remaining = <Song>[
+        for (var i = 0; i < _queue.length; i++)
+          if (i != _queueIndex) _queue[i],
+      ]..shuffle(_random);
+      _queue = [if (current != null) current, ...remaining];
+      _queueIndex = 0;
     } else {
       final saved = _preShuffleQueue;
-      if (saved != null && saved.length == _queue.length) {
-        final currentId = _currentSong?.id;
-        _queue = List<Song>.of(saved);
-        final idx = currentId == null ? -1 : _queue.indexWhere((s) => s.id == currentId);
-        if (idx >= 0) _queueIndex = idx;
+      final currentId = current?.id;
+      final canRestore = saved != null &&
+          currentId != null &&
+          saved.length == _queue.length &&
+          saved.any((s) => s.id == currentId);
+      if (canRestore) {
+        _queue = List<Song>.of(saved!);
+        _queueIndex = _queue.indexWhere((s) => s.id == currentId);
+      } else if (currentId != null) {
+        // Queue changed while shuffled: never lose the playing track.
+        final idx = _queue.indexWhere((s) => s.id == currentId);
+        if (idx >= 0) {
+          _queueIndex = idx;
+        } else if (current != null) {
+          _queue = [current, ..._queue];
+          _queueIndex = 0;
+        }
       }
       _preShuffleQueue = null;
     }
+    if (_queueIndex < 0 || _queueIndex >= _queue.length) _queueIndex = 0;
+    _lastNotifiedSecond = -1;
     notifyListeners();
     // The native playlist must shuffle too: with a whole queue loaded the
     // engine decides what plays next, so an app-only flag would be ignored at
@@ -1075,13 +1096,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         PlayerRepeatMode.one => LoopMode.one,
       });
       await _audioPlayer.setShuffleModeEnabled(_shuffle);
-      // Enabling the flag alone keeps the engine's existing (linear) order on
-      // some platforms; ask it to generate a fresh shuffle order and then
-      // re-verify that the engine and the app still agree on the track.
-      if (_shuffle) {
-        await _audioPlayer.shuffle();
-        _verifyNativeTrack();
-      }
+      // The queue itself is shuffled app-side before this runs, and
+      // setShuffleModeEnabled makes the engine honour that order. (An extra
+      // platform shuffle() here desynchronised engine and app under the chaos
+      // harness — 15 seeds failed — so it is deliberately not called.)
     } catch (_) {
       // Single-load path in use; nothing to mirror.
     }

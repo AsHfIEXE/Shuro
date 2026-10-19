@@ -65,19 +65,10 @@ class _MiniPlayerBar extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
-      // Swipe left/right skips — a shortcut on top of (not instead of) the tap
-      // and the transport buttons. Deliberately not the *only* way to skip: it
-      // would be unreachable on a TV remote.
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity.abs() < 200) return;
-        HapticFeedback.lightImpact();
-        if (velocity < 0) {
-          player.next();
-        } else {
-          player.previous();
-        }
-      },
+      // NOTE: horizontal swipe-to-skip used to live here, but it competed
+      // with the seek bar's own horizontal drag in the gesture arena — the
+      // progress line became undraggable (reported bug). Skipping stays on
+      // the transport buttons; the bar keeps tap-to-open and swipe-up.
       // Swipe UP opens Now Playing (the tap does too — the gesture is the
       // shortcut for a thumb already resting on the bar).
       onVerticalDragEnd: (details) {
