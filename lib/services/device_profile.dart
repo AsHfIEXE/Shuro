@@ -142,19 +142,39 @@ class DeviceProfileService {
     }
   }
 
+  static Map<String, Object?>? _capsCache;
+  static bool _capsLoaded = false;
+
   /// Reads the native capability map; null when the channel is unavailable
   /// (web, tests, or a build without the bridge) — callers must handle that
   /// honestly instead of inventing a class.
+  ///
+  /// Cached for the process: RAM, cores and ABI never change at runtime, and
+  /// the Settings picker used to hit the platform channel on every open.
   static Future<Map<String, Object?>?> readCapabilities() async {
-    if (kIsWeb) return null;
-    try {
-      final map = await _channel.invokeMapMethod<String, Object?>('getProfile');
-      return map;
-    } on MissingPluginException {
-      return null;
-    } on PlatformException {
+    if (_capsLoaded) return _capsCache;
+    if (kIsWeb) {
+      _capsLoaded = true;
       return null;
     }
+    try {
+      final map = await _channel.invokeMapMethod<String, Object?>('getProfile');
+      _capsCache = map;
+      _capsLoaded = true;
+      return map;
+    } on MissingPluginException {
+      _capsLoaded = true;
+      return null;
+    } on PlatformException {
+      _capsLoaded = true;
+      return null;
+    }
+  }
+
+  /// Test hook: forget the cached capability reading.
+  static void clearCapabilityCache() {
+    _capsCache = null;
+    _capsLoaded = false;
   }
 
   /// Current stored profile choice.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import '../models/build_from_mode.dart';
 import '../models/smart_playlist_preset.dart';
@@ -121,7 +122,18 @@ class ShuroPulse {
     }).toList();
     scored.sort((a, b) => b.score.compareTo(a.score));
     // Artist-diversity pass: max 2 per artist until every artist had a turn.
-    return _diversify(scored.map((e) => e.song).toList(), limit, perArtistCap: 2);
+    final picked = _diversify(scored.map((e) => e.song).toList(), limit, perArtistCap: 2);
+    // Guaranteed length: a small or single-artist library must still fill the
+    // row (this is what made Home look nearly empty on fresh libraries).
+    if (picked.length < limit) {
+      final chosen = {for (final s in picked) s.id};
+      final rest = songs.where((s) => !chosen.contains(s.id)).toList()..shuffle(rng);
+      for (final s in rest) {
+        if (picked.length >= limit) break;
+        picked.add(s);
+      }
+    }
+    return picked;
   }
 
   /// Greedy pick with a per-artist cap; over-cap tracks are deferred and
@@ -205,6 +217,14 @@ class ShuroPulse {
       }
       round++;
     }
+    if (result.length < length) {
+      final rest = songs.where((s) => !used.contains(s.id)).toList()..shuffle(rng);
+      for (final s in rest) {
+        if (result.length >= length) break;
+        used.add(s.id);
+        result.add(s);
+      }
+    }
     return result;
   }
 
@@ -219,10 +239,35 @@ class ShuroPulse {
     AppState appState, {
     int artistLimit = 4,
   }) {
-    // "Similar artist" only means anything against the server's artist/genre
-    // graph — a local-only library has neither, so there's nothing honest
-    // to show here rather than fabricating rows from nothing.
-    if (!appState.hasServer) return const [];
+    // Local-only libraries have no server genre graph — fall back to the
+    // honest local signal: your favourite artists' other tracks, then the
+    // artists you listen to most. (This used to return an empty section, which
+    // is why Discover looked starved without a server.)
+    if (!appState.hasServer) {
+      final rows = <({String artistId, String artistName, List<Song> songs})>[];
+      final rngLocal = _randomFor(56);
+      final byArtist = <String, List<Song>>{};
+      for (final s in appState.localSongs) {
+        (byArtist[s.artistId] ??= []).add(s);
+      }
+      final candidates = <String>{
+        ...appState.favoriteArtistIds,
+        ...appState.artistAffinity.entries.where((e) => e.value > 0).map((e) => e.key),
+        ...appState.listeningHistory
+            .map((id) => appState.songById(id)?.artistId)
+            .whereType<String>(),
+      };
+      for (final artistId in candidates) {
+        final artist = appState.artistById(artistId);
+        final pool = byArtist[artistId];
+        if (artist == null || pool == null) continue;
+        final songs = List<Song>.of(pool)..shuffle(rngLocal);
+        if (songs.isEmpty) continue;
+        rows.add((artistId: artistId, artistName: artist.name, songs: songs.take(8).toList()));
+        if (rows.length >= artistLimit) break;
+      }
+      return rows;
+    }
     // Genre-affinity graph: score every genre by the taste signals of the
     // songs and artists living in it, then walk that graph — for each artist
     // you like, recommend songs from its strongest genres by artists you
@@ -308,6 +353,14 @@ class ShuroPulse {
       return liked && !_recentlyPlayed(s, appState, withinLast: 30);
     }).toList();
     candidates.shuffle(_randomFor(33));
+    if (candidates.length < limit) {
+      final chosen = {for (final s in candidates) s.id};
+      final extra = songs
+          .where((s) => !chosen.contains(s.id) && !_recentlyPlayed(s, appState, withinLast: 10))
+          .toList()
+        ..shuffle(_randomFor(34));
+      candidates.addAll(extra);
+    }
     return candidates.take(limit).toList();
   }
 
@@ -317,10 +370,28 @@ class ShuroPulse {
   /// of most-played tracks from that artist — a cheap stand-in for "low
   /// play-count tracks by artists you already like".
   static List<Song> deepCuts(AppState appState, {int limit = 10}) {
-    // Same reasoning as becauseYouLike — "deep cuts by an artist you like"
-    // needs the server's full per-artist catalog to find the less-played
-    // tracks from, which a local-only library doesn't have.
-    if (!appState.hasServer) return const [];
+    // Local fallback: your favourite artists' tracks that are not among the
+    // most recent plays — the same idea, computed from what a local library
+    // actually knows. (Was an empty list before, emptying the row entirely.)
+    if (!appState.hasServer) {
+      final liked = <String>{
+        ...appState.favoriteArtistIds,
+        ...appState.artistAffinity.entries.where((e) => e.value > 0).map((e) => e.key),
+      };
+      final topPlayed = appState.listeningHistory.take(10).toSet();
+      final pool = appState.localSongs
+          .where((s) => liked.contains(s.artistId) && !topPlayed.contains(s.id))
+          .toList()
+        ..shuffle(_randomFor(45));
+      if (pool.isNotEmpty) return pool.take(limit).toList();
+      // Nothing to filter on yet: show unplayed local tracks rather than
+      // nothing at all.
+      final unplayed = appState.localSongs
+          .where((s) => !appState.listeningHistory.contains(s.id))
+          .toList()
+        ..shuffle(_randomFor(46));
+      return unplayed.take(limit).toList();
+    }
     final likedArtistIds = <String>{
       ...appState.favoriteArtistIds,
       ...appState.artistAffinity.entries.where((e) => e.value >= 0).map((e) => e.key),
