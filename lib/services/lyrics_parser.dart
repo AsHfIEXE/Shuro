@@ -30,6 +30,12 @@ final RegExp _wordTimestampRe = RegExp(r'<(?:(\d{1,3}):)?(\d{1,3}):(\d{2})(?:[.:
 
 final RegExp _whitespaceRe = RegExp(r'\s+');
 
+/// `[offset:±ms]` — the standard LRC global shift. Positive values delay every
+/// line, negative advance it. Ignoring it (as this parser used to) shifted the
+/// whole song by the file's own correction — a very common real-world bug with
+/// user-ripped .lrc files.
+final RegExp _offsetTagRe = RegExp(r'\[offset:\s*([+-]?\d+)\s*\]', caseSensitive: false);
+
 /// How far a candidate recording's duration may differ before its *timings*
 /// stop being safe to trust. LRCLIB's own exact lookup matches within ±2s;
 /// this is looser to absorb tag-vs-decode duration differences, and still far
@@ -208,6 +214,13 @@ List<LyricsLine> staticLines(String plain) {
 ({List<LyricsLine> lines, bool hasWordSync}) parseLrc(String lrc, {Duration fallbackDuration = Duration.zero}) {
   final timed = <({Duration start, String content})>[];
 
+  final offsetMs = int.tryParse(_offsetTagRe.firstMatch(lrc)?.group(1) ?? '') ?? 0;
+  final shift = Duration(milliseconds: offsetMs);
+  Duration shiftTo(Duration d) {
+    final v = d + shift;
+    return v < Duration.zero ? Duration.zero : v;
+  }
+
   for (final rawLine in lrc.split('\n')) {
     var rest = rawLine.trim();
     if (rest.isEmpty) continue;
@@ -227,7 +240,7 @@ List<LyricsLine> staticLines(String plain) {
     final content = rest.trim();
     if (content.isEmpty) continue; // gap marker — nothing to show
     for (final start in starts) {
-      timed.add((start: start, content: content));
+      timed.add((start: shiftTo(start), content: content));
     }
   }
 
@@ -241,7 +254,7 @@ List<LyricsLine> staticLines(String plain) {
     final end = i + 1 < timed.length ? timed[i + 1].start : _closeLastLine(entry.start, fallbackDuration);
     final List<LyricsSyllable> syllables;
     if (_wordTimestampRe.hasMatch(entry.content)) {
-      syllables = _trimEdges(_syllablesFromWordTags(entry.content, entry.start, end));
+      syllables = _trimEdges(_syllablesFromWordTags(entry.content, entry.start, end, shift));
       if (syllables.length > 1) hasWordSync = true;
     } else {
       syllables = estimateSyllables(entry.content, entry.start, end);
@@ -252,7 +265,12 @@ List<LyricsLine> staticLines(String plain) {
   return (lines: lines, hasWordSync: hasWordSync);
 }
 
-List<LyricsSyllable> _syllablesFromWordTags(String content, Duration lineStart, Duration lineEnd) {
+List<LyricsSyllable> _syllablesFromWordTags(
+  String content,
+  Duration lineStart,
+  Duration lineEnd, [
+  Duration shift = Duration.zero,
+]) {
   final matches = _wordTimestampRe.allMatches(content).toList();
   if (matches.isEmpty) return estimateSyllables(content, lineStart, lineEnd);
 
@@ -260,7 +278,11 @@ List<LyricsSyllable> _syllablesFromWordTags(String content, Duration lineStart, 
   final lead = content.substring(0, matches.first.start);
   if (lead.trim().isNotEmpty) pieces.add((start: lineStart, text: lead));
   for (var i = 0; i < matches.length; i++) {
-    final start = _durationFromMatch(matches[i]);
+    var start = _durationFromMatch(matches[i]);
+    if (start != null) {
+      start += shift;
+      if (start < Duration.zero) start = Duration.zero;
+    }
     final text = content.substring(matches[i].end, i + 1 < matches.length ? matches[i + 1].start : content.length);
     if (start == null) continue;
     pieces.add((start: start, text: text));
