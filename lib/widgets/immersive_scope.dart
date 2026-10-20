@@ -25,12 +25,13 @@ class ImmersiveScope extends StatefulWidget {
   State<ImmersiveScope> createState() => _ImmersiveScopeState();
 }
 
-class _ImmersiveScopeState extends State<ImmersiveScope> {
+class _ImmersiveScopeState extends State<ImmersiveScope> with WidgetsBindingObserver {
   bool _applied = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // After the first frame: reading Provider in initState is only safe via
     // read(), but applying the mode before the route is on screen can be
     // overridden by the route transition on some platforms.
@@ -45,8 +46,21 @@ class _ImmersiveScopeState extends State<ImmersiveScope> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
+  /// Rotation (and split-screen/foldable resizes) makes Android re-show the
+  /// system bars; re-assert the mode once the new metrics settle so the bars
+  /// don't stay stuck over the landscape player.
+  @override
+  void didChangeMetrics() {
+    if (!_applied) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_applied) return;
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    });
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Only undo what this scope actually changed — otherwise closing a
     // non-immersive screen would also kick the device out of a mode some other
     // scope set.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/download_state.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/sheet_scroll.dart';
 
 /// "8. Quality selector" — used for streaming quality (Wi-Fi / mobile data,
 /// as independent preferences per the request) and download quality.
@@ -11,11 +12,9 @@ Future<StreamingQuality?> showQualitySelectorSheet(
   required StreamingQuality current,
 }) {
   return showModalBottomSheet<StreamingQuality>(
-    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
-    // the screen, which overflows in landscape (yellow/black stripes).
-    isScrollControlled: true,
     context: context,
-    builder: (sheetContext) => _QualitySelectorSheet(title: title, current: current),
+    isScrollControlled: true,
+    builder: (sheetContext) => SheetScroll(child: _QualitySelectorSheet(title: title, current: current)),
   );
 }
 

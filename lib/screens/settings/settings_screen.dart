@@ -20,6 +20,8 @@ import '../../state/appearance_settings.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/sheet_scroll.dart';
+import '../../widgets/sheet_scroll.dart';
 import '../../widgets/state_views.dart';
 import 'artwork_style_sheet.dart';
 import 'avatar_editor_screen.dart';
@@ -337,7 +339,7 @@ class SettingsScreen extends StatelessWidget {
       backgroundColor: kCardColor,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           child: Column(
@@ -352,7 +354,9 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 420),
+                // Shorter log window on short (landscape) screens so the header
+                // and buttons stay reachable; the whole sheet scrolls too.
+                constraints: BoxConstraints(maxHeight: (MediaQuery.sizeOf(sheetContext).height * 0.4).clamp(120.0, 420.0).toDouble()),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
@@ -398,8 +402,9 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: kCardColor,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           child: Column(
@@ -609,7 +614,8 @@ class SettingsScreen extends StatelessWidget {
   void _pickBackdropBlur(BuildContext context, AppearanceSettings appearance) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (sheetContext) => SafeArea(
+      isScrollControlled: true,
+      builder: (sheetContext) => ScrollSafeArea(
         child: StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             final value = appearance.backdropBlurScale;
@@ -1132,7 +1138,7 @@ class _PerformanceTileState extends State<_PerformanceTile> {
       backgroundColor: kCardColor,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           child: Column(

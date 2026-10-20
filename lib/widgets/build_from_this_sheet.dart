@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'page_transitions.dart';
+import 'sheet_scroll.dart';
 
 /// The per-track "Build from this" sheet — radiates [seed] out into a full
 /// queue using one of [BuildFromMode]'s rules, then starts playing it.
@@ -41,7 +42,7 @@ class _BuildFromThisSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return ScrollSafeArea(
       child: Padding(
         padding: const EdgeInsets.only(top: 12, bottom: 20),
         child: Column(

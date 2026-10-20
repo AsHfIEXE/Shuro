@@ -243,11 +243,11 @@ class NowPlayingScreen extends StatelessWidget {
         .clamp(160.0, 360.0);
 
     return LayoutBuilder(
-      builder: (context, viewport) => SingleChildScrollView(
+      builder: (context, viewport) => _RingAwareScroll(
         // A stable storage identity: the scroll offset survives every rebuild
         // (the player notifies ~1×/s while playing), so the page can never
         // silently jump position mid-playback.
-        key: const PageStorageKey('npv_portrait'),
+        scrollKey: const PageStorageKey('npv_portrait'),
         // Real scrolling: ConstrainedBox(minHeight) lets the column stretch to
         // the viewport on tall phones (spaceBetween still separates the
         // groups), while content taller than the viewport (small phones, with
@@ -424,7 +424,7 @@ class NowPlayingScreen extends StatelessWidget {
                   // nothing clipped — the reported bug); on an unusually short
                   // wide window it scrolls instead of overflowing.
                   child: LayoutBuilder(
-                    builder: (context, columnConstraints) => SingleChildScrollView(
+                    builder: (context, columnConstraints) => _RingAwareScroll(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(minHeight: columnConstraints.maxHeight),
                         // One centered, cohesive player group: ring, time,
@@ -573,6 +573,35 @@ class NowPlayingScreen extends StatelessWidget {
   }
 }
 
+/// True while a finger is down on the seek ring. When the player column is
+/// taller than the viewport (landscape, small windows) it scrolls, and its
+/// vertical drag recognizer used to win the gesture arena against the ring's
+/// pan, so scrubbing on the ring scrolled the page instead of seeking.
+final ValueNotifier<bool> _ringTouched = ValueNotifier<bool>(false);
+
+/// A [SingleChildScrollView] that stops accepting drags while the ring is
+/// touched, so the ring's pan always wins.
+class _RingAwareScroll extends StatelessWidget {
+  final Widget child;
+
+  /// Applied to the inner scroll view so a [PageStorageKey] keeps its offset.
+  final Key? scrollKey;
+  const _RingAwareScroll({this.scrollKey, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _ringTouched,
+      child: child,
+      builder: (context, touched, child) => SingleChildScrollView(
+        key: scrollKey,
+        physics: touched ? const NeverScrollableScrollPhysics() : null,
+        child: child,
+      ),
+    );
+  }
+}
+
 /// The ring with its drag-to-seek gesture AND the scrubbing state: while a
 /// finger is down on the ring, the knob grows and its glow strengthens (see
 /// ProgressRingPainter.scrubbing) so the seek control visibly answers touch.
@@ -609,6 +638,14 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
   /// felt laggy and sometimes stuck.
   double? _preview;
 
+  @override
+  void dispose() {
+    // A ring torn down mid-touch (rotation, track change) must not leave the
+    // page's scroll view frozen.
+    _ringTouched.value = false;
+    super.dispose();
+  }
+
   double _progressAt(Offset localPosition) {
     final center = Offset(widget.size / 2, widget.size / 2);
     final dx = localPosition.dx - center.dx;
@@ -639,12 +676,17 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
   @override
   Widget build(BuildContext context) {
     return Listener(
-      onPointerDown: (_) => setState(() => _scrubbing = true),
+      onPointerDown: (_) {
+        _ringTouched.value = true;
+        setState(() => _scrubbing = true);
+      },
       onPointerUp: (_) {
+        _ringTouched.value = false;
         if (_preview != null) _commitSeek();
         setState(() => _scrubbing = false);
       },
       onPointerCancel: (_) {
+        _ringTouched.value = false;
         if (_preview != null) _commitSeek();
         setState(() => _scrubbing = false);
       },

@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/artwork_style.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/sheet_scroll.dart';
 
 Future<ArtworkStyle?> showArtworkStyleSheet(BuildContext context, ArtworkStyle current) {
   return showModalBottomSheet<ArtworkStyle>(
-    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
-    // the screen, which overflows in landscape (yellow/black stripes).
-    isScrollControlled: true,
     context: context,
-    builder: (sheetContext) => SafeArea(
+    isScrollControlled: true,
+    builder: (sheetContext) => SheetScroll(child: SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -46,6 +45,6 @@ Future<ArtworkStyle?> showArtworkStyleSheet(BuildContext context, ArtworkStyle c
           const SizedBox(height: 8),
         ],
       ),
-    ),
+    )),
   );
 }

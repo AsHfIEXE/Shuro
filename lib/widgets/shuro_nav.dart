@@ -94,14 +94,21 @@ class ShuroRail extends StatelessWidget {
       ),
       child: SafeArea(
         right: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 20, bottom: 10),
-              child: Center(child: AppLogo(size: 38)),
-            ),
-            const SizedBox(height: 8),
+        // Scrolls on a short landscape phone, where the logo plus five
+        // labelled items is taller than the ~360 dp screen (that overflow was
+        // the yellow/black stripes on every landscape screen).
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (MediaQuery.sizeOf(context).height >= 480) ...[
+                const Padding(
+                  padding: EdgeInsets.only(top: 20, bottom: 10),
+                  child: Center(child: AppLogo(size: 38)),
+                ),
+                const SizedBox(height: 8),
+              ] else
+                const SizedBox(height: 8),
             for (var i = 0; i < ShuroNavBar.destinations.length; i++)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
@@ -112,7 +119,8 @@ class ShuroRail extends StatelessWidget {
                   onTap: () => onTap(i),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );

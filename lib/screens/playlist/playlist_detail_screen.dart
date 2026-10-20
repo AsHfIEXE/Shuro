@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/playlist_collage_art.dart';
+import '../../widgets/sheet_scroll.dart';
 import '../../widgets/song_tile.dart';
 import '../../widgets/state_views.dart';
 
@@ -20,7 +21,9 @@ class PlaylistDetailScreen extends StatelessWidget {
     final appState = context.read<AppState>();
     final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (sheetContext) => SafeArea(
+      isScrollControlled: true,
+      builder: (sheetContext) => SheetScroll(
+        child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -38,6 +41,7 @@ class PlaylistDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
+        ),
         ),
       ),
     );

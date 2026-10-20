@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'playlist_collage_art.dart';
+import 'sheet_scroll.dart';
 import 'state_views.dart';
 
 /// The long-press quick-action sheet for a playlist card — Play/Shuffle plus
@@ -18,11 +19,9 @@ void showPlaylistActionsSheet(BuildContext context, Playlist playlist) {
   final songs = playlist.isSmart ? ShuroPulse.smartPlaylistSongs(playlist.smartPreset!, appState) : appState.songsByIds(playlist.songIds);
 
   showModalBottomSheet(
-    // Full-height sheet: without this a modal sheet is capped at ~9/16 of
-    // the screen, which overflows in landscape (yellow/black stripes).
-    isScrollControlled: true,
     context: context,
-    builder: (sheetContext) => SafeArea(
+    isScrollControlled: true,
+    builder: (sheetContext) => SheetScroll(child: SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -89,6 +88,6 @@ void showPlaylistActionsSheet(BuildContext context, Playlist playlist) {
           const SizedBox(height: 8),
         ],
       ),
-    ),
+    )),
   );
 }
