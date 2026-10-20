@@ -1,0 +1,10 @@
+diff a/lib/screens/settings/settings_screen.dart b/lib/screens/settings/settings_screen.dart	(rejected hunks)
+@@ -1132,7 +1137,7 @@ class _PerformanceTileState extends State<_PerformanceTile> {
+       backgroundColor: kCardColor,
+       isScrollControlled: true,
+       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+-      builder: (sheetContext) => SafeArea(
++      builder: (sheetContext) => ScrollSafeArea(
+         child: Padding(
+           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+           child: Column(

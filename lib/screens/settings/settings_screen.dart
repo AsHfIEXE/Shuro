@@ -21,7 +21,6 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/sheet_scroll.dart';
-import '../../widgets/sheet_scroll.dart';
 import '../../widgets/state_views.dart';
 import 'artwork_style_sheet.dart';
 import 'avatar_editor_screen.dart';
@@ -31,6 +30,7 @@ import 'quality_selector_sheet.dart';
 import '../onboarding/consent_screen.dart' show LegalTexts, DeviceBasics;
 
 import '../../widgets/page_transitions.dart';
+
 /// "14. Settings" — Account / Playback / Downloads / Cache / Appearance /
 /// Behavior / About, per the requested structure.
 class SettingsScreen extends StatelessWidget {
@@ -56,26 +56,36 @@ class SettingsScreen extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text('Settings', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
+              child: Text('Settings',
+                  style: headingFont(
+                      color: kTextColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600)),
             ),
 
             _SectionLabel('ACCOUNT'),
             _NavRow(
               icon: Icons.dns_rounded,
               label: 'Server',
-              value: appState.activeServer?.name ?? (appState.isLocalOnly ? 'Local files only' : '—'),
-              onTap: () => Navigator.of(context).push(drillDownRoute(const ManageServersScreen())),
+              value: appState.activeServer?.name ??
+                  (appState.isLocalOnly ? 'Local files only' : '—'),
+              onTap: () => Navigator.of(context)
+                  .push(drillDownRoute(const ManageServersScreen())),
             ),
             if (appState.hasServer)
               // No tap affordance: there's no separate "account" page to
               // open (the server connection *is* the account), so this is
               // honest info display rather than a dead button.
-              _NavRow(icon: Icons.person_rounded, label: 'Account', value: appState.activeServer?.username ?? '—'),
+              _NavRow(
+                  icon: Icons.person_rounded,
+                  label: 'Account',
+                  value: appState.activeServer?.username ?? '—'),
             _NavRow(
               icon: Icons.photo_camera_rounded,
               label: 'Profile photo',
               value: appState.userAvatarBytes != null ? 'Set' : 'Default',
-              onTap: () => Navigator.of(context).push(drillDownRoute(const AvatarEditorScreen())),
+              onTap: () => Navigator.of(context)
+                  .push(drillDownRoute(const AvatarEditorScreen())),
             ),
             _NavRow(
               icon: Icons.logout_rounded,
@@ -86,7 +96,8 @@ class SettingsScreen extends StatelessWidget {
               // existed.
               label: appState.isLocalOnly ? 'Exit local-only mode' : 'Sign out',
               destructive: true,
-              onTap: () => _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
+              onTap: () =>
+                  _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
             ),
 
             _SectionLabel('PLAYBACK'),
@@ -95,7 +106,9 @@ class SettingsScreen extends StatelessWidget {
               label: 'Wi-Fi quality',
               value: appState.wifiQuality.label,
               onTap: () async {
-                final selected = await showQualitySelectorSheet(context, title: 'Wi-Fi Streaming Quality', current: appState.wifiQuality);
+                final selected = await showQualitySelectorSheet(context,
+                    title: 'Wi-Fi Streaming Quality',
+                    current: appState.wifiQuality);
                 if (selected != null) appState.updateWifiQuality(selected);
               },
             ),
@@ -104,7 +117,9 @@ class SettingsScreen extends StatelessWidget {
               label: 'Mobile data quality',
               value: appState.mobileQuality.label,
               onTap: () async {
-                final selected = await showQualitySelectorSheet(context, title: 'Mobile Data Streaming Quality', current: appState.mobileQuality);
+                final selected = await showQualitySelectorSheet(context,
+                    title: 'Mobile Data Streaming Quality',
+                    current: appState.mobileQuality);
                 if (selected != null) appState.updateMobileQuality(selected);
               },
             ),
@@ -118,7 +133,9 @@ class SettingsScreen extends StatelessWidget {
             _NavRow(
               icon: Icons.graphic_eq_rounded,
               label: 'Fade between songs',
-              value: playbackPrefs.crossfadeSeconds == 0 ? 'Off' : '${playbackPrefs.crossfadeSeconds}s',
+              value: playbackPrefs.crossfadeSeconds == 0
+                  ? 'Off'
+                  : '${playbackPrefs.crossfadeSeconds}s',
               onTap: () => _pickCrossfade(context, playbackPrefs),
             ),
             // Loudness normalisation from the server's own ReplayGain tags.
@@ -140,11 +157,16 @@ class SettingsScreen extends StatelessWidget {
             ),
 
             _SectionLabel('LYRICS'),
-            _ToggleRow(label: 'Auto-scroll', value: appState.lyricsAutoScroll, onChanged: appState.updateLyricsAutoScroll),
+            _ToggleRow(
+                label: 'Auto-scroll',
+                value: appState.lyricsAutoScroll,
+                onChanged: appState.updateLyricsAutoScroll),
             _NavRow(
               icon: Icons.sync_rounded,
               label: 'Sync adjustment',
-              value: appState.lyricsOffsetMs == 0 ? 'On time' : '${appState.lyricsOffsetMs > 0 ? '+' : ''}${appState.lyricsOffsetMs} ms',
+              value: appState.lyricsOffsetMs == 0
+                  ? 'On time'
+                  : '${appState.lyricsOffsetMs > 0 ? '+' : ''}${appState.lyricsOffsetMs} ms',
               onTap: () => _adjustLyricsSync(context, appState),
             ),
 
@@ -154,11 +176,17 @@ class SettingsScreen extends StatelessWidget {
               label: 'Download quality',
               value: appState.downloadQuality.label,
               onTap: () async {
-                final selected = await showQualitySelectorSheet(context, title: 'Download Quality', current: appState.downloadQuality);
+                final selected = await showQualitySelectorSheet(context,
+                    title: 'Download Quality',
+                    current: appState.downloadQuality);
                 if (selected != null) appState.updateDownloadQuality(selected);
               },
             ),
-            _ToggleRow(label: 'Wi-Fi only', value: appState.downloadWifiOnly, onChanged: (v) => appState.toggleSetting(() => appState.downloadWifiOnly = v)),
+            _ToggleRow(
+                label: 'Wi-Fi only',
+                value: appState.downloadWifiOnly,
+                onChanged: (v) => appState
+                    .toggleSetting(() => appState.downloadWifiOnly = v)),
             // Wired to the real download service: opens the system folder
             // picker, and the chosen folder becomes where downloads are saved.
             // "App storage" means the default documents dir (which survives
@@ -166,7 +194,9 @@ class SettingsScreen extends StatelessWidget {
             _NavRow(
               icon: Icons.folder_rounded,
               label: 'Storage location',
-              value: context.watch<DownloadService>().customLocation == null ? 'App storage' : 'Custom folder',
+              value: context.watch<DownloadService>().customLocation == null
+                  ? 'App storage'
+                  : 'Custom folder',
               onTap: () => _pickDownloadLocation(context),
             ),
             _NavRow(
@@ -176,7 +206,8 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => _confirmClear(
                 context,
                 title: 'Clear all downloads?',
-                message: "You'll need to download songs again to play them offline.",
+                message:
+                    "You'll need to download songs again to play them offline.",
                 onConfirm: () async {
                   final downloads = context.read<DownloadService>();
                   for (final song in downloads.songs) {
@@ -193,9 +224,18 @@ class SettingsScreen extends StatelessWidget {
             // No tap affordance: Shuro is deliberately dark-only (part of
             // its brand identity, not an oversight), so there's no picker
             // to open — this states that rather than pretending to offer one.
-            _NavRow(icon: Icons.dark_mode_rounded, label: 'Theme', value: 'Dark'),
-            _NavRow(icon: Icons.text_fields_rounded, label: 'Font', value: appState.fontFamily, onTap: () => showFontPickerSheet(context)),
-            _ToggleRow(label: 'Dynamic colors', value: appState.dynamicColors, onChanged: (v) => appState.toggleSetting(() => appState.dynamicColors = v)),
+            _NavRow(
+                icon: Icons.dark_mode_rounded, label: 'Theme', value: 'Dark'),
+            _NavRow(
+                icon: Icons.text_fields_rounded,
+                label: 'Font',
+                value: appState.fontFamily,
+                onTap: () => showFontPickerSheet(context)),
+            _ToggleRow(
+                label: 'Dynamic colors',
+                value: appState.dynamicColors,
+                onChanged: (v) =>
+                    appState.toggleSetting(() => appState.dynamicColors = v)),
             // Two looks for Now Playing / Lyrics: the animated blurred artwork, or
             // a static gradient from the same artwork-extracted palette. The
             // static option is genuinely cheaper per frame, so it doubles as the
@@ -237,21 +277,37 @@ class SettingsScreen extends StatelessWidget {
               value: appearance.immersiveScreens,
               onChanged: appearance.setImmersiveScreens,
             ),
-            _ToggleRow(label: 'Reduce animations', value: appState.reduceAnimations, onChanged: appState.updateReduceAnimations),
+            _ToggleRow(
+                label: 'Reduce animations',
+                value: appState.reduceAnimations,
+                onChanged: appState.updateReduceAnimations),
             _NavRow(
               icon: Icons.grid_view_rounded,
               label: 'Artwork style',
               value: appState.artworkStyle.label,
               onTap: () async {
-                final selected = await showArtworkStyleSheet(context, appState.artworkStyle);
+                final selected =
+                    await showArtworkStyleSheet(context, appState.artworkStyle);
                 if (selected != null) appState.updateArtworkStyle(selected);
               },
             ),
 
             _SectionLabel('BEHAVIOR'),
-            _ToggleRow(label: 'Autoplay', value: appState.autoplay, onChanged: (v) => appState.toggleSetting(() => appState.autoplay = v)),
-            _ToggleRow(label: 'Remember queue', value: appState.rememberQueue, onChanged: (v) => appState.toggleSetting(() => appState.rememberQueue = v)),
-            _ToggleRow(label: 'Resume playback', value: appState.resumePlayback, onChanged: (v) => appState.toggleSetting(() => appState.resumePlayback = v)),
+            _ToggleRow(
+                label: 'Autoplay',
+                value: appState.autoplay,
+                onChanged: (v) =>
+                    appState.toggleSetting(() => appState.autoplay = v)),
+            _ToggleRow(
+                label: 'Remember queue',
+                value: appState.rememberQueue,
+                onChanged: (v) =>
+                    appState.toggleSetting(() => appState.rememberQueue = v)),
+            _ToggleRow(
+                label: 'Resume playback',
+                value: appState.resumePlayback,
+                onChanged: (v) =>
+                    appState.toggleSetting(() => appState.resumePlayback = v)),
 
             const _SectionLabel('SERVER'),
             _NavRow(
@@ -279,7 +335,10 @@ class SettingsScreen extends StatelessWidget {
 
             const _SectionLabel('ABOUT'),
             const _AboutBlock(),
-            _NavRow(icon: Icons.info_outline_rounded, label: 'Version', value: kAppVersion),
+            _NavRow(
+                icon: Icons.info_outline_rounded,
+                label: 'Version',
+                value: kAppVersion),
             // Play Store reviewers and screen-reader users both get real
             // value here: the exact facts the consent screen discloses, in
             // plain sight.
@@ -338,7 +397,8 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       backgroundColor: kCardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -346,17 +406,25 @@ class SettingsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Report a problem', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              Text('Report a problem',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
                 'The last ${PlaybackEventLog.kMaxEvents} playback events, redacted — no credentials, no URLs. Copy it and send it when a bug appears.',
-                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMutedTextColor, fontSize: 12),
               ),
               const SizedBox(height: 12),
               ConstrainedBox(
                 // Shorter log window on short (landscape) screens so the header
                 // and buttons stay reachable; the whole sheet scrolls too.
-                constraints: BoxConstraints(maxHeight: (MediaQuery.sizeOf(sheetContext).height * 0.4).clamp(120.0, 420.0).toDouble()),
+                constraints: BoxConstraints(
+                    maxHeight: (MediaQuery.sizeOf(sheetContext).height * 0.4)
+                        .clamp(120.0, 420.0)
+                        .toDouble()),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
@@ -367,7 +435,8 @@ class SettingsScreen extends StatelessWidget {
                   child: SingleChildScrollView(
                     child: SelectableText(
                       report,
-                      style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 11, height: 1.35),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70, fontSize: 11, height: 1.35),
                     ),
                   ),
                 ),
@@ -403,7 +472,8 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       backgroundColor: kCardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -411,7 +481,11 @@ class SettingsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Device & app info', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              Text('Device & app info',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
               for (final row in [...basics.entries, ...screen.entries])
                 Padding(
@@ -419,8 +493,14 @@ class SettingsScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(row.key, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
-                      Text(row.value, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      Text(row.key,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kMutedTextColor, fontSize: 12.5)),
+                      Text(row.value,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -438,7 +518,8 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       backgroundColor: kCardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (sheetContext) => DefaultTabController(
         length: 2,
         child: SafeArea(
@@ -467,7 +548,9 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _legalScroll(String body) => SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Text(body, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, height: 1.55)),
+        child: Text(body,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white70, fontSize: 13, height: 1.55)),
       );
 
   /// Full local wipe: preferences (servers, favorites, history, playlists,
@@ -481,20 +564,26 @@ class SettingsScreen extends StatelessWidget {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: kCardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Reset app data?', style: GoogleFonts.getFont(currentFontFamily, color: kTextColor, fontWeight: FontWeight.w600)),
+        title: Text('Reset app data?',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kTextColor, fontWeight: FontWeight.w600)),
         content: Text(
           'This erases everything stored on this device: servers, favorites, playlists, downloads, lyrics settings and preferences. '
           'Your music on the server is not touched.',
-          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13.5, height: 1.45),
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: kMutedTextColor, fontSize: 13.5, height: 1.45),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Erase everything', style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.w600)),
+            child: const Text('Erase everything',
+                style: TextStyle(
+                    color: Color(0xFFFF6B6B), fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -534,16 +623,22 @@ class SettingsScreen extends StatelessWidget {
           context: context,
           builder: (dialogContext) => AlertDialog(
             backgroundColor: kCardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('App data cleared', style: GoogleFonts.getFont(currentFontFamily, color: kTextColor, fontWeight: FontWeight.w600)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('App data cleared',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kTextColor, fontWeight: FontWeight.w600)),
             content: Text(
               'Everything stored by Shuro was erased. Reload the page to start fresh.',
-              style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13.5, height: 1.45),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kMutedTextColor, fontSize: 13.5, height: 1.45),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK', style: TextStyle(color: kBrandColor, fontWeight: FontWeight.w600)),
+                child: const Text('OK',
+                    style: TextStyle(
+                        color: kBrandColor, fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -555,56 +650,74 @@ class SettingsScreen extends StatelessWidget {
   }
 
   /// Picks how Now Playing and Lyrics paint their background.
-  void _pickBackgroundStyle(BuildContext context, AppearanceSettings appearance) {
+  void _pickBackgroundStyle(
+      BuildContext context, AppearanceSettings appearance) {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Now Playing background', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Now Playing background',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            for (final style in BackgroundStyle.values)
-              ListTile(
-                leading: Icon(
-                  style == appearance.backgroundStyle ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: style == appearance.backgroundStyle ? kBrandColor : kMutedTextColor,
-                ),
-                title: Text(
-                  switch (style) {
-                    BackgroundStyle.animatedBlur => 'Animated blur',
-                    BackgroundStyle.animatedGradient => 'Animated gradient',
-                    BackgroundStyle.staticArtwork => 'Static artwork colours',
+              for (final style in BackgroundStyle.values)
+                ListTile(
+                  leading: Icon(
+                    style == appearance.backgroundStyle
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: style == appearance.backgroundStyle
+                        ? kBrandColor
+                        : kMutedTextColor,
+                  ),
+                  title: Text(
+                    switch (style) {
+                      BackgroundStyle.animatedBlur => 'Animated blur',
+                      BackgroundStyle.animatedGradient => 'Animated gradient',
+                      BackgroundStyle.staticArtwork => 'Static artwork colours',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    switch (style) {
+                      BackgroundStyle.animatedBlur =>
+                        'The cover, blurred and drifting behind the artwork — like Apple Music',
+                      BackgroundStyle.animatedGradient =>
+                        'The cover\'s colours, slowly drifting — alive without any image processing',
+                      BackgroundStyle.staticArtwork =>
+                        'A still gradient from the cover\'s own colours — cheapest to render',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12),
+                  ),
+                  onTap: () {
+                    appearance.setBackgroundStyle(style);
+                    Navigator.of(sheetContext).pop();
                   },
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
-                subtitle: Text(
-                  switch (style) {
-                    BackgroundStyle.animatedBlur =>
-                      'The cover, blurred and drifting behind the artwork — like Apple Music',
-                    BackgroundStyle.animatedGradient =>
-                      'The cover\'s colours, slowly drifting — alive without any image processing',
-                    BackgroundStyle.staticArtwork =>
-                      'A still gradient from the cover\'s own colours — cheapest to render',
-                  },
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
-                ),
-                onTap: () {
-                  appearance.setBackgroundStyle(style);
-                  Navigator.of(sheetContext).pop();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -625,13 +738,24 @@ class SettingsScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                  Center(
+                      child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 18),
-                  Text('Background blur', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text('Background blur',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   Text(
                     'How strongly the artwork is blurred behind Now Playing and Lyrics. Open Now Playing to see the change live.',
-                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12),
                   ),
                   Slider(
                     value: value,
@@ -648,7 +772,10 @@ class SettingsScreen extends StatelessWidget {
                   Center(
                     child: Text(
                       appearance.backdropBlurLabel,
-                      style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -661,105 +788,147 @@ class SettingsScreen extends StatelessWidget {
   }
 
   /// Three idle-motion levels for the backdrop.
-  void _pickBackdropMotion(BuildContext context, AppearanceSettings appearance) {
+  void _pickBackdropMotion(
+      BuildContext context, AppearanceSettings appearance) {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Background motion', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Background motion',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            for (final motion in BackdropMotion.values)
-              ListTile(
-                leading: Icon(
-                  appearance.backdropMotion == motion ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: appearance.backdropMotion == motion ? kBrandColor : kMutedTextColor,
-                ),
-                title: Text(
-                  switch (motion) {
-                    BackdropMotion.still => 'Still',
-                    BackdropMotion.subtle => 'Subtle',
-                    BackdropMotion.normal => 'Normal (default)',
-                    BackdropMotion.lively => 'Fast',
+              for (final motion in BackdropMotion.values)
+                ListTile(
+                  leading: Icon(
+                    appearance.backdropMotion == motion
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: appearance.backdropMotion == motion
+                        ? kBrandColor
+                        : kMutedTextColor,
+                  ),
+                  title: Text(
+                    switch (motion) {
+                      BackdropMotion.still => 'Still',
+                      BackdropMotion.subtle => 'Subtle',
+                      BackdropMotion.normal => 'Normal (default)',
+                      BackdropMotion.lively => 'Fast',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    switch (motion) {
+                      BackdropMotion.still =>
+                        'The artwork holds completely still',
+                      BackdropMotion.subtle =>
+                        'Barely-there drift — slower and shallower than default',
+                      BackdropMotion.normal =>
+                        'The designed slow breathe (18-second cycle)',
+                      BackdropMotion.lively =>
+                        'Fast drifting colours — clearly visible motion',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12),
+                  ),
+                  onTap: () {
+                    appearance.setBackdropMotion(motion);
+                    Navigator.of(sheetContext).pop();
                   },
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
-                subtitle: Text(
-                  switch (motion) {
-                    BackdropMotion.still => 'The artwork holds completely still',
-                    BackdropMotion.subtle => 'Barely-there drift — slower and shallower than default',
-                    BackdropMotion.normal => 'The designed slow breathe (18-second cycle)',
-                    BackdropMotion.lively => 'Fast drifting colours — clearly visible motion',
-                  },
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
-                ),
-                onTap: () {
-                  appearance.setBackdropMotion(motion);
-                  Navigator.of(sheetContext).pop();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
 
   /// Whether the lyrics fill word by word or highlight whole lines.
-  void _pickLyricsHighlight(BuildContext context, AppearanceSettings appearance) {
+  void _pickLyricsHighlight(
+      BuildContext context, AppearanceSettings appearance) {
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Lyrics highlight', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Lyrics highlight',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            for (final mode in LyricsHighlight.values)
-              ListTile(
-                leading: Icon(
-                  appearance.lyricsHighlight == mode ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: appearance.lyricsHighlight == mode ? kBrandColor : kMutedTextColor,
-                ),
-                title: Text(
-                  switch (mode) {
-                    LyricsHighlight.word => 'Word by word',
-                    LyricsHighlight.line => 'Line by line',
+              for (final mode in LyricsHighlight.values)
+                ListTile(
+                  leading: Icon(
+                    appearance.lyricsHighlight == mode
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: appearance.lyricsHighlight == mode
+                        ? kBrandColor
+                        : kMutedTextColor,
+                  ),
+                  title: Text(
+                    switch (mode) {
+                      LyricsHighlight.word => 'Word by word',
+                      LyricsHighlight.line => 'Line by line',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    switch (mode) {
+                      LyricsHighlight.word =>
+                        'Each word lights up as it is sung — karaoke style',
+                      LyricsHighlight.line =>
+                        'The whole line lights up at once — no word fill',
+                    },
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12),
+                  ),
+                  onTap: () {
+                    appearance.setLyricsHighlight(mode);
+                    Navigator.of(sheetContext).pop();
                   },
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
-                subtitle: Text(
-                  switch (mode) {
-                    LyricsHighlight.word => 'Each word lights up as it is sung — karaoke style',
-                    LyricsHighlight.line => 'The whole line lights up at once — no word fill',
-                  },
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
-                ),
-                onTap: () {
-                  appearance.setLyricsHighlight(mode);
-                  Navigator.of(sheetContext).pop();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -774,27 +943,46 @@ class SettingsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Fade between songs', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: Text('Fade between songs',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
                 ),
               ),
               for (final seconds in const [0, 2, 4, 6])
                 ListTile(
                   leading: Icon(
-                    prefs.crossfadeSeconds == seconds ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                    color: prefs.crossfadeSeconds == seconds ? kBrandColor : kMutedTextColor,
+                    prefs.crossfadeSeconds == seconds
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: prefs.crossfadeSeconds == seconds
+                        ? kBrandColor
+                        : kMutedTextColor,
                   ),
                   title: Text(
                     seconds == 0 ? 'Off' : '${seconds}s fade',
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
                   ),
                   subtitle: Text(
-                    seconds == 0 ? 'Songs switch at full volume' : 'Each song fades out over its last ${seconds}s',
-                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                    seconds == 0
+                        ? 'Songs switch at full volume'
+                        : 'Each song fades out over its last ${seconds}s',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12),
                   ),
                   onTap: () {
                     prefs.setCrossfadeSeconds(seconds);
@@ -816,35 +1004,51 @@ class SettingsScreen extends StatelessWidget {
       builder: (sheetContext) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Playback speed', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-            for (final speed in const [0.75, 1.0, 1.25, 1.5, 2.0])
-              ListTile(
-                leading: Icon(
-                  prefs.playbackSpeed == speed ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: prefs.playbackSpeed == speed ? kBrandColor : kMutedTextColor,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Playback speed',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
                 ),
-                title: Text(
-                  '${speed.toStringAsFixed(2)}×',
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                onTap: () {
-                  prefs.setPlaybackSpeed(speed);
-                  Navigator.of(sheetContext).pop();
-                },
               ),
-            const SizedBox(height: 8),
-          ],
+              for (final speed in const [0.75, 1.0, 1.25, 1.5, 2.0])
+                ListTile(
+                  leading: Icon(
+                    prefs.playbackSpeed == speed
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: prefs.playbackSpeed == speed
+                        ? kBrandColor
+                        : kMutedTextColor,
+                  ),
+                  title: Text(
+                    '${speed.toStringAsFixed(2)}×',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    prefs.setPlaybackSpeed(speed);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -856,7 +1060,10 @@ class SettingsScreen extends StatelessWidget {
     final path = await downloads.pickLocation();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(path == null ? 'No folder chosen — downloads stay in app storage.' : 'Downloads will be saved to: $path')),
+      SnackBar(
+          content: Text(path == null
+              ? 'No folder chosen — downloads stay in app storage.'
+              : 'Downloads will be saved to: $path')),
     );
   }
 
@@ -872,9 +1079,11 @@ class SettingsScreen extends StatelessWidget {
     showSuccessSnackBar(context, 'Asking the server to rescan…');
     api.startScan().then((status) {
       if (!context.mounted) return;
-      showSuccessSnackBar(context, 'Rescan started — the server knows ${status.count} files so far.');
+      showSuccessSnackBar(context,
+          'Rescan started — the server knows ${status.count} files so far.');
     }).catchError((_) {
-      if (context.mounted) showErrorSnackBar(context, 'Could not reach the server.');
+      if (context.mounted)
+        showErrorSnackBar(context, 'Could not reach the server.');
     });
   }
 
@@ -883,11 +1092,30 @@ class SettingsScreen extends StatelessWidget {
   /// they carry no licence obligations like pub packages do, but naming them
   /// is the honest thing to do and costs one page.
   static const List<({String name, String usage})> _serviceEntries = [
-    (name: 'LRCLIB (lrclib.net)', usage: 'Synced and unsynced lyrics, including word-level timing where contributors recorded it.'),
-    (name: 'Last.fm / Libre.fm', usage: 'Optional scrobbling — reporting the tracks you play to the account you authorize yourself. Uses the AudioScrobbler protocol.'),
-    (name: 'MusicBrainz', usage: 'Album and artist metadata enrichment, and cover-art lookups when your server has no artwork.'),
-    (name: 'Cover Art Archive', usage: 'Album artwork for releases identified through MusicBrainz.'),
-    (name: 'Navidrome / OpenSubsonic', usage: 'Your own music server — the Subsonic API it speaks is what Shuro is built around.'),
+    (
+      name: 'LRCLIB (lrclib.net)',
+      usage:
+          'Synced and unsynced lyrics, including word-level timing where contributors recorded it.'
+    ),
+    (
+      name: 'Last.fm / Libre.fm',
+      usage:
+          'Optional scrobbling — reporting the tracks you play to the account you authorize yourself. Uses the AudioScrobbler protocol.'
+    ),
+    (
+      name: 'MusicBrainz',
+      usage:
+          'Album and artist metadata enrichment, and cover-art lookups when your server has no artwork.'
+    ),
+    (
+      name: 'Cover Art Archive',
+      usage: 'Album artwork for releases identified through MusicBrainz.'
+    ),
+    (
+      name: 'Navidrome / OpenSubsonic',
+      usage:
+          'Your own music server — the Subsonic API it speaks is what Shuro is built around.'
+    ),
   ];
 
   void _showServiceAttributions(BuildContext context) {
@@ -899,14 +1127,24 @@ class SettingsScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           children: [
             Center(
-              child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
             ),
             const SizedBox(height: 16),
-            Text('Services & data sources', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+            Text('Services & data sources',
+                style: headingFont(
+                    color: kTextColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(
               'Shuro talks to your own Navidrome server, and to these open services for extras. Each is used only for the purpose listed, and only when you use the matching feature.',
-              style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kMutedTextColor, fontSize: 12),
             ),
             const SizedBox(height: 12),
             for (final entry in _serviceEntries)
@@ -915,9 +1153,15 @@ class SettingsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(entry.name, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(entry.name,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(entry.usage, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                    Text(entry.usage,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 12)),
                   ],
                 ),
               ),
@@ -940,7 +1184,11 @@ class SettingsScreen extends StatelessWidget {
         builder: (dialogContext, setDialogState) {
           return AlertDialog(
             backgroundColor: kCardColor,
-            title: Text('Sync adjustment', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+            title: Text('Sync adjustment',
+                style: headingFont(
+                    color: kTextColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -948,29 +1196,41 @@ class SettingsScreen extends StatelessWidget {
                   offset.value == 0
                       ? 'On time'
                       : '${offset.value > 0 ? '+' : ''}${offset.value} ms — lyrics appear ${offset.value > 0 ? 'sooner' : 'later'}',
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 12),
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.white70),
-                      onPressed: () => setDialogState(() => offset.value -= 100),
+                      icon: const Icon(Icons.remove_circle_outline_rounded,
+                          color: Colors.white70),
+                      onPressed: () =>
+                          setDialogState(() => offset.value -= 100),
                     ),
                     SizedBox(
                       width: 100,
-                      child: Text('${offset.value} ms', textAlign: TextAlign.center, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                      child: Text('${offset.value} ms',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600)),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white70),
-                      onPressed: () => setDialogState(() => offset.value += 100),
+                      icon: const Icon(Icons.add_circle_outline_rounded,
+                          color: Colors.white70),
+                      onPressed: () =>
+                          setDialogState(() => offset.value += 100),
                     ),
                   ],
                 ),
               ],
             ),
             actions: [
-              TextButton(onPressed: () => setDialogState(() => offset.value = 0), child: const Text('Reset')),
+              TextButton(
+                  onPressed: () => setDialogState(() => offset.value = 0),
+                  child: const Text('Reset')),
               TextButton(
                 onPressed: () {
                   appState.updateLyricsOffset(offset.value);
@@ -990,44 +1250,60 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: kCardColor,
-        title: Text(isLocalOnly ? 'Exit local-only mode?' : 'Sign out?', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16)),
+        title: Text(isLocalOnly ? 'Exit local-only mode?' : 'Sign out?',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 16)),
         content: Text(
           isLocalOnly
               ? "You'll go back to the start screen. Your imported local files stay on this device."
               : "You'll need to reconnect to your server to use the app again.",
-          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13),
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: kMutedTextColor, fontSize: 13),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
               context.read<AppState>().disconnect();
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
-            child: Text(isLocalOnly ? 'Exit' : 'Sign out', style: const TextStyle(color: Colors.redAccent)),
+            child: Text(isLocalOnly ? 'Exit' : 'Sign out',
+                style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
     );
   }
 
-  void _confirmClear(BuildContext context, {required String title, required String message, required VoidCallback onConfirm}) {
+  void _confirmClear(BuildContext context,
+      {required String title,
+      required String message,
+      required VoidCallback onConfirm}) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: kCardColor,
-        title: Text(title, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16)),
-        content: Text(message, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+        title: Text(title,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 16)),
+        content: Text(message,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kMutedTextColor, fontSize: 13)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
               onConfirm();
               showSuccessSnackBar(context, 'Cleared');
             },
-            child: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+            child:
+                const Text('Clear', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -1055,16 +1331,28 @@ class _AboutBlock extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(kAppName, style: headingFont(color: kTextColor, fontSize: 17, fontWeight: FontWeight.w700)),
-                  Text(kAppTagline, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                  Text(kAppName,
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700)),
+                  Text(kAppTagline,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMutedTextColor, fontSize: 12)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 14),
-          Text(kAppDescription, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5, height: 1.5)),
+          Text(kAppDescription,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kMutedTextColor, fontSize: 12.5, height: 1.5)),
           const SizedBox(height: 10),
-          Text(kAppTaglineAlt, style: GoogleFonts.getFont(currentFontFamily, color: kTextColor.withOpacity(0.7), fontSize: 12, fontStyle: FontStyle.italic)),
+          Text(kAppTaglineAlt,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kTextColor.withOpacity(0.7),
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic)),
         ],
       ),
     );
@@ -1080,11 +1368,18 @@ class _SectionLabel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
         child: Row(
           children: [
-            Text(label, style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
+            Text(label,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kBrandColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1)),
             const SizedBox(width: 10),
             // A hairline runs to the edge — anchors the label so sections read
             // as ruled groups instead of floating captions.
-            const Expanded(child: Divider(color: Color(0x14FFFFFF), thickness: 1, height: 1)),
+            const Expanded(
+                child:
+                    Divider(color: Color(0x14FFFFFF), thickness: 1, height: 1)),
           ],
         ),
       );
@@ -1124,9 +1419,8 @@ class _PerformanceTileState extends State<_PerformanceTile> {
 
   String get _subtitle {
     final preset = DeviceProfileService.presetFor(_effective);
-    final label = _choice == ShuroProfile.auto
-        ? 'Auto → ${preset.name}'
-        : preset.name;
+    final label =
+        _choice == ShuroProfile.auto ? 'Auto → ${preset.name}' : preset.name;
     return '$label · ${DeviceProfileService.describeDevice(_ramMb, _deviceClass)}';
   }
 
@@ -1137,7 +1431,8 @@ class _PerformanceTileState extends State<_PerformanceTile> {
       context: context,
       backgroundColor: kCardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (sheetContext) => ScrollSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -1145,18 +1440,25 @@ class _PerformanceTileState extends State<_PerformanceTile> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Performance profile', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              Text('Performance profile',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
                 'Auto picks a preset from this device (${DeviceProfileService.describeDevice(_ramMb, _deviceClass)}). Choosing a preset applies it instantly.',
-                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMutedTextColor, fontSize: 12),
               ),
               const SizedBox(height: 10),
               for (final profile in ShuroProfile.values)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
-                    profile == _choice ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                    profile == _choice
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
                     color: profile == _choice ? kBrandColor : kMutedTextColor,
                     size: 20,
                   ),
@@ -1164,13 +1466,15 @@ class _PerformanceTileState extends State<_PerformanceTile> {
                     profile == ShuroProfile.auto
                         ? 'Auto (recommended)'
                         : DeviceProfileService.presetFor(profile).name,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5),
                   ),
                   subtitle: Text(
                     profile == ShuroProfile.auto
                         ? 'Follows this device: currently ${DeviceProfileService.presetFor(_effective).name}'
                         : DeviceProfileService.presetFor(profile).tagline,
-                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 11.5),
                   ),
                   onTap: () async {
                     Navigator.of(sheetContext).pop();
@@ -1183,12 +1487,19 @@ class _PerformanceTileState extends State<_PerformanceTile> {
                   },
                 ),
               const Divider(color: kDividerColor, height: 18),
-              Text('What this changes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+              Text('What this changes',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              for (final line in DeviceProfileService.presetFor(_effective).changes)
+              for (final line
+                  in DeviceProfileService.presetFor(_effective).changes)
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
-                  child: Text('· $line', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 12)),
+                  child: Text('· $line',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70, fontSize: 12)),
                 ),
             ],
           ),
@@ -1212,21 +1523,31 @@ class _NavRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String? value;
+
   /// Null means this row is informational only — no ripple, no chevron,
   /// nothing happens on tap, instead of a row that looks tappable but
   /// silently does nothing.
   final VoidCallback? onTap;
   final bool destructive;
 
-  const _NavRow({required this.icon, required this.label, this.onTap, this.value, this.destructive = false});
+  const _NavRow(
+      {required this.icon,
+      required this.label,
+      this.onTap,
+      this.value,
+      this.destructive = false});
 
   @override
   Widget build(BuildContext context) {
     final color = destructive ? Colors.redAccent.shade100 : Colors.white;
     return ListTile(
       onTap: onTap,
-      leading: Icon(icon, color: destructive ? Colors.redAccent.shade100 : Colors.white70, size: 20),
-      title: Text(label, style: GoogleFonts.getFont(currentFontFamily, color: color, fontSize: 14)),
+      leading: Icon(icon,
+          color: destructive ? Colors.redAccent.shade100 : Colors.white70,
+          size: 20),
+      title: Text(label,
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: color, fontSize: 14)),
       trailing: value != null
           ? ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 150),
@@ -1235,10 +1556,12 @@ class _NavRow extends StatelessWidget {
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMutedTextColor, fontSize: 12),
               ),
             )
-          : const Icon(Icons.chevron_right_rounded, color: kMutedTextColor, size: 18),
+          : const Icon(Icons.chevron_right_rounded,
+              color: kMutedTextColor, size: 18),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
@@ -1278,7 +1601,10 @@ class _CacheSectionState extends State<_CacheSection> {
     final cache = PaintingBinding.instance.imageCache;
     return Column(
       children: [
-        _NavRow(icon: Icons.image_rounded, label: 'Artwork cache', value: _formatBytes(cache.currentSizeBytes)),
+        _NavRow(
+            icon: Icons.image_rounded,
+            label: 'Artwork cache',
+            value: _formatBytes(cache.currentSizeBytes)),
         _NavRow(
           icon: Icons.cleaning_services_rounded,
           label: 'Clear cache',
@@ -1287,18 +1613,25 @@ class _CacheSectionState extends State<_CacheSection> {
             context: context,
             builder: (dialogContext) => AlertDialog(
               backgroundColor: kCardColor,
-              title: Text('Clear cache?', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16)),
-              content: Text('Cached artwork will be re-fetched as needed. Downloaded songs are not affected.',
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+              title: Text('Clear cache?',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white, fontSize: 16)),
+              content: Text(
+                  'Cached artwork will be re-fetched as needed. Downloaded songs are not affected.',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 13)),
               actions: [
-                TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel')),
                 TextButton(
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
                     _clear();
                     showSuccessSnackBar(context, 'Cleared');
                   },
-                  child: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+                  child: const Text('Clear',
+                      style: TextStyle(color: Colors.redAccent)),
                 ),
               ],
             ),
@@ -1314,19 +1647,21 @@ class _ToggleRow extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _ToggleRow({required this.label, required this.value, required this.onChanged});
+  const _ToggleRow(
+      {required this.label, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      title: Text(label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14)),
+      title: Text(label,
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: Colors.white, fontSize: 14)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
 }
-
 
 /// A small muted caption under a row — used for one-line explanations
 /// (the reset section's warning).
@@ -1339,7 +1674,8 @@ class _Note extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 0, 24, 6),
         child: Text(
           text,
-          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5, height: 1.5),
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: kMutedTextColor, fontSize: 11.5, height: 1.5),
         ),
       );
 }

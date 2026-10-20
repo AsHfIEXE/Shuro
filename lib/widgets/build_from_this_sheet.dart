@@ -35,7 +35,10 @@ class _BuildFromThisSheet extends StatelessWidget {
       SnackBar(
         content: Text('Building "${mode.label}" from "${seed.title}"…'),
         behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(label: 'Queue', onPressed: () => Navigator.of(context).push(risingRoute(const QueueScreen()))),
+        action: SnackBarAction(
+            label: 'Queue',
+            onPressed: () =>
+                Navigator.of(context).push(risingRoute(const QueueScreen()))),
       ),
     );
   }
@@ -50,27 +53,44 @@ class _BuildFromThisSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-              child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
             ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text('Build from "${seed.title}"',
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: headingFont(
+                      color: kTextColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text('Shuro will turn this one track into a full queue.',
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 12)),
             ),
             const SizedBox(height: 8),
             for (final mode in BuildFromMode.values)
               ListTile(
-                leading: const Icon(Icons.auto_awesome_rounded, color: kBrandColor, size: 20),
-                title: Text(mode.label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: Text(mode.description, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                leading: const Icon(Icons.auto_awesome_rounded,
+                    color: kBrandColor, size: 20),
+                title: Text(mode.label,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600)),
+                subtitle: Text(mode.description,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12)),
                 onTap: () => _run(context, mode),
               ),
           ],

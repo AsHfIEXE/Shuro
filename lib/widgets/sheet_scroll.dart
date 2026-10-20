@@ -31,5 +31,6 @@ class ScrollSafeArea extends StatelessWidget {
   const ScrollSafeArea({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) => SafeArea(child: SheetScroll(child: child));
+  Widget build(BuildContext context) =>
+      SafeArea(child: SheetScroll(child: child));
 }

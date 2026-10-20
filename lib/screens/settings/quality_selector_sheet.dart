@@ -14,7 +14,8 @@ Future<StreamingQuality?> showQualitySelectorSheet(
   return showModalBottomSheet<StreamingQuality>(
     context: context,
     isScrollControlled: true,
-    builder: (sheetContext) => SheetScroll(child: _QualitySelectorSheet(title: title, current: current)),
+    builder: (sheetContext) => SheetScroll(
+        child: _QualitySelectorSheet(title: title, current: current)),
   );
 }
 
@@ -30,22 +31,39 @@ class _QualitySelectorSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 8),
-          Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+          Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2))),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(title, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+              child: Text(title,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600)),
             ),
           ),
           for (final quality in StreamingQuality.values)
             ListTile(
               leading: Icon(
-                quality == current ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                quality == current
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_off_rounded,
                 color: quality == current ? kBrandColor : kMutedTextColor,
               ),
-              title: Text(quality.label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-              subtitle: Text(quality.description, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+              title: Text(quality.label,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500)),
+              subtitle: Text(quality.description,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 12)),
               onTap: () => Navigator.of(context).pop(quality),
             ),
           const SizedBox(height: 8),

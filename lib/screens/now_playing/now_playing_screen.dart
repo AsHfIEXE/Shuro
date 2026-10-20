@@ -77,7 +77,8 @@ class NowPlayingScreen extends StatelessWidget {
     return '$minutes:$seconds';
   }
 
-  void _handleSeekDrag(PlayerController player, Offset localPosition, double size) {
+  void _handleSeekDrag(
+      PlayerController player, Offset localPosition, double size) {
     final center = Offset(size / 2, size / 2);
     final dx = localPosition.dx - center.dx;
     final dy = localPosition.dy - center.dy;
@@ -104,9 +105,14 @@ class NowPlayingScreen extends StatelessWidget {
       // show the empty state instead.
       return Scaffold(
         backgroundColor: kSurfaceColor,
-        appBar: AppBar(backgroundColor: kSurfaceColor, elevation: 0, leading: const BackButton(color: Colors.white)),
+        appBar: AppBar(
+            backgroundColor: kSurfaceColor,
+            elevation: 0,
+            leading: const BackButton(color: Colors.white)),
         body: Center(
-          child: Text('Nothing is playing', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14)),
+          child: Text('Nothing is playing',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white70, fontSize: 14)),
         ),
       );
     }
@@ -127,93 +133,95 @@ class NowPlayingScreen extends StatelessWidget {
       // Settings → Appearance → "Immersive screens": hides the system bars while
       // this screen is open, and restores them on the way out.
       child: ArtworkPaletteBuilder(
-      artwork: song.artwork,
-      fallback: song.gradientColors,
-      cacheKey: song.id,
-      builder: (context, colors) {
-        final accent = colors.last;
-        return Scaffold(
-          backgroundColor: kSurfaceColor,
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: BlurredArtworkBackdrop(
-                  artwork: song.artwork,
-                  palette: colors,
-                  cacheKey: song.id,
+        artwork: song.artwork,
+        fallback: song.gradientColors,
+        cacheKey: song.id,
+        builder: (context, colors) {
+          final accent = colors.last;
+          return Scaffold(
+            backgroundColor: kSurfaceColor,
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: BlurredArtworkBackdrop(
+                    artwork: song.artwork,
+                    palette: colors,
+                    cacheKey: song.id,
+                  ),
                 ),
-              ),
-              // The right pane's darkening lives HERE, full-screen, so it is
-              // vertically uniform across the whole viewport — painting it
-              // inside the pane started abruptly at the header's bottom edge
-              // and drew a hard horizontal seam (reported on Android + web).
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.28),
-                          Colors.black.withValues(alpha: 0.45),
-                        ],
-                        stops: const [0.45, 0.72, 1.0],
+                // The right pane's darkening lives HERE, full-screen, so it is
+                // vertically uniform across the whole viewport — painting it
+                // inside the pane started abruptly at the header's bottom edge
+                // and drew a hard horizontal seam (reported on Android + web).
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.28),
+                            Colors.black.withValues(alpha: 0.45),
+                          ],
+                          stops: const [0.45, 0.72, 1.0],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              SafeArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Two-pane on tablets/desktop (>=1024) AND on landscape
-                    // phones (wider than tall, >=600 wide) — a phone rotated
-                    // sideways used to get the portrait stack, which cramped
-                    // into its scroll fallback with a 160 px ring; the split
-                    // layout is the correct landscape composition at any size.
-                    final wide = constraints.maxWidth >= kNowPlayingWideBreakpoint ||
-                        (constraints.maxWidth > constraints.maxHeight && constraints.maxWidth >= 600);
-                    final body = wide
-                        ? _wideLayout(
-                            context: context,
-                            constraints: constraints,
-                            song: song,
-                            accent: accent,
-                            colors: colors,
-                            progress: progress,
-                            position: position,
-                            total: total,
-                            isPlaying: isPlaying,
-                            isCurrent: isCurrent,
-                            isFav: isFav,
-                            appState: appState,
-                            player: player,
-                          )
-                        : _phoneLayout(
-                            context: context,
-                            constraints: constraints,
-                            song: song,
-                            accent: accent,
-                            colors: colors,
-                            progress: progress,
-                            position: position,
-                            total: total,
-                            isPlaying: isPlaying,
-                            isCurrent: isCurrent,
-                            isFav: isFav,
-                            appState: appState,
-                            player: player,
-                          );
-                    return body;
-                  },
+                SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Two-pane on tablets/desktop (>=1024) AND on landscape
+                      // phones (wider than tall, >=600 wide) — a phone rotated
+                      // sideways used to get the portrait stack, which cramped
+                      // into its scroll fallback with a 160 px ring; the split
+                      // layout is the correct landscape composition at any size.
+                      final wide =
+                          constraints.maxWidth >= kNowPlayingWideBreakpoint ||
+                              (constraints.maxWidth > constraints.maxHeight &&
+                                  constraints.maxWidth >= 600);
+                      final body = wide
+                          ? _wideLayout(
+                              context: context,
+                              constraints: constraints,
+                              song: song,
+                              accent: accent,
+                              colors: colors,
+                              progress: progress,
+                              position: position,
+                              total: total,
+                              isPlaying: isPlaying,
+                              isCurrent: isCurrent,
+                              isFav: isFav,
+                              appState: appState,
+                              player: player,
+                            )
+                          : _phoneLayout(
+                              context: context,
+                              constraints: constraints,
+                              song: song,
+                              accent: accent,
+                              colors: colors,
+                              progress: progress,
+                              position: position,
+                              total: total,
+                              isPlaying: isPlaying,
+                              isCurrent: isCurrent,
+                              isFav: isFav,
+                              appState: appState,
+                              player: player,
+                            );
+                      return body;
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -239,7 +247,8 @@ class NowPlayingScreen extends StatelessWidget {
     // very short window still shows recognisable artwork, and at 320 so a tall
     // phone keeps the design's proportions.
     final ringSize = math
-        .min(constraints.maxWidth * 0.79, math.max(160.0, constraints.maxHeight - _kPhoneChromeHeight))
+        .min(constraints.maxWidth * 0.79,
+            math.max(160.0, constraints.maxHeight - _kPhoneChromeHeight))
         .clamp(160.0, 360.0);
 
     return LayoutBuilder(
@@ -269,9 +278,13 @@ class NowPlayingScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _ring(context, player, song, progress, colors, 'artwork_${song.id}', ringSize),
+                    _ring(context, player, song, progress, colors,
+                        'artwork_${song.id}', ringSize),
                     const SizedBox(height: 18),
-                    _TimesRow(position: position, total: total, format: _formatDuration),
+                    _TimesRow(
+                        position: position,
+                        total: total,
+                        format: _formatDuration),
                     const SizedBox(height: 6),
                     const _PlayingFromLine(),
                     const SizedBox(height: 14),
@@ -284,7 +297,8 @@ class NowPlayingScreen extends StatelessWidget {
                       onShuffleToggle: player.toggleShuffle,
                       onRepeatToggle: player.cycleRepeatMode,
                       isFavorite: isFav,
-                      onToggleFavorite: () => Favorites.toggle(context, song.id),
+                      onToggleFavorite: () =>
+                          Favorites.toggle(context, song.id),
                     ),
                     const SizedBox(height: 22),
                     _transport(player, song, isPlaying, isCurrent, accent),
@@ -318,7 +332,12 @@ class NowPlayingScreen extends StatelessWidget {
                       shaderCallback: (bounds) => const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0x00000000), Color(0xFF000000), Color(0xFF000000), Color(0x00000000)],
+                        colors: [
+                          Color(0x00000000),
+                          Color(0xFF000000),
+                          Color(0xFF000000),
+                          Color(0x00000000)
+                        ],
                         stops: [0.0, 0.22, 0.78, 1.0],
                       ).createShader(bounds),
                       blendMode: BlendMode.dstIn,
@@ -334,9 +353,11 @@ class NowPlayingScreen extends StatelessWidget {
                         // down a little when lyrics change line".
                         behavior: ScrollConfiguration.of(context).copyWith(
                           scrollbars: false,
-                          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                          physics: const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics()),
                         ),
-                        child: LyricsScreen(initialSong: song, embedded: true, compact: true),
+                        child: LyricsScreen(
+                            initialSong: song, embedded: true, compact: true),
                       ),
                     ),
                   ),
@@ -354,7 +375,9 @@ class NowPlayingScreen extends StatelessWidget {
                     sleepActiveUntil: player.sleepUntil,
                   ),
                   const SizedBox(height: 14),
-                  _LyricsBar(onTap: () => openLyricsScreen(context, song), accent: accent),
+                  _LyricsBar(
+                      onTap: () => openLyricsScreen(context, song),
+                      accent: accent),
                 ],
               ),
             ],
@@ -391,9 +414,13 @@ class NowPlayingScreen extends StatelessWidget {
     // Sized from the *shorter* axis AND constrained by its own column width —
     // on short landscape windows the height factor alone let the ring grow
     // past the column and clip at the screen edge (the reported screenshot).
-    final columnWidth = math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
+    final columnWidth =
+        math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
     final artworkSize = math
-        .min(math.min(constraints.maxHeight * (compact ? 0.36 : 0.44), columnWidth), compact ? 210.0 : 340.0)
+        .min(
+            math.min(
+                constraints.maxHeight * (compact ? 0.36 : 0.44), columnWidth),
+            compact ? 210.0 : 340.0)
         .clamp(compact ? 110.0 : 160.0, compact ? 210.0 : 340.0);
 
     return Column(
@@ -418,7 +445,8 @@ class NowPlayingScreen extends StatelessWidget {
               Expanded(
                 flex: 5,
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 2, compact ? 16 : 28, compact ? 4 : 18),
+                  padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 2,
+                      compact ? 16 : 28, compact ? 4 : 18),
                   // LayoutBuilder + scroll fallback: at normal sizes the column
                   // is spaceBetween (artwork up top, controls at the bottom,
                   // nothing clipped — the reported bug); on an unusually short
@@ -426,7 +454,8 @@ class NowPlayingScreen extends StatelessWidget {
                   child: LayoutBuilder(
                     builder: (context, columnConstraints) => _RingAwareScroll(
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: columnConstraints.maxHeight),
+                        constraints: BoxConstraints(
+                            minHeight: columnConstraints.maxHeight),
                         // One centered, cohesive player group: ring, time,
                         // title, controls. The old spaceBetween pinned the ring
                         // to the top and controls to the bottom, hollowing out
@@ -434,14 +463,18 @@ class NowPlayingScreen extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _ring(context, player, song, progress, colors, 'artwork_${song.id}', artworkSize),
+                            _ring(context, player, song, progress, colors,
+                                'artwork_${song.id}', artworkSize),
                             SizedBox(height: compact ? 6 : 30),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _TimesRow(position: position, total: total, format: _formatDuration),
+                                  _TimesRow(
+                                      position: position,
+                                      total: total,
+                                      format: _formatDuration),
                                   SizedBox(height: compact ? 4 : 14),
                                   // Title + artist stay visible in landscape
                                   // too — only the controls dissolve.
@@ -454,11 +487,14 @@ class NowPlayingScreen extends StatelessWidget {
                                     onShuffleToggle: player.toggleShuffle,
                                     onRepeatToggle: player.cycleRepeatMode,
                                     isFavorite: isFav,
-                                    onToggleFavorite: () => Favorites.toggle(context, song.id),
+                                    onToggleFavorite: () =>
+                                        Favorites.toggle(context, song.id),
                                     dense: compact,
                                   ),
                                   SizedBox(height: compact ? 3 : 14),
-                                  _transport(player, song, isPlaying, isCurrent, accent, compact: compact),
+                                  _transport(player, song, isPlaying, isCurrent,
+                                      accent,
+                                      compact: compact),
                                   SizedBox(height: compact ? 2 : 10),
                                   // Landscape volume: same animated control as
                                   // portrait — a slim chip opening the full
@@ -469,7 +505,8 @@ class NowPlayingScreen extends StatelessWidget {
                                     child: _QuickAction(
                                       icon: Icons.volume_up_rounded,
                                       label: 'Volume',
-                                      onTap: () => showVolumeSheet(context, player),
+                                      onTap: () =>
+                                          showVolumeSheet(context, player),
                                     ),
                                   ),
                                 ],
@@ -495,7 +532,8 @@ class NowPlayingScreen extends StatelessWidget {
                         // header and its scrim, which previously cut through them.
                         // (The pane's own darkening gradient was removed — it
                         // lives full-screen now, see the layer above SafeArea.)
-                        padding: EdgeInsets.only(left: 28, right: 28, top: compact ? 12 : 28),
+                        padding: EdgeInsets.only(
+                            left: 28, right: 28, top: compact ? 12 : 28),
                         // With no lyrics to show, the pane falls back to the
                         // Up Next list — real content instead of a dark void
                         // (the TV-width "empty half" report).
@@ -517,7 +555,8 @@ class NowPlayingScreen extends StatelessWidget {
                         child: IconButton(
                           tooltip: 'Open full lyrics',
                           onPressed: () => openLyricsScreen(context, song),
-                          icon: const Icon(Icons.open_in_full_rounded, color: Colors.white, size: 18),
+                          icon: const Icon(Icons.open_in_full_rounded,
+                              color: Colors.white, size: 18),
                         ),
                       ),
                     ),
@@ -533,7 +572,9 @@ class NowPlayingScreen extends StatelessWidget {
 
   // --- shared pieces --------------------------------------------------------
 
-  Widget _ring(BuildContext context, PlayerController player, Song song, double progress, List<Color> colors, String heroTag, double size, {bool showProgress = true}) {
+  Widget _ring(BuildContext context, PlayerController player, Song song,
+      double progress, List<Color> colors, String heroTag, double size,
+      {bool showProgress = true}) {
     Widget buildRing(double p) => _ScrubbingRing(
           player: player,
           size: size,
@@ -550,11 +591,14 @@ class NowPlayingScreen extends StatelessWidget {
     // therefore the Performance profile) keeps the plain 1 Hz value.
     if (!showProgress || reduceMotionEnabled) return buildRing(progress);
     return SmoothPositionBuilder(
-      builder: (context, player, position, smoothProgress) => buildRing(smoothProgress),
+      builder: (context, player, position, smoothProgress) =>
+          buildRing(smoothProgress),
     );
   }
 
-  Widget _transport(PlayerController player, Song song, bool isPlaying, bool isCurrent, Color accent, {bool compact = false}) {
+  Widget _transport(PlayerController player, Song song, bool isPlaying,
+      bool isCurrent, Color accent,
+      {bool compact = false}) {
     return PlaybackControls(
       isPlaying: isPlaying,
       isBuffering: isCurrent && player.isBuffering,
@@ -748,14 +792,19 @@ class _Header extends StatelessWidget {
             label: 'Close Now Playing',
             child: IconButton(
               onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white, size: 18),
               tooltip: 'Close',
             ),
           ),
           Expanded(
             child: Center(
               child: Text('PLAYING NOW',
-                  style: GoogleFonts.getFont(currentFontFamily, color: const Color(0x80FFFFFF), fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 2.0)),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: const Color(0x80FFFFFF),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 2.0)),
             ),
           ),
           // (No favourite here: the heart lives in its sweet spot under the
@@ -772,13 +821,15 @@ class _Header extends StatelessWidget {
           if (onQueue != null)
             IconButton(
               onPressed: onQueue,
-              icon: const Icon(Icons.queue_music_rounded, color: Colors.white70),
+              icon:
+                  const Icon(Icons.queue_music_rounded, color: Colors.white70),
               tooltip: 'Queue',
             ),
           if (onAudioInfo != null)
             IconButton(
               onPressed: onAudioInfo,
-              icon: const Icon(Icons.info_outline_rounded, color: Colors.white70),
+              icon:
+                  const Icon(Icons.info_outline_rounded, color: Colors.white70),
               tooltip: 'Audio information',
             ),
           IconButton(
@@ -797,11 +848,13 @@ class _TimesRow extends StatelessWidget {
   final Duration total;
   final String Function(Duration) format;
 
-  const _TimesRow({required this.position, required this.total, required this.format});
+  const _TimesRow(
+      {required this.position, required this.total, required this.format});
 
   @override
   Widget build(BuildContext context) {
-    final style = GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 11);
+    final style = GoogleFonts.getFont(currentFontFamily,
+        color: Colors.white, fontSize: 11);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -838,7 +891,10 @@ class _ProgressLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 11, fontFeatures: const [FontFeature.tabularFigures()]);
+    final style = GoogleFonts.getFont(currentFontFamily,
+        color: Colors.white70,
+        fontSize: 11,
+        fontFeatures: const [FontFeature.tabularFigures()]);
     final bar = ClipRRect(
       borderRadius: BorderRadius.circular(2),
       child: LinearProgressIndicator(
@@ -861,7 +917,8 @@ class _ProgressLine extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (d) => _seekFrom(d.localPosition.dx, context),
-            onHorizontalDragUpdate: (d) => _seekFrom(d.localPosition.dx, context),
+            onHorizontalDragUpdate: (d) =>
+                _seekFrom(d.localPosition.dx, context),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: bar,
@@ -912,7 +969,8 @@ class _QuickActions extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _QuickAction(icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
+          _QuickAction(
+              icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
           const SizedBox(width: 36),
           _QuickAction(
             icon: Icons.bedtime_rounded,
@@ -922,9 +980,13 @@ class _QuickActions extends StatelessWidget {
             onTap: onSleep,
           ),
           const SizedBox(width: 36),
-          _QuickAction(icon: Icons.volume_up_rounded, label: 'Volume', onTap: onVolume),
+          _QuickAction(
+              icon: Icons.volume_up_rounded, label: 'Volume', onTap: onVolume),
           const SizedBox(width: 36),
-          _QuickAction(icon: Icons.info_outline_rounded, label: 'Audio info', onTap: onAudioInfo),
+          _QuickAction(
+              icon: Icons.info_outline_rounded,
+              label: 'Audio info',
+              onTap: onAudioInfo),
         ],
       ),
     );
@@ -961,7 +1023,11 @@ class _LyricsBar extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   'Lyrics',
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3),
                 ),
               ],
             ),
@@ -1020,7 +1086,9 @@ class _TrackTitleBlock extends StatelessWidget {
         return FadeTransition(
           opacity: animation,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.10), end: Offset.zero).animate(animation),
+            position:
+                Tween<Offset>(begin: const Offset(0, 0.10), end: Offset.zero)
+                    .animate(animation),
             child: child,
           ),
         );
@@ -1045,7 +1113,8 @@ class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _QuickAction({required this.icon, required this.label, required this.onTap});
+  const _QuickAction(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1059,7 +1128,9 @@ class _QuickAction extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white70, size: 20),
             const SizedBox(height: 4),
-            Text(label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 11)),
+            Text(label,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white70, fontSize: 11)),
           ],
         ),
       ),
@@ -1069,7 +1140,8 @@ class _QuickAction extends StatelessWidget {
 
 /// Sleep timer picker: Off / preset minutes / end of track. Shows what's
 /// armed with the time it will pause.
-Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) async {
+Future<void> showSleepTimerSheet(
+    BuildContext context, PlayerController player) async {
   // The fade preference persists (the timer itself never does — spec rule).
   final prefs = await SharedPreferences.getInstance();
   var fade = prefs.getBool('shuro_sleep_fade') ?? true;
@@ -1078,7 +1150,8 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: kSurfaceColor,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
     builder: (sheetContext) => StatefulBuilder(
       builder: (sheetContext, setSheetState) => SafeArea(
         child: SingleChildScrollView(
@@ -1090,15 +1163,20 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
                 child: Text(
                   'Sleep timer',
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
                 ),
               ),
               if (player.sleepUntil != null) ...[
                 ListTile(
-                  leading: const Icon(Icons.exposure_plus_1_rounded, color: kBrandColor),
+                  leading: const Icon(Icons.exposure_plus_1_rounded,
+                      color: kBrandColor),
                   title: Text(
                     '+10 minutes (now pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!.add(const Duration(minutes: 10))).format(sheetContext)})',
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5),
                   ),
                   onTap: () {
                     player.extendSleepTimer();
@@ -1106,10 +1184,12 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.timer_off_rounded, color: Colors.redAccent),
+                  leading: const Icon(Icons.timer_off_rounded,
+                      color: Colors.redAccent),
                   title: Text(
                     'Cancel timer (pauses at ${TimeOfDay.fromDateTime(player.sleepUntil!).format(sheetContext)})',
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5),
                   ),
                   onTap: () {
                     player.cancelSleepTimer();
@@ -1119,24 +1199,33 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
               ],
               for (final minutes in const [15, 30, 45, 60, 90])
                 ListTile(
-                  leading: const Icon(Icons.bedtime_rounded, color: kBrandColor),
-                  title: Text('$minutes minutes', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                  leading:
+                      const Icon(Icons.bedtime_rounded, color: kBrandColor),
+                  title: Text('$minutes minutes',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white, fontSize: 13.5)),
                   onTap: () {
-                    player.startSleepTimer(Duration(minutes: minutes), fadeOut: fade);
+                    player.startSleepTimer(Duration(minutes: minutes),
+                        fadeOut: fade);
                     Navigator.of(sheetContext).pop();
                   },
                 ),
               ListTile(
                 leading: const Icon(Icons.schedule_rounded, color: kBrandColor),
-                title: Text('Custom time…', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-                subtitle: Text('Pause at a specific clock time', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                title: Text('Custom time…',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Pause at a specific clock time',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 11.5)),
                 onTap: () async {
                   final now = DateTime.now();
                   final soon = now.add(const Duration(minutes: 30));
                   final picked = await showTimePicker(
                     context: sheetContext,
                     helpText: 'Pause at',
-                    initialTime: TimeOfDay(hour: soon.hour, minute: soon.minute),
+                    initialTime:
+                        TimeOfDay(hour: soon.hour, minute: soon.minute),
                     initialEntryMode: TimePickerEntryMode.dial,
                   );
                   if (picked == null) return;
@@ -1145,7 +1234,8 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                   // tomorrow. (The old code read the picked hour/minute as
                   // h*60+m minutes — picking 12:17 scheduled +17 minutes,
                   // which is exactly why a 12:17 setting fired at 12:33.)
-                  var target = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+                  var target = DateTime(
+                      now.year, now.month, now.day, picked.hour, picked.minute);
                   if (!target.isAfter(now)) {
                     target = target.add(const Duration(days: 1));
                   }
@@ -1156,26 +1246,39 @@ Future<void> showSleepTimerSheet(BuildContext context, PlayerController player) 
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.music_note_rounded, color: kBrandColor),
-                title: Text('End of current track', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                leading:
+                    const Icon(Icons.music_note_rounded, color: kBrandColor),
+                title: Text('End of current track',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5)),
                 onTap: () {
                   player.startSleepTimerEndOfTrack(fadeOut: fade);
                   Navigator.of(sheetContext).pop();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.queue_music_rounded, color: kBrandColor),
-                title: Text('End of queue', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-                subtitle: Text('Plays everything queued, then pauses', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                leading:
+                    const Icon(Icons.queue_music_rounded, color: kBrandColor),
+                title: Text('End of queue',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Plays everything queued, then pauses',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 11.5)),
                 onTap: () {
                   player.startSleepTimerEndOfQueue();
                   Navigator.of(sheetContext).pop();
                 },
               ),
               SwitchListTile(
-                secondary: const Icon(Icons.graphic_eq_rounded, color: kBrandColor),
-                title: Text('Fade out before pausing', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
-                subtitle: Text('10 seconds, player volume only', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5)),
+                secondary:
+                    const Icon(Icons.graphic_eq_rounded, color: kBrandColor),
+                title: Text('Fade out before pausing',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('10 seconds, player volume only',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 11.5)),
                 value: fade,
                 activeThumbColor: kBrandColor,
                 onChanged: (value) async {
@@ -1201,7 +1304,8 @@ Future<void> showVolumeSheet(BuildContext context, PlayerController player) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: kSurfaceColor,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
     builder: (_) => SafeArea(child: _VolumeSheet(player: player)),
   );
 }
@@ -1309,7 +1413,8 @@ class _VolumeSheetState extends State<_VolumeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final value = (_useSystem ? (_systemVolume ?? 0.5) : _playerVolume).clamp(0.0, 1.0);
+    final value =
+        (_useSystem ? (_systemVolume ?? 0.5) : _playerVolume).clamp(0.0, 1.0);
     final percent = '${(value * 100).round()}%';
 
     final body = Column(
@@ -1319,16 +1424,27 @@ class _VolumeSheetState extends State<_VolumeSheet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Volume', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            Text('Volume',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700)),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
               transitionBuilder: (child, anim) => FadeTransition(
                 opacity: anim,
-                child: ScaleTransition(scale: Tween<double>(begin: 0.85, end: 1).animate(anim), child: child),
+                child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.85, end: 1).animate(anim),
+                    child: child),
               ),
               child: _unknown
                   ? const SizedBox.shrink(key: ValueKey('unknown'))
-                  : Text(percent, key: ValueKey(percent), style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+                  : Text(percent,
+                      key: ValueKey(percent),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -1338,9 +1454,15 @@ class _VolumeSheetState extends State<_VolumeSheet> {
             padding: const EdgeInsets.symmetric(vertical: 18),
             child: Row(
               children: [
-                const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kBrandColor)),
+                const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: kBrandColor)),
                 const SizedBox(width: 12),
-                Text('Reading system volume…', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12.5)),
+                Text('Reading system volume…',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12.5)),
               ],
             ),
           )
@@ -1356,7 +1478,8 @@ class _VolumeSheetState extends State<_VolumeSheet> {
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
                 onHorizontalDragStart: (_) => setState(() => _dragging = true),
-                onHorizontalDragUpdate: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
+                onHorizontalDragUpdate: (d) =>
+                    _onDrag(d.localPosition.dx, c.maxWidth),
                 onHorizontalDragEnd: (_) => setState(() => _dragging = false),
                 onHorizontalDragCancel: () => setState(() => _dragging = false),
                 child: SizedBox(
@@ -1394,15 +1517,23 @@ class _VolumeSheetState extends State<_VolumeSheet> {
                       ),
                       // Floating bubble at the fill edge while dragging.
                       Positioned(
-                        left: (value * c.maxWidth - 26).clamp(0.0, c.maxWidth - 52),
+                        left: (value * c.maxWidth - 26)
+                            .clamp(0.0, c.maxWidth - 52),
                         top: -26,
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 200),
                           opacity: _dragging ? 1 : 0,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                            child: Text(percent, style: GoogleFonts.getFont(currentFontFamily, color: Colors.black87, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10)),
+                            child: Text(percent,
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Colors.black87,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700)),
                           ),
                         ),
                       ),
@@ -1417,7 +1548,9 @@ class _VolumeSheetState extends State<_VolumeSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _VolumeIconButton(
-                icon: value == 0 ? Icons.volume_off_rounded : Icons.volume_mute_rounded,
+                icon: value == 0
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_mute_rounded,
                 tooltip: value == 0 ? 'Unmute' : 'Mute',
                 onTap: () async {
                   HapticFeedback.lightImpact();
@@ -1439,8 +1572,12 @@ class _VolumeSheetState extends State<_VolumeSheet> {
               ),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                child: Icon(_levelIcon(value), key: ValueKey(_levelIcon(value)), color: Colors.white70, size: 22),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Icon(_levelIcon(value),
+                    key: ValueKey(_levelIcon(value)),
+                    color: Colors.white70,
+                    size: 22),
               ),
             ],
           ),
@@ -1451,7 +1588,8 @@ class _VolumeSheetState extends State<_VolumeSheet> {
                 : (kIsWeb
                     ? 'Player volume — in a browser the tab/speaker volume is the system control'
                     : 'Player volume — this device did not expose its system control'),
-            style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11.5),
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kMutedTextColor, fontSize: 11.5),
           ),
         ],
       ],
@@ -1466,7 +1604,8 @@ class _VolumeSheetState extends State<_VolumeSheet> {
         curve: Curves.easeOutCubic,
         builder: (context, t, child) => Opacity(
           opacity: t,
-          child: Transform.translate(offset: Offset(0, 14 * (1 - t)), child: child),
+          child: Transform.translate(
+              offset: Offset(0, 14 * (1 - t)), child: child),
         ),
         child: body,
       ),
@@ -1480,7 +1619,8 @@ class _VolumeIconButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
-  const _VolumeIconButton({required this.icon, required this.tooltip, required this.onTap});
+  const _VolumeIconButton(
+      {required this.icon, required this.tooltip, required this.onTap});
 
   @override
   State<_VolumeIconButton> createState() => _VolumeIconButtonState();
@@ -1567,7 +1707,8 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
       RouteKind.builtIn => 'This device',
       RouteKind.other || RouteKind.unknown => 'External output',
     };
-    final deviceName = (label != null && label.trim().isNotEmpty) ? label.trim() : null;
+    final deviceName =
+        (label != null && label.trim().isNotEmpty) ? label.trim() : null;
     final text = deviceName != null && report.routeKind != RouteKind.builtIn
         ? 'Playing from $deviceName'
         : 'Playing from $kindText';
@@ -1584,7 +1725,8 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white38, fontSize: 11),
             ),
           ),
         ],

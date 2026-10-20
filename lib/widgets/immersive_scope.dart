@@ -25,7 +25,8 @@ class ImmersiveScope extends StatefulWidget {
   State<ImmersiveScope> createState() => _ImmersiveScopeState();
 }
 
-class _ImmersiveScopeState extends State<ImmersiveScope> with WidgetsBindingObserver {
+class _ImmersiveScopeState extends State<ImmersiveScope>
+    with WidgetsBindingObserver {
   bool _applied = false;
 
   @override

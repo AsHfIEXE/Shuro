@@ -25,14 +25,33 @@ class ShuroNavBar extends StatelessWidget {
   /// with mismatched corners.
   final Widget? header;
 
-  const ShuroNavBar({super.key, required this.currentIndex, required this.onTap, this.header});
+  const ShuroNavBar(
+      {super.key,
+      required this.currentIndex,
+      required this.onTap,
+      this.header});
 
   static const List<_ShuroNavDestination> destinations = [
-    _ShuroNavDestination(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
-    _ShuroNavDestination(icon: Icons.library_music_outlined, activeIcon: Icons.library_music_rounded, label: 'Library'),
-    _ShuroNavDestination(icon: Icons.search_outlined, activeIcon: Icons.search_rounded, label: 'Search'),
-    _ShuroNavDestination(icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded, label: 'Discover'),
-    _ShuroNavDestination(icon: Icons.favorite_outlined, activeIcon: Icons.favorite_rounded, label: 'Favorites'),
+    _ShuroNavDestination(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home'),
+    _ShuroNavDestination(
+        icon: Icons.library_music_outlined,
+        activeIcon: Icons.library_music_rounded,
+        label: 'Library'),
+    _ShuroNavDestination(
+        icon: Icons.search_outlined,
+        activeIcon: Icons.search_rounded,
+        label: 'Search'),
+    _ShuroNavDestination(
+        icon: Icons.auto_awesome_outlined,
+        activeIcon: Icons.auto_awesome_rounded,
+        label: 'Discover'),
+    _ShuroNavDestination(
+        icon: Icons.favorite_outlined,
+        activeIcon: Icons.favorite_rounded,
+        label: 'Favorites'),
   ];
 
   @override
@@ -44,7 +63,12 @@ class ShuroNavBar extends StatelessWidget {
         color: kCardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         border: const Border(top: BorderSide(color: Color(0x14FFFFFF))),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 22, offset: const Offset(0, -8))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 22,
+              offset: const Offset(0, -8))
+        ],
       ),
       child: SafeArea(
         top: false,
@@ -109,16 +133,16 @@ class ShuroRail extends StatelessWidget {
                 const SizedBox(height: 8),
               ] else
                 const SizedBox(height: 8),
-            for (var i = 0; i < ShuroNavBar.destinations.length; i++)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: _ShuroNavItem(
-                  destination: ShuroNavBar.destinations[i],
-                  selected: currentIndex == i,
-                  showLabel: true,
-                  onTap: () => onTap(i),
+              for (var i = 0; i < ShuroNavBar.destinations.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: _ShuroNavItem(
+                    destination: ShuroNavBar.destinations[i],
+                    selected: currentIndex == i,
+                    showLabel: true,
+                    onTap: () => onTap(i),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -132,7 +156,8 @@ class _ShuroNavDestination {
   final IconData activeIcon;
   final String label;
 
-  const _ShuroNavDestination({required this.icon, required this.activeIcon, required this.label});
+  const _ShuroNavDestination(
+      {required this.icon, required this.activeIcon, required this.label});
 }
 
 class _ShuroNavItem extends StatelessWidget {
@@ -160,7 +185,9 @@ class _ShuroNavItem extends StatelessWidget {
           switchOutCurve: Curves.easeIn,
           transitionBuilder: (child, animation) => FadeTransition(
             opacity: animation,
-            child: ScaleTransition(scale: Tween(begin: 0.85, end: 1.0).animate(animation), child: child),
+            child: ScaleTransition(
+                scale: Tween(begin: 0.85, end: 1.0).animate(animation),
+                child: child),
           ),
           child: Icon(
             selected ? destination.activeIcon : destination.icon,
