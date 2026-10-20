@@ -83,6 +83,13 @@ class RouteDiagnostics {
 /// attempted, while [directPlayback] records what the platform reported.
 class CapabilityDiagnostics {
   final CapabilityState directPlayback;
+
+  /// Device-reported format capabilities, already formatted for display
+  /// (null = the platform did not report them).
+  final String? sampleRatesLabel;
+  final String? channelCountsLabel;
+  final String? encodingsLabel;
+
   final bool highResolutionPcmRequested;
   final bool bitPerfectUsbRequested;
 
@@ -106,6 +113,9 @@ class CapabilityDiagnostics {
     this.bitPerfectUsbRequested = false,
     this.highResolutionPcmAccepted,
     this.bitPerfectUsbAccepted,
+    this.sampleRatesLabel,
+    this.channelCountsLabel,
+    this.encodingsLabel,
     this.reason,
   });
 

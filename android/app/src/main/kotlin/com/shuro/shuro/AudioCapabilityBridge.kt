@@ -126,6 +126,9 @@ class AudioCapabilityBridge(
         return mapOf(
             "routeKind" to route.kind,
             "routeLabel" to route.label,
+            "deviceSampleRates" to route.sampleRates,
+            "deviceChannelCounts" to route.channelCounts,
+            "deviceEncodings" to route.encodings,
             "directPlayback" to direct.state,
             "directPlaybackMode" to direct.mode,
             "directPlaybackReason" to direct.reason,
@@ -151,7 +154,13 @@ class AudioCapabilityBridge(
         "source" to "Android AudioManager",
     )
 
-    private data class Route(val kind: String, val label: String?)
+    private data class Route(
+        val kind: String,
+        val label: String?,
+        val sampleRates: List<Int>? = null,
+        val channelCounts: List<Int>? = null,
+        val encodings: List<Int>? = null,
+    )
 
     /**
      * Best-effort classification of the current output route.
@@ -189,6 +198,22 @@ class AudioCapabilityBridge(
             }
         }
 
+        /** Device-accepted formats (API 23+), best effort — null when opaque. */
+        fun capsOf(device: AudioDeviceInfo): Route {
+            val base = routeOfDevice(device)
+            return try {
+                Route(
+                    base.kind,
+                    base.label,
+                    device.sampleRates?.toList()?.takeIf { it.isNotEmpty() },
+                    device.channelCounts?.toList()?.takeIf { it.isNotEmpty() },
+                    device.encodings?.toList()?.takeIf { it.isNotEmpty() },
+                )
+            } catch (_: Exception) {
+                base
+            }
+        }
+
         // Android 13+ answers "where would music actually play" for the exact
         // attributes we use - far more accurate than listing every attached
         // output and guessing by priority (a plugged-in-but-inactive USB DAC
@@ -202,7 +227,7 @@ class AudioCapabilityBridge(
                     .build()
                 val preferred = manager.getAudioDevicesForAttributes(attrs)
                 if (preferred.isNotEmpty()) {
-                    return routeOfDevice(preferred.first())
+                    return capsOf(preferred.first())
                 }
             } catch (_: Exception) {
                 // fall through to the attached-device list
@@ -223,20 +248,20 @@ class AudioCapabilityBridge(
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE,
             AudioDeviceInfo.TYPE_USB_ACCESSORY,
-        )?.let { return Route("usb", it.productName?.toString()?.takeIf { name -> name.isNotBlank() }) }
+        )?.let { return capsOf(it) }
 
         firstOf(
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
             AudioDeviceInfo.TYPE_BLE_HEADSET,
             AudioDeviceInfo.TYPE_BLE_SPEAKER,
-        )?.let { return Route("bluetooth", it.productName?.toString()?.takeIf { name -> name.isNotBlank() }) }
+        )?.let { return capsOf(it) }
 
         firstOf(
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
             AudioDeviceInfo.TYPE_WIRED_HEADSET,
             AudioDeviceInfo.TYPE_LINE_ANALOG,
-        )?.let { return Route("wired", it.productName?.toString()?.takeIf { name -> name.isNotBlank() }) }
+        )?.let { return capsOf(it) }
 
         firstOf(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
             ?.let { return Route("builtIn", null) }

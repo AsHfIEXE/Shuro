@@ -166,6 +166,12 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
               const _SectionLabel('OUTPUT CAPABILITY'),
               _InfoRow('Route', _routeLabel(diagnostics.route), provenance: _routeProvenance()),
               _InfoRow('Direct playback', _capabilityLabel(diagnostics.capability), provenance: _capabilityProvenance()),
+              if (diagnostics.capability.sampleRatesLabel != null)
+                _InfoRow('Device sample rates', diagnostics.capability.sampleRatesLabel!, provenance: 'reported by the output device'),
+              if (diagnostics.capability.channelCountsLabel != null)
+                _InfoRow('Device channels', diagnostics.capability.channelCountsLabel!, provenance: 'reported by the output device'),
+              if (diagnostics.capability.encodingsLabel != null)
+                _InfoRow('Device encodings', diagnostics.capability.encodingsLabel!, provenance: 'reported by the output device'),
               if (diagnostics.capability.reason != null && diagnostics.capability.directPlayback == CapabilityState.unknown)
                 _Note(diagnostics.capability.reason!),
               if (diagnostics.capability.highResolutionPcmRequested)

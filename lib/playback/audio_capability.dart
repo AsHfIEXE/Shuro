@@ -115,6 +115,14 @@ class AudioCapabilityReport {
   final bool? highResolutionPcmAccepted;
   final bool? bitPerfectUsbAccepted;
 
+  /// Formats the output device itself reports as acceptable (API 23+):
+  /// sample rates in Hz, channel counts, and raw `AudioFormat` encodings.
+  /// Null when the platform did not say — always rendered as "not reported"
+  /// rather than guessed.
+  final List<int>? deviceSampleRates;
+  final List<int>? deviceChannelCounts;
+  final List<int>? deviceEncodings;
+
   /// Where this answer came from, for display ("Android AudioManager", or
   /// "not queried"). Diagnostics should never look more authoritative than the
   /// thing that produced them.
@@ -128,8 +136,47 @@ class AudioCapabilityReport {
     this.reason,
     this.highResolutionPcmAccepted,
     this.bitPerfectUsbAccepted,
+    this.deviceSampleRates,
+    this.deviceChannelCounts,
+    this.deviceEncodings,
     this.source = 'not queried',
   });
+
+  /// Sample-rate list as a compact string, e.g. "44.1 · 48 · 96 kHz".
+  String? get sampleRatesLabel {
+    final rates = deviceSampleRates;
+    if (rates == null || rates.isEmpty) return null;
+    final sorted = List<int>.of(rates)..sort();
+    return '${sorted.map((r) => (r / 1000).toStringAsFixed(r % 1000 == 0 ? 0 : 1)).join(' · ')} kHz';
+  }
+
+  /// Channel counts, e.g. "2 ch" or "1 · 2 ch".
+  String? get channelCountsLabel {
+    final counts = deviceChannelCounts;
+    if (counts == null || counts.isEmpty) return null;
+    final sorted = List<int>.of(counts)..sort();
+    return '${sorted.join(' · ')} ch';
+  }
+
+  /// Encodings as human labels (AudioFormat constants).
+  String? get encodingsLabel {
+    final enc = deviceEncodings;
+    if (enc == null || enc.isEmpty) return null;
+    const names = {
+      1: 'PCM 8-bit',
+      2: 'PCM 16-bit',
+      3: 'PCM 8-bit float',
+      4: 'PCM float',
+      21: 'PCM 24-bit packed',
+      22: 'PCM 32-bit',
+      5: 'PCM 24-bit',
+    };
+    final labels = <String>{};
+    for (final e in enc) {
+      labels.add(names[e] ?? 'encoding $e');
+    }
+    return labels.join(' · ');
+  }
 
   static const AudioCapabilityReport unknown = AudioCapabilityReport();
 
@@ -144,6 +191,9 @@ class AudioCapabilityReport {
         bitPerfectUsbRequested: bitPerfectUsbRequested,
         highResolutionPcmAccepted: highResolutionPcmAccepted,
         bitPerfectUsbAccepted: bitPerfectUsbAccepted,
+        sampleRatesLabel: sampleRatesLabel,
+        channelCountsLabel: channelCountsLabel,
+        encodingsLabel: encodingsLabel,
         reason: reason,
       );
 
@@ -196,6 +246,9 @@ class MethodChannelAudioCapabilitySource implements AudioCapabilitySource {
         reason: response['directPlaybackReason'] as String?,
         highResolutionPcmAccepted: response['highResolutionPcmAccepted'] as bool?,
         bitPerfectUsbAccepted: response['bitPerfectUsbAccepted'] as bool?,
+        deviceSampleRates: (response['deviceSampleRates'] as List?)?.whereType<num>().map((n) => n.toInt()).toList(),
+        deviceChannelCounts: (response['deviceChannelCounts'] as List?)?.whereType<num>().map((n) => n.toInt()).toList(),
+        deviceEncodings: (response['deviceEncodings'] as List?)?.whereType<num>().map((n) => n.toInt()).toList(),
         source: (response['source'] as String?) ?? 'Android AudioManager',
       );
     } on MissingPluginException {
