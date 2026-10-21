@@ -23,6 +23,7 @@ import '../../widgets/state_views.dart';
 import '../album/album_detail_screen.dart';
 import '../artist/artist_detail_screen.dart';
 import '../downloads/downloads_screen.dart';
+import 'personal_shelves_screen.dart';
 import '../playlist/create_playlist_screen.dart';
 import '../playlist/playlist_detail_screen.dart';
 
@@ -39,7 +40,8 @@ Future<void> _refreshLibrary(BuildContext context) async {
 /// Just the folder's own name for a local-folder source row, falling back
 /// to the full path for a root path with nothing to split off.
 String _folderDisplayName(String path) {
-  final parts = path.split(Platform.pathSeparator).where((p) => p.isNotEmpty).toList();
+  final parts =
+      path.split(Platform.pathSeparator).where((p) => p.isNotEmpty).toList();
   return parts.isEmpty ? path : parts.last;
 }
 
@@ -54,8 +56,10 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: 6, vsync: this);
+class _LibraryScreenState extends State<LibraryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController =
+      TabController(length: 6, vsync: this);
   _SongSort _sort = _SongSort.titleAz;
 
   @override
@@ -77,11 +81,24 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
               child: Row(
                 children: [
                   Expanded(
-                    child: Text('Library', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
+                    child: Text('Library',
+                        style: headingFont(
+                            color: kTextColor,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.download_rounded, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).push(drillDownRoute(const DownloadsScreen())),
+                    tooltip: 'Personal shelves',
+                    icon: const Icon(Icons.auto_awesome_rounded,
+                        color: Colors.white70),
+                    onPressed: () => Navigator.of(context)
+                        .push(drillDownRoute(const PersonalShelvesScreen())),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.download_rounded,
+                        color: Colors.white70),
+                    onPressed: () => Navigator.of(context)
+                        .push(drillDownRoute(const DownloadsScreen())),
                   ),
                 ],
               ),
@@ -92,8 +109,10 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
               indicatorColor: kBrandColor,
               labelColor: Colors.white,
               unselectedLabelColor: kMutedTextColor,
-              labelStyle: GoogleFonts.getFont(currentFontFamily, fontSize: 13, fontWeight: FontWeight.w600),
-              unselectedLabelStyle: GoogleFonts.getFont(currentFontFamily, fontSize: 13),
+              labelStyle: GoogleFonts.getFont(currentFontFamily,
+                  fontSize: 13, fontWeight: FontWeight.w600),
+              unselectedLabelStyle:
+                  GoogleFonts.getFont(currentFontFamily, fontSize: 13),
               tabs: const [
                 Tab(text: 'Songs'),
                 Tab(text: 'Albums'),
@@ -107,7 +126,9 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _SongsTab(sort: _sort, onSortChanged: (s) => setState(() => _sort = s)),
+                  _SongsTab(
+                      sort: _sort,
+                      onSortChanged: (s) => setState(() => _sort = s)),
                   const _AlbumsTab(),
                   const _ArtistsTab(),
                   const _GenresTab(),
@@ -152,14 +173,17 @@ class _SongsTab extends StatelessWidget {
     final player = context.read<PlayerController>();
     final songs = _sorted(context);
     // First fetch in flight: skeleton rows in the shape of the list.
-    if (songs.isEmpty && context.watch<AppState>().connectionStatus == ConnectionStatus.connecting) {
+    if (songs.isEmpty &&
+        context.watch<AppState>().connectionStatus ==
+            ConnectionStatus.connecting) {
       return const SongListSkeleton();
     }
     if (songs.isEmpty) {
       return const EmptyStateView(
         icon: Icons.library_music_rounded,
         title: 'No songs yet',
-        subtitle: 'Connect a Navidrome server to see its catalog here, or add files from the Local tab.',
+        subtitle:
+            'Connect a Navidrome server to see its catalog here, or add files from the Local tab.',
       );
     }
     return Column(
@@ -168,7 +192,9 @@ class _SongsTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: Row(
             children: [
-              Text('${songs.length} songs', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+              Text('${songs.length} songs',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 12)),
               const Spacer(),
               // Play / shuffle the whole current list — the sort (the "filter")
               // decides the play order, shuffle randomises it. Both queue the
@@ -177,7 +203,9 @@ class _SongsTab extends StatelessWidget {
                 onPressed: () => player.playSong(songs.first, queue: songs),
                 icon: const Icon(Icons.play_arrow_rounded, size: 18),
                 label: const Text('Play all'),
-                style: TextButton.styleFrom(foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 8)),
               ),
               const SizedBox(width: 4),
               TextButton.icon(
@@ -187,23 +215,38 @@ class _SongsTab extends StatelessWidget {
                 },
                 icon: const Icon(Icons.shuffle_rounded, size: 18),
                 label: const Text('Shuffle'),
-                style: TextButton.styleFrom(foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 8)),
               ),
               PopupMenuButton<_SongSort>(
                 color: kCardColor,
                 initialValue: sort,
                 onSelected: onSortChanged,
                 itemBuilder: (context) => [
-                  PopupMenuItem(value: _SongSort.titleAz, child: Text('Sort: Title A–Z', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(value: _SongSort.artistAz, child: Text('Sort: Artist A–Z', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(value: _SongSort.recentlyAdded, child: Text('Sort: Recently added', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13))),
+                  PopupMenuItem(
+                      value: _SongSort.titleAz,
+                      child: Text('Sort: Title A–Z',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white, fontSize: 13))),
+                  PopupMenuItem(
+                      value: _SongSort.artistAz,
+                      child: Text('Sort: Artist A–Z',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white, fontSize: 13))),
+                  PopupMenuItem(
+                      value: _SongSort.recentlyAdded,
+                      child: Text('Sort: Recently added',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white, fontSize: 13))),
                 ],
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.sort_rounded, color: kMutedTextColor, size: 16),
                     SizedBox(width: 4),
-                    Icon(Icons.keyboard_arrow_down_rounded, color: kMutedTextColor, size: 16),
+                    Icon(Icons.keyboard_arrow_down_rounded,
+                        color: kMutedTextColor, size: 16),
                   ],
                 ),
               ),
@@ -217,7 +260,9 @@ class _SongsTab extends StatelessWidget {
             onRefresh: () => _refreshLibrary(context),
             child: ListView.builder(
               itemCount: songs.length,
-              itemBuilder: (context, i) => SongTile(song: songs[i], onTap: () => player.playSong(songs[i], queue: songs)),
+              itemBuilder: (context, i) => SongTile(
+                  song: songs[i],
+                  onTap: () => player.playSong(songs[i], queue: songs)),
             ),
           ),
         ),
@@ -235,7 +280,8 @@ class _AlbumsTab extends StatelessWidget {
     final albums = appState.catalogAlbums;
     // First fetch in flight: a skeleton in the exact shape of the grid, so
     // the tab reads as "loading" instead of "empty".
-    if (albums.isEmpty && appState.connectionStatus == ConnectionStatus.connecting) {
+    if (albums.isEmpty &&
+        appState.connectionStatus == ConnectionStatus.connecting) {
       return const AlbumGridSkeleton();
     }
     if (albums.isEmpty) {
@@ -266,7 +312,8 @@ class _AlbumsTab extends StatelessWidget {
           final album = albums[i];
           return AlbumCard(
             album: album,
-            onTap: () => Navigator.of(context).push(drillDownRoute(AlbumDetailScreen(album: album))),
+            onTap: () => Navigator.of(context)
+                .push(drillDownRoute(AlbumDetailScreen(album: album))),
           );
         },
       ),
@@ -282,7 +329,8 @@ class _ArtistsTab extends StatelessWidget {
     final appState = context.watch<AppState>();
     final artists = appState.catalogArtists;
     final artworkService = context.watch<ArtistArtworkService>();
-    if (artists.isEmpty && appState.connectionStatus == ConnectionStatus.connecting) {
+    if (artists.isEmpty &&
+        appState.connectionStatus == ConnectionStatus.connecting) {
       return const ArtistGridSkeleton();
     }
     if (artists.isEmpty) {
@@ -297,7 +345,9 @@ class _ArtistsTab extends StatelessWidget {
     // real images in without a manual refresh.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!context.mounted) return;
-      context.read<ArtistArtworkService>().warmUp(artists.map((a) => (id: a.id, name: a.name)).toList());
+      context
+          .read<ArtistArtworkService>()
+          .warmUp(artists.map((a) => (id: a.id, name: a.name)).toList());
     });
     return RefreshIndicator(
       color: kBrandColor,
@@ -318,7 +368,8 @@ class _ArtistsTab extends StatelessWidget {
           final artist = artists[i];
           // An artist with no server artwork gets the resolved picture (or the
           // placeholder until one arrives).
-          final resolved = artist.artwork ?? artworkService.forArtist(id: artist.id, name: artist.name);
+          final resolved = artist.artwork ??
+              artworkService.forArtist(id: artist.id, name: artist.name);
           return ArtistCard(
             artist: resolved == null
                 ? artist
@@ -330,7 +381,8 @@ class _ArtistsTab extends StatelessWidget {
                     albumIds: artist.albumIds,
                     topSongIds: artist.topSongIds,
                   ),
-            onTap: () => Navigator.of(context).push(drillDownRoute(ArtistDetailScreen(artist: artist))),
+            onTap: () => Navigator.of(context)
+                .push(drillDownRoute(ArtistDetailScreen(artist: artist))),
           );
         },
       ),
@@ -341,13 +393,19 @@ class _ArtistsTab extends StatelessWidget {
 class _GenresTab extends StatelessWidget {
   const _GenresTab();
 
-  static const _gradients = [kBrandGradient, [Color(0xFFFF32C7), Color(0xFF5642DD)], [Color(0xFFFEB722), Color(0xFFFF7A00)], [Color(0xFF00C9A7), Color(0xFF0575E6)]];
+  static const _gradients = [
+    kBrandGradient,
+    [Color(0xFFFF32C7), Color(0xFF5642DD)],
+    [Color(0xFFFEB722), Color(0xFFFF7A00)],
+    [Color(0xFF00C9A7), Color(0xFF0575E6)]
+  ];
 
   @override
   Widget build(BuildContext context) {
     final genres = context.watch<AppState>().catalogGenres.keys.toList();
     if (genres.isEmpty) {
-      if (context.watch<AppState>().connectionStatus == ConnectionStatus.connecting) {
+      if (context.watch<AppState>().connectionStatus ==
+          ConnectionStatus.connecting) {
         return const GenreGridSkeleton();
       }
       return const EmptyStateView(
@@ -369,11 +427,15 @@ class _GenresTab extends StatelessWidget {
         final genre = genres[i];
         final gradient = _gradients[i % _gradients.length];
         return GestureDetector(
-          onTap: () => Navigator.of(context).push(drillDownRoute(_GenreSongsScreen(genre: genre))),
+          onTap: () => Navigator.of(context)
+              .push(drillDownRoute(_GenreSongsScreen(genre: genre))),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+              gradient: LinearGradient(
+                  colors: gradient,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(14),
             ),
             clipBehavior: Clip.antiAlias,
@@ -387,12 +449,17 @@ class _GenresTab extends StatelessWidget {
                   bottom: -14,
                   child: Transform.rotate(
                     angle: -0.3,
-                    child: ShuroIcon(glyphForGenre(genre), size: 86, color: Colors.white.withValues(alpha: 0.22)),
+                    child: ShuroIcon(glyphForGenre(genre),
+                        size: 86, color: Colors.white.withValues(alpha: 0.22)),
                   ),
                 ),
                 Align(
                   alignment: Alignment.bottomLeft,
-                  child: Text(genre, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: Text(genre,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -413,12 +480,20 @@ class _GenreSongsScreen extends StatelessWidget {
     final player = context.read<PlayerController>();
     return Scaffold(
       backgroundColor: kSurfaceColor,
-      appBar: AppBar(backgroundColor: kSurfaceColor, elevation: 0, title: Text(genre, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16))),
+      appBar: AppBar(
+          backgroundColor: kSurfaceColor,
+          elevation: 0,
+          title: Text(genre,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white, fontSize: 16))),
       body: songs.isEmpty
-          ? const EmptyStateView(icon: Icons.category_rounded, title: 'No songs in this genre yet')
+          ? const EmptyStateView(
+              icon: Icons.category_rounded, title: 'No songs in this genre yet')
           : ListView.builder(
               itemCount: songs.length,
-              itemBuilder: (context, i) => SongTile(song: songs[i], onTap: () => player.playSong(songs[i], queue: songs)),
+              itemBuilder: (context, i) => SongTile(
+                  song: songs[i],
+                  onTap: () => player.playSong(songs[i], queue: songs)),
             ),
     );
   }
@@ -434,27 +509,39 @@ class _PlaylistsTab extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
         ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
           leading: Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), gradient: const LinearGradient(colors: kBrandGradient)),
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                gradient: const LinearGradient(colors: kBrandGradient)),
             child: const Icon(Icons.add_rounded, color: Colors.white),
           ),
-          title: Text('New Playlist', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-          onTap: () => Navigator.of(context).push(drillDownRoute(const CreatePlaylistScreen())),
+          title: Text('New Playlist',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600)),
+          onTap: () => Navigator.of(context)
+              .push(drillDownRoute(const CreatePlaylistScreen())),
         ),
         if (appState.playlists.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 40),
-            child: EmptyStateView(icon: Icons.queue_music_rounded, title: 'No local playlists yet',
-                subtitle: 'Tap "New Playlist" above, or add a song to one from its "⋮" menu.'),
+            child: EmptyStateView(
+                icon: Icons.queue_music_rounded,
+                title: 'No local playlists yet',
+                subtitle:
+                    'Tap "New Playlist" above, or add a song to one from its "⋮" menu.'),
           )
         else
           for (final playlist in appState.playlists)
             PlaylistCard(
               playlist: playlist,
-              onTap: () => Navigator.of(context).push(drillDownRoute(PlaylistDetailScreen(playlist: playlist))),
+              onTap: () => Navigator.of(context).push(
+                  drillDownRoute(PlaylistDetailScreen(playlist: playlist))),
             ),
         // Everything the connected server reports, manageable in-app when the
         // user owns it (create/rename/delete/add playing song) — changes land
@@ -499,13 +586,25 @@ class _LocalTab extends StatelessWidget {
                 width: double.infinity,
                 height: 46,
                 child: ElevatedButton.icon(
-                  onPressed: appState.importingLocalFiles ? null : () => _addFolder(context, appState),
-                  style: ElevatedButton.styleFrom(backgroundColor: kBrandColor, foregroundColor: Colors.white),
+                  onPressed: appState.importingLocalFiles
+                      ? null
+                      : () => _addFolder(context, appState),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: kBrandColor,
+                      foregroundColor: Colors.white),
                   icon: appState.importingLocalFiles
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.folder_rounded, size: 18),
-                  label: Text(appState.importingLocalFiles ? 'Importing…' : 'Add a music folder',
-                      style: GoogleFonts.getFont(currentFontFamily, fontSize: 13, fontWeight: FontWeight.w600)),
+                  label: Text(
+                      appState.importingLocalFiles
+                          ? 'Importing…'
+                          : 'Add a music folder',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(height: 8),
@@ -513,10 +612,16 @@ class _LocalTab extends StatelessWidget {
                 width: double.infinity,
                 height: 44,
                 child: OutlinedButton.icon(
-                  onPressed: appState.importingLocalFiles ? null : () => _addFiles(context, appState),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: kDividerColor)),
+                  onPressed: appState.importingLocalFiles
+                      ? null
+                      : () => _addFiles(context, appState),
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: kDividerColor)),
                   icon: const Icon(Icons.audio_file_rounded, size: 18),
-                  label: Text('Add individual files', style: GoogleFonts.getFont(currentFontFamily, fontSize: 13, fontWeight: FontWeight.w600)),
+                  label: Text('Add individual files',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -527,21 +632,35 @@ class _LocalTab extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('SOURCES', style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1)),
+              child: Text('SOURCES',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kBrandColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1)),
             ),
           ),
           for (final folder in folders)
             ListTile(
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              leading: const Icon(Icons.folder_rounded, color: kMutedTextColor, size: 20),
+              leading: const Icon(Icons.folder_rounded,
+                  color: kMutedTextColor, size: 20),
               title: Text(_folderDisplayName(folder),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
-              subtitle: Text(folder, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 11)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
+              subtitle: Text(folder,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kMutedTextColor, fontSize: 11)),
               trailing: IconButton(
-                icon: const Icon(Icons.close_rounded, color: kMutedTextColor, size: 18),
+                icon: const Icon(Icons.close_rounded,
+                    color: kMutedTextColor, size: 18),
                 tooltip: 'Remove this folder',
                 // Confirmed first: this used to remove a folder and every song
                 // imported from it on a single tap, with no undo.
@@ -549,21 +668,24 @@ class _LocalTab extends StatelessWidget {
                   final confirmed = await confirmAction(
                     context,
                     title: 'Remove this folder?',
-                    message: '"${_folderDisplayName(folder)}" and every song imported from it will be removed from Shuro. Your files on disk are not touched.',
+                    message:
+                        '"${_folderDisplayName(folder)}" and every song imported from it will be removed from Shuro. Your files on disk are not touched.',
                     confirmLabel: 'Remove',
                   );
                   if (confirmed) appState.removeLocalFolder(folder);
                 },
               ),
             ),
-          const Divider(height: 1, color: kDividerColor, indent: 20, endIndent: 20),
+          const Divider(
+              height: 1, color: kDividerColor, indent: 20, endIndent: 20),
         ],
         Expanded(
           child: songs.isEmpty
               ? const EmptyStateView(
                   icon: Icons.folder_open_rounded,
                   title: 'No local files yet',
-                  subtitle: 'Add a music folder, or pick individual audio files, to play them here.',
+                  subtitle:
+                      'Add a music folder, or pick individual audio files, to play them here.',
                 )
               : ListView.builder(
                   itemCount: songs.length,
@@ -576,18 +698,22 @@ class _LocalTab extends StatelessWidget {
                         color: Colors.redAccent.withValues(alpha: 0.15),
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 24),
-                        child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                        child: const Icon(Icons.delete_outline_rounded,
+                            color: Colors.redAccent),
                       ),
                       // Ask first — a swipe is easy to trigger while scrolling,
                       // and this removes the track from the library.
                       confirmDismiss: (_) => confirmAction(
                         context,
                         title: 'Remove this file?',
-                        message: '"${song.title}" will be removed from your local library. The file on disk is not deleted.',
+                        message:
+                            '"${song.title}" will be removed from your local library. The file on disk is not deleted.',
                         confirmLabel: 'Remove',
                       ),
                       onDismissed: (_) => appState.removeLocalSong(song.id),
-                      child: SongTile(song: song, onTap: () => player.playSong(song, queue: songs)),
+                      child: SongTile(
+                          song: song,
+                          onTap: () => player.playSong(song, queue: songs)),
                     );
                   },
                 ),

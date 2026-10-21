@@ -18,6 +18,7 @@ import '../models/artwork_style.dart';
 import '../models/download_state.dart';
 import '../models/lyrics.dart';
 import '../models/playlist.dart';
+import '../models/personal_shelf.dart';
 import '../models/server_config.dart';
 import '../models/smart_playlist_preset.dart';
 import '../services/app_persistence.dart';
@@ -69,6 +70,7 @@ class AppState extends ChangeNotifier {
   static const _kHistoryKey = 'listening_history_v1';
   static const _kAffinityKey = 'artist_affinity_v1';
   static const _kPlaylistsKey = 'playlists_v1';
+  static const _kPersonalShelvesKey = 'personal_shelves_v1';
   static const _kLocalFoldersKey = 'local_folders_v1';
   static const _kServersKey = 'servers_v1';
   static const _kActiveServerKey = 'active_server_v1';
@@ -160,6 +162,18 @@ class AppState extends ChangeNotifier {
                   : null,
             );
           }).toList();
+        } catch (_) {}
+      }
+
+      final shelvesJson = persistence.getString(_kPersonalShelvesKey);
+      if (shelvesJson != null) {
+        try {
+          final list = jsonDecode(shelvesJson) as List<dynamic>;
+          personalShelves = list
+              .whereType<Map<String, dynamic>>()
+              .map(PersonalShelf.fromJson)
+              .take(100)
+              .toList();
         } catch (_) {}
       }
 
@@ -488,6 +502,13 @@ class AppState extends ChangeNotifier {
             })
         .toList();
     await p.setString(_kPlaylistsKey, jsonEncode(list));
+  }
+
+  Future<void> _persistPersonalShelves() async {
+    final p = _persistence;
+    if (p == null) return;
+    await p.setString(_kPersonalShelvesKey,
+        jsonEncode(personalShelves.map((s) => s.toJson()).toList()));
   }
 
   Future<void> _persistLocalFolders() async {
@@ -1447,6 +1468,130 @@ class AppState extends ChangeNotifier {
 
   // --- Playlists --------------------------------------------------------
   List<Playlist> playlists = [];
+
+  // Shelves keep stable, ordered identities rather than copied metadata, so
+  // they resolve against the latest library on each open/play action.
+  List<PersonalShelf> personalShelves = [];
+
+  PersonalShelf? createPersonalShelf(String name, {String description = ''}) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || personalShelves.length >= 100) return null;
+    final shelf = PersonalShelf(
+      id: 'shelf_${DateTime.now().microsecondsSinceEpoch}',
+      name: trimmed,
+      description: description.trim(),
+    );
+    personalShelves = [...personalShelves, shelf];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+    return shelf;
+  }
+
+  void deletePersonalShelf(String id) {
+    personalShelves = personalShelves.where((shelf) => shelf.id != id).toList();
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  void renamePersonalShelf(String id, String name, String description) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    personalShelves = [
+      for (final shelf in personalShelves)
+        if (shelf.id == id)
+          shelf.copyWith(name: trimmed, description: description.trim())
+        else
+          shelf,
+    ];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  void addItemsToPersonalShelf(String shelfId, Iterable<ShelfItem> items) {
+    personalShelves = [
+      for (final shelf in personalShelves)
+        if (shelf.id == shelfId) _shelfWithItems(shelf, items) else shelf,
+    ];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  PersonalShelf _shelfWithItems(
+      PersonalShelf shelf, Iterable<ShelfItem> incoming) {
+    final items = [...shelf.items];
+    final identities =
+        items.map((item) => '${item.type.name}:${item.id}').toSet();
+    for (final item in incoming) {
+      if (items.length >= 500) break;
+      if (identities.add('${item.type.name}:${item.id}')) items.add(item);
+    }
+    return shelf.copyWith(items: items);
+  }
+
+  void reorderPersonalShelf(String shelfId, int oldIndex, int newIndex) {
+    personalShelves = [
+      for (final shelf in personalShelves)
+        if (shelf.id == shelfId)
+          shelf.copyWith(
+              items: _reorderedShelfItems(shelf.items, oldIndex, newIndex))
+        else
+          shelf,
+    ];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  List<ShelfItem> _reorderedShelfItems(
+      List<ShelfItem> source, int oldIndex, int newIndex) {
+    final items = [...source];
+    if (oldIndex < 0 || oldIndex >= items.length) return items;
+    items.insert(newIndex.clamp(0, items.length - 1), items.removeAt(oldIndex));
+    return items;
+  }
+
+  void removePersonalShelfItem(String shelfId, int index) {
+    personalShelves = [
+      for (final shelf in personalShelves)
+        if (shelf.id == shelfId && index >= 0 && index < shelf.items.length)
+          shelf.copyWith(items: [...shelf.items]..removeAt(index))
+        else
+          shelf,
+    ];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  List<Song> songsForPersonalShelf(PersonalShelf shelf) {
+    final songs = <Song>[];
+    for (final item in shelf.items) {
+      switch (item.type) {
+        case ShelfItemType.song:
+          final song = songById(item.id);
+          if (song != null) songs.add(song);
+        case ShelfItemType.album:
+          songs.addAll(songsForAlbum(item.id));
+        case ShelfItemType.artist:
+          for (final album in albumsForArtist(item.id).take(50)) {
+            songs.addAll(songsForAlbum(album.id));
+          }
+        case ShelfItemType.playlist:
+          final playlist =
+              playlists.where((playlist) => playlist.id == item.id).firstOrNull;
+          if (playlist != null) {
+            songs.addAll(playlist.smartPreset == null
+                ? songsByIds(playlist.songIds)
+                : ShuroPulse.smartPlaylistSongs(playlist.smartPreset!, this));
+          }
+      }
+      if (songs.length >= 1000) return _uniqueShelfSongs(songs);
+    }
+    return _uniqueShelfSongs(songs);
+  }
+
+  List<Song> _uniqueShelfSongs(List<Song> songs) {
+    final seen = <String>{};
+    return songs.where((song) => seen.add(song.id)).take(1000).toList();
+  }
 
   Playlist createPlaylist(String name,
       {ImageProvider? artwork,

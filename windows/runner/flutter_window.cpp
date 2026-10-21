@@ -4,6 +4,10 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+namespace {
+constexpr UINT kShowExistingWindowMessage = WM_APP + 42;
+}
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -62,6 +66,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case kShowExistingWindowMessage:
+      ShowWindow(hwnd, SW_RESTORE);
+      SetForegroundWindow(hwnd);
+      return 0;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
