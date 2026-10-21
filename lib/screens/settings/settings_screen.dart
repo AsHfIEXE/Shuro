@@ -13,6 +13,7 @@ import '../../playback/event_log.dart';
 import '../../backend/subsonic_api.dart';
 import '../../services/server_secret_store.dart';
 import '../../services/device_profile.dart';
+import '../../services/listenbrainz_service.dart';
 import '../../services/download_service.dart';
 import '../../services/playback_prefs.dart';
 import '../../state/app_state.dart';
@@ -34,6 +35,88 @@ import '../../widgets/page_transitions.dart';
 
 /// "14. Settings" — Account / Playback / Downloads / Cache / Appearance /
 /// Behavior / About, per the requested structure.
+
+Future<void> showListenBrainzSheet(BuildContext context) async {
+  final controller = TextEditingController(text: ListenBrainzService.instance.token ?? '');
+  var validating = false;
+  String? status;
+
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: kCardColor,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('ListenBrainz',
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(
+                'Paste your ListenBrainz user token from listenbrainz.org/settings/. Scrobbles are sent when a track finishes.',
+                style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                obscureText: true,
+                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'User token',
+                  hintStyle: GoogleFonts.getFont(currentFontFamily, color: Colors.white24, fontSize: 13),
+                  filled: true,
+                  fillColor: kSurfaceColor,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+              if (status != null) ...[
+                const SizedBox(height: 8),
+                Text(status ?? '', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: validating
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(validating ? 'Validating…' : 'Connect ListenBrainz'),
+                  onPressed: validating
+                      ? null
+                      : () async {
+                          setSheetState(() { validating = true; status = null; });
+                          final username = await ListenBrainzService.instance.setToken(controller.text.trim());
+                          setSheetState(() {
+                            validating = false;
+                            status = username != null
+                                ? 'Connected as $username'
+                                : 'Invalid token — check it and try again.';
+                          });
+                        },
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () async {
+                  await ListenBrainzService.instance.disconnect();
+                  if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                },
+                child: Text('Disconnect', style: GoogleFonts.getFont(currentFontFamily, color: Colors.redAccent, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -382,7 +465,13 @@ class SettingsScreen extends StatelessWidget {
               const _SectionLabel('PERFORMANCE'),
               const _PerformanceTile(),
 
-              const _SectionLabel('ABOUT'),
+              const _SectionLabel('LISTENBRAINZ'),
+            _NavRow(
+              icon: Icons.graphic_eq_rounded,
+              label: 'ListenBrainz',
+              onTap: () => showListenBrainzSheet(context),
+            ),
+            const _SectionLabel('ABOUT'),
               const _AboutBlock(),
               _NavRow(
                   icon: Icons.info_outline_rounded,

@@ -20,6 +20,7 @@ import 'services/local_tag_enrichment.dart';
 import 'services/metadata/lastfm_client.dart';
 import 'services/playback_prefs.dart';
 import 'services/metadata/scrobble_service.dart';
+import 'services/listenbrainz_service.dart';
 import 'screens/discover/discover_screen.dart';
 import 'screens/favorites/favorites_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -40,6 +41,9 @@ import 'widgets/shuro_nav.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/page_transitions.dart';
 import 'widgets/state_views.dart';
+
+/// The app-level ListenBrainz submitter.
+final sharedListenBrainz = ListenBrainzService.instance;
 
 /// The app-level Last.fm scrobbler.
 ///
@@ -522,6 +526,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       try {
         final scrobblePersistence = await AppPersistence.load();
         await sharedScrobbleService.restore(scrobblePersistence);
+        await sharedListenBrainz.restore();
         unawaited(sharedScrobbleService.flushPending());
       } catch (_) {
         // Storage unavailable on this platform: scrobbling stays off, playback
@@ -639,7 +644,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return;
     }
     if (!sharedScrobbleService.isReady &&
-        !sharedScrobbleService.needsAuthorization) return;
+        !sharedScrobbleService.needsAuthorization &&
+        !sharedListenBrainz.isReady &&
+        !sharedListenBrainz.isEnabled) return;
 
     final song = player.currentSong;
     if (song == null) return;
@@ -653,6 +660,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         if (ScrobbleService.shouldScrobble(
             trackDuration: previous.duration,
             played: _scrobblingLastPosition)) {
+          final lbAlbum = appState.albumById(previous.albumId)?.title;
+          unawaited(sharedListenBrainz.scrobble(
+            track: previous.title,
+            artist: previous.artist,
+            album: lbAlbum,
+            durationSeconds: previous.duration.inSeconds,
+            listenedAtUnix: startedAt.millisecondsSinceEpoch ~/ 1000,
+          ));
           unawaited(sharedScrobbleService.submit(ScrobbleEntry(
             artist: previous.artist,
             track: previous.title,
@@ -668,6 +683,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _scrobblingStartedAt = DateTime.now().toUtc();
       _scrobblingStartPosition = player.position;
       _scrobblingLastPosition = Duration.zero;
+      final npAlbum = appState.albumById(song.albumId)?.title;
+      unawaited(sharedListenBrainz.nowPlaying(
+        track: song.title,
+        artist: song.artist,
+        album: npAlbum,
+        durationSeconds: song.duration.inSeconds,
+      ));
       unawaited(sharedScrobbleService.nowPlaying(ScrobbleEntry(
         artist: song.artist,
         track: song.title,
