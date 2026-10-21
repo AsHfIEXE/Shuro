@@ -61,7 +61,8 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
     // Ask about the format this engine actually outputs for this track, so the
     // answer describes a real configuration rather than a hypothetical one.
     final info = widget.song.audioInfo;
-    sharedAudioCapabilityMonitor.setQueryFormat(AudioQueryFormat.forCurrentEngine(
+    sharedAudioCapabilityMonitor
+        .setQueryFormat(AudioQueryFormat.forCurrentEngine(
       sampleRateHz: info.hasSampleRate ? info.sampleRateHz : null,
       channelCount: info.channelCount,
     ));
@@ -75,8 +76,13 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
   AudioDiagnostics _diagnostics() {
     final player = context.read<PlayerController>();
     final resolver = player.diagnosticsResolver;
-    if (resolver != null) return resolver(widget.song, player.sourcePolicy, player.processingOptions);
-    return AudioDiagnostics.forSong(song: widget.song, policy: player.sourcePolicy, processing: player.processingOptions);
+    if (resolver != null)
+      return resolver(
+          widget.song, player.sourcePolicy, player.processingOptions);
+    return AudioDiagnostics.forSong(
+        song: widget.song,
+        policy: player.sourcePolicy,
+        processing: player.processingOptions);
   }
 
   Future<void> _runProbe() async {
@@ -116,38 +122,60 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
     return SafeArea(
       child: SingleChildScrollView(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.fromLTRB(
+              20, 8, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-              Text('Audio Information', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+              Center(
+                  child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2)))),
+              Text('Audio Information',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              Text('${widget.song.title} · ${widget.song.artist}', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 12)),
-
+              Text('${widget.song.title} · ${widget.song.artist}',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white60, fontSize: 12)),
               const SizedBox(height: 20),
               const _SectionLabel('SOURCE'),
               Text(
-                source.sourceKind == SourceKind.local ? 'This device (local file)' : 'Your Navidrome server',
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 12),
+                source.sourceKind == SourceKind.local
+                    ? 'This device (local file)'
+                    : 'Your Navidrome server',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white70, fontSize: 12),
               ),
               const SizedBox(height: 8),
-              _InfoRow('Codec', info.formatLabel, provenance: 'server file scan'),
-              _InfoRow('Bit depth', info.bitDepthLabel, provenance: 'server file scan'),
-              _InfoRow('Sample rate', info.sampleRateLabel, provenance: 'server file scan'),
-              _InfoRow('Channels', info.channelsLabel, provenance: 'server file scan'),
-              _InfoRow('Bitrate', info.bitrateLabel, provenance: 'server file scan'),
+              _InfoRow('Codec', info.formatLabel,
+                  provenance: 'server file scan'),
+              _InfoRow('Bit depth', info.bitDepthLabel,
+                  provenance: 'server file scan'),
+              _InfoRow('Sample rate', info.sampleRateLabel,
+                  provenance: 'server file scan'),
+              _InfoRow('Channels', info.channelsLabel,
+                  provenance: 'server file scan'),
+              _InfoRow('Bitrate', info.bitrateLabel,
+                  provenance: 'server file scan'),
               if (info.nothingReported)
-                const _Note('Your server did not report technical details for this file, so these read "not reported" rather than a guess.')
+                const _Note(
+                    'Your server did not report technical details for this file, so these read "not reported" rather than a guess.')
               else
-                const _Note('These describe the file itself, as your server indexed it — not what your device outputs.'),
-
+                const _Note(
+                    'These describe the file itself, as your server indexed it — not what your device outputs.'),
               const SizedBox(height: 20),
               const _SectionLabel('PLAYBACK'),
-              _InfoRow('Quality requested', source.policy.quality.label, provenance: _policySummary(source.policy)),
-              if (requestCheck != null)
-                _RequestCheckRow(check: requestCheck),
+              _InfoRow('Quality requested', source.policy.quality.label,
+                  provenance: _policySummary(source.policy)),
+              if (requestCheck != null) _RequestCheckRow(check: requestCheck),
               _InfoRow(
                 'Stream mode',
                 switch (source.streamMode) {
@@ -157,71 +185,123 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
                 },
                 provenance: 'from the request, until a response is inspected',
               ),
-              _InfoRow('Resolved for', _resolvedFor(appState), provenance: 'current connection'),
-              _InfoRow('Effects applied', diagnostics.processing.anyEnabled ? _effectsLabel(diagnostics.processing) : 'None', provenance: 'this engine applies none'),
+              _InfoRow('Resolved for', _resolvedFor(appState),
+                  provenance: 'current connection'),
+              _InfoRow(
+                  'Effects applied',
+                  diagnostics.processing.anyEnabled
+                      ? _effectsLabel(diagnostics.processing)
+                      : 'None',
+                  provenance: 'this engine applies none'),
               if (!source.policy.isOriginal)
-                const _Note('A capped quality setting means the server re-encodes this stream. Choose "Original" to stream the file untouched — see the stream check below for what actually arrives.'),
-
+                const _Note(
+                    'A capped quality setting means the server re-encodes this stream. Choose "Original" to stream the file untouched — see the stream check below for what actually arrives.'),
               const SizedBox(height: 20),
               const _SectionLabel('OUTPUT CAPABILITY'),
-              _InfoRow('Route', _routeLabel(diagnostics.route), provenance: _routeProvenance()),
-              _InfoRow('Direct playback', _capabilityLabel(diagnostics.capability), provenance: _capabilityProvenance()),
+              _InfoRow('Route', _routeLabel(diagnostics.route),
+                  provenance: _routeProvenance()),
+              _InfoRow(
+                  'Direct playback', _capabilityLabel(diagnostics.capability),
+                  provenance: _capabilityProvenance()),
               if (diagnostics.capability.sampleRatesLabel != null)
-                _InfoRow('Device sample rates', diagnostics.capability.sampleRatesLabel!, provenance: 'reported by the output device'),
+                _InfoRow('Device sample rates',
+                    diagnostics.capability.sampleRatesLabel!,
+                    provenance: 'reported by the output device'),
               if (diagnostics.capability.channelCountsLabel != null)
-                _InfoRow('Device channels', diagnostics.capability.channelCountsLabel!, provenance: 'reported by the output device'),
+                _InfoRow('Device channels',
+                    diagnostics.capability.channelCountsLabel!,
+                    provenance: 'reported by the output device'),
               if (diagnostics.capability.encodingsLabel != null)
-                _InfoRow('Device encodings', diagnostics.capability.encodingsLabel!, provenance: 'reported by the output device'),
-              if (diagnostics.capability.reason != null && diagnostics.capability.directPlayback == CapabilityState.unknown)
+                _InfoRow(
+                    'Device encodings', diagnostics.capability.encodingsLabel!,
+                    provenance: 'reported by the output device'),
+              if (diagnostics.capability.reason != null &&
+                  diagnostics.capability.directPlayback ==
+                      CapabilityState.unknown)
                 _Note(diagnostics.capability.reason!),
               if (diagnostics.capability.highResolutionPcmRequested)
-                _InfoRow('High-res PCM', diagnostics.capability.highResolutionPcmAccepted == null ? 'Requested (no answer)' : (diagnostics.capability.highResolutionPcmAccepted! ? 'Accepted' : 'Rejected'), provenance: 'requested configuration'),
+                _InfoRow(
+                    'High-res PCM',
+                    diagnostics.capability.highResolutionPcmAccepted == null
+                        ? 'Requested (no answer)'
+                        : (diagnostics.capability.highResolutionPcmAccepted!
+                            ? 'Accepted'
+                            : 'Rejected'),
+                    provenance: 'requested configuration'),
               const _Note(
                 'Android decides how these samples reach your speaker, headphones or USB device, and Shuro cannot measure that last stage. Nothing here is a claim of verified hardware output.',
               ),
-
               const SizedBox(height: 20),
               const _SectionLabel('STREAM CHECK'),
               Text(
                 'Asks your server for this track\'s stream and reports what it actually sends back — the difference between the quality you asked for and the audio you get.',
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 12, height: 1.4),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white60, fontSize: 12, height: 1.4),
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _probing ? null : _runProbe,
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: kDividerColor)),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: kDividerColor)),
                     icon: _probing
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white70))
                         : const Icon(Icons.wifi_tethering_rounded, size: 16),
-                    label: Text(_probing ? 'Checking…' : 'Check what the server sends'),
+                    label: Text(
+                        _probing ? 'Checking…' : 'Check what the server sends'),
                   ),
-                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: _refreshCapability,
                     tooltip: 'Re-check the output route',
-                    icon: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 18),
+                    icon: const Icon(Icons.refresh_rounded,
+                        color: Colors.white70, size: 18),
                   ),
                 ],
               ),
               if (_probeError != null) ...[
                 const SizedBox(height: 12),
-                Text(_probeError!, style: GoogleFonts.getFont(currentFontFamily, color: Colors.amber.shade100, fontSize: 12, height: 1.4)),
+                Text(_probeError!,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.amber.shade100,
+                        fontSize: 12,
+                        height: 1.4)),
               ],
               if (probe != null && _probeError == null) ...[
                 const SizedBox(height: 14),
                 if (probe.statusCode == 0)
                   Text(
                     'No response from the server (${probe.elapsed.inMilliseconds} ms). It may be unreachable right now.',
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.amber.shade100, fontSize: 12, height: 1.4),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.amber.shade100,
+                        fontSize: 12,
+                        height: 1.4),
                   )
                 else ...[
-                  _InfoRow('HTTP status', '${probe.statusCode}${probe.supportsRange ? ' (range supported)' : ''}', provenance: 'response headers'),
-                  _InfoRow('Server sent', probe.servedFormat ?? (probe.contentType.isEmpty ? 'undeclared type' : probe.contentType), provenance: 'Content-Type'),
-                  _InfoRow('Track size', probe.sizeLabel, provenance: 'Content-Length / Content-Range'),
+                  _InfoRow('HTTP status',
+                      '${probe.statusCode}${probe.supportsRange ? ' (range supported)' : ''}',
+                      provenance: 'response headers'),
+                  _InfoRow(
+                      'Server sent',
+                      probe.servedFormat ??
+                          (probe.contentType.isEmpty
+                              ? 'undeclared type'
+                              : probe.contentType),
+                      provenance: 'Content-Type'),
+                  _InfoRow('Track size', probe.sizeLabel,
+                      provenance: 'Content-Length / Content-Range'),
                   const SizedBox(height: 8),
-                  _Verdict(probe: probe, taggedFormat: info.format, isOriginal: source.policy.isOriginal),
+                  _Verdict(
+                      probe: probe,
+                      taggedFormat: info.format,
+                      isOriginal: source.policy.isOriginal),
                 ],
               ],
             ],
@@ -231,8 +311,9 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
     );
   }
 
-  static String _policySummary(SourcePolicy policy) =>
-      policy.isOriginal ? 'sent as format=raw' : 'sent as a ${streamParametersFor(policy)['maxBitRate']} kbps cap';
+  static String _policySummary(SourcePolicy policy) => policy.isOriginal
+      ? 'sent as format=raw'
+      : 'sent as a ${streamParametersFor(policy)['maxBitRate']} kbps cap';
 
   static String _effectsLabel(ProcessingDiagnostics processing) {
     final active = <String>[
@@ -255,15 +336,20 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
   /// Names the mode when the platform distinguished it: "supported (offload)"
   /// or "supported (bitstream passthrough)" says far more about fidelity than
   /// a bare "supported" — and an unsupported answer names why.
-  static String _capabilityLabel(CapabilityDiagnostics capability) => switch (capability.directPlayback) {
-        CapabilityState.supported => 'Supported for this format · ${capability.directPlaybackMode.label}',
-        CapabilityState.unsupported => 'No direct path for this format · ${capability.directPlaybackMode.label}',
+  static String _capabilityLabel(CapabilityDiagnostics capability) =>
+      switch (capability.directPlayback) {
+        CapabilityState.supported =>
+          'Supported for this format · ${capability.directPlaybackMode.label}',
+        CapabilityState.unsupported =>
+          'No direct path for this format · ${capability.directPlaybackMode.label}',
         CapabilityState.unknown => 'Not reported',
       };
 
   String _routeProvenance() {
     final report = sharedAudioCapabilityMonitor.reportOrUnknown();
-    return report.source == 'not queried' ? 'no platform answer available here' : report.source;
+    return report.source == 'not queried'
+        ? 'no platform answer available here'
+        : report.source;
   }
 
   String _capabilityProvenance() {
@@ -303,16 +389,33 @@ class _RequestCheckRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(ok ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded, size: 16, color: ok ? Colors.lightGreenAccent.shade100 : Colors.orangeAccent.shade100),
+          Icon(
+              ok
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.warning_amber_rounded,
+              size: 16,
+              color: ok
+                  ? Colors.lightGreenAccent.shade100
+                  : Colors.orangeAccent.shade100),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(ok ? 'Request matches the policy' : 'Request does not match the policy',
-                    style: GoogleFonts.getFont(currentFontFamily, color: ok ? Colors.lightGreenAccent.shade100 : Colors.orangeAccent.shade100, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(
+                    ok
+                        ? 'Request matches the policy'
+                        : 'Request does not match the policy',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: ok
+                            ? Colors.lightGreenAccent.shade100
+                            : Colors.orangeAccent.shade100,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(check.detail, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11, height: 1.4)),
+                Text(check.detail,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white60, fontSize: 11, height: 1.4)),
               ],
             ),
           ),
@@ -328,7 +431,10 @@ class _Verdict extends StatelessWidget {
   final String? taggedFormat;
   final bool isOriginal;
 
-  const _Verdict({required this.probe, required this.taggedFormat, required this.isOriginal});
+  const _Verdict(
+      {required this.probe,
+      required this.taggedFormat,
+      required this.isOriginal});
 
   @override
   Widget build(BuildContext context) {
@@ -339,34 +445,45 @@ class _Verdict extends StatelessWidget {
     final IconData icon;
 
     if (served == null) {
-      message = 'The server answered but did not declare a format, so the stream could not be verified.';
+      message =
+          'The server answered but did not declare a format, so the stream could not be verified.';
       colour = Colors.white70;
       icon = Icons.help_outline_rounded;
     } else if (!known) {
-      message = 'Server sent $served (${probe.sizeLabel}). Your server does not report a library format for this track, so there is nothing to compare it against.';
+      message =
+          'Server sent $served (${probe.sizeLabel}). Your server does not report a library format for this track, so there is nothing to compare it against.';
       colour = Colors.white70;
       icon = Icons.info_outline_rounded;
     } else if (probe.matchesFormat(taggedFormat!)) {
       message = isOriginal
           ? 'Original file served — $served, ${probe.sizeLabel}, no transcode.'
           : 'Server sent $served, matching the library format. A capped quality was requested, so treat this as a re-encode of the original.';
-      colour = isOriginal ? Colors.lightGreenAccent.shade100 : Colors.amber.shade100;
-      icon = isOriginal ? Icons.check_circle_rounded : Icons.info_outline_rounded;
+      colour =
+          isOriginal ? Colors.lightGreenAccent.shade100 : Colors.amber.shade100;
+      icon =
+          isOriginal ? Icons.check_circle_rounded : Icons.info_outline_rounded;
     } else {
-      message = 'Server sent $served for a ${taggedFormat!} track — it is transcoding this stream, so you are not hearing the original file.';
+      message =
+          'Server sent $served for a ${taggedFormat!} track — it is transcoding this stream, so you are not hearing the original file.';
       colour = Colors.orangeAccent.shade100;
       icon = Icons.warning_amber_rounded;
     }
 
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: kCardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: kDividerColor)),
+      decoration: BoxDecoration(
+          color: kCardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kDividerColor)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: colour, size: 18),
           const SizedBox(width: 10),
-          Expanded(child: Text(message, style: GoogleFonts.getFont(currentFontFamily, color: colour, fontSize: 12, height: 1.45))),
+          Expanded(
+              child: Text(message,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: colour, fontSize: 12, height: 1.45))),
         ],
       ),
     );
@@ -384,9 +501,13 @@ class _Note extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: Colors.white54, size: 14),
+          const Icon(Icons.info_outline_rounded,
+              color: Colors.white54, size: 14),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11, height: 1.45))),
+          Expanded(
+              child: Text(text,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white60, fontSize: 11, height: 1.45))),
         ],
       ),
     );
@@ -400,7 +521,12 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11, letterSpacing: 1.1, fontWeight: FontWeight.w600)),
+        child: Text(label,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white60,
+                fontSize: 11,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w600)),
       );
 }
 
@@ -425,9 +551,13 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13)),
+                Text(label,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white70, fontSize: 13)),
                 if (provenance != null)
-                  Text(provenance!, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 10)),
+                  Text(provenance!,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white38, fontSize: 10)),
               ],
             ),
           ),
@@ -437,7 +567,10 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500),
             ),
           ),
         ],

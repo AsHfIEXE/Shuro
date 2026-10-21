@@ -57,7 +57,8 @@ class RecentSongCard extends StatelessWidget {
           },
           child: Semantics(
             button: true,
-            label: '${song.title} by ${song.artist}${playing ? ', playing now' : ''}',
+            label:
+                '${song.title} by ${song.artist}${playing ? ', playing now' : ''}',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -93,7 +94,9 @@ class RecentSongCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.getFont(currentFontFamily,
-                      color: playing ? song.gradientColors.last : Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                      color: playing ? song.gradientColors.last : Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500),
                 ),
                 Text(
                   song.artist,
@@ -101,7 +104,8 @@ class RecentSongCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   // white60 rather than the app's 38%-white muted tone: at this
                   // size the darker tone fell below the 4.5:1 contrast bar.
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white60, fontSize: 11),
                 ),
               ],
             ),
@@ -120,7 +124,8 @@ class _NowPlayingOverlay extends StatelessWidget {
   final bool buffering;
   final VoidCallback onTap;
 
-  const _NowPlayingOverlay({required this.playing, required this.buffering, required this.onTap});
+  const _NowPlayingOverlay(
+      {required this.playing, required this.buffering, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -137,10 +142,15 @@ class _NowPlayingOverlay extends StatelessWidget {
             height: 34,
             child: Center(
               child: buffering
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : playing
                       ? const _PlayingBadge()
-                      : const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                      : const Icon(Icons.play_arrow_rounded,
+                          color: Colors.white, size: 20),
             ),
           ),
         ),
@@ -157,9 +167,11 @@ class _PlayingBadge extends StatefulWidget {
   State<_PlayingBadge> createState() => _PlayingBadgeState();
 }
 
-class _PlayingBadgeState extends State<_PlayingBadge> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+class _PlayingBadgeState extends State<_PlayingBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
 
   @override
   void dispose() {
@@ -180,7 +192,8 @@ class _PlayingBadgeState extends State<_PlayingBadge> with SingleTickerProviderS
             crossAxisAlignment: CrossAxisAlignment.end,
             children: List.generate(3, (i) {
               final t = (_controller.value + i * 0.33) % 1.0;
-              final height = 4 + (8 * (0.5 + 0.5 * (t < 0.5 ? t * 2 : (1 - t) * 2)));
+              final height =
+                  4 + (8 * (0.5 + 0.5 * (t < 0.5 ? t * 2 : (1 - t) * 2)));
               return Container(width: 2.4, height: height, color: Colors.white);
             }),
           );
@@ -188,4 +201,14 @@ class _PlayingBadgeState extends State<_PlayingBadge> with SingleTickerProviderS
       ),
     );
   }
+}
+
+/// Height of a horizontal rail of 150 dp cards (square cover + title + artist).
+/// A fixed 200 fit at the default font size but overflowed (yellow/black
+/// stripes under every song card) once the device font scale reached ~1.5, so
+/// the two text lines are measured with the user's text scaler.
+double cardRailHeight(BuildContext context, {double coverWidth = 150}) {
+  final scaler = MediaQuery.textScalerOf(context);
+  final text = scaler.scale(13) * 1.4 + scaler.scale(11) * 1.4;
+  return (coverWidth + 8 + text + 4).clamp(200.0, 320.0);
 }

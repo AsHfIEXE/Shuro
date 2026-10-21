@@ -43,7 +43,9 @@ class MiniPlayer extends StatelessWidget {
     return AnimatedSize(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeInOut,
-      child: song == null ? const SizedBox(width: double.infinity, key: ValueKey('empty')) : _MiniPlayerBar(key: ValueKey(song.id), song: song),
+      child: song == null
+          ? const SizedBox(width: double.infinity, key: ValueKey('empty'))
+          : _MiniPlayerBar(key: ValueKey(song.id), song: song),
     );
   }
 }
@@ -60,7 +62,7 @@ class _MiniPlayerBar extends StatelessWidget {
     final isActive = player.currentSong?.id == song.id;
     final isPlaying = isActive && player.isPlaying;
     final isBuffering = isActive && player.isBuffering;
-    final width = MediaQuery.of(context).size.width;
+    final width = MediaQuery.sizeOf(context).width;
     final wide = width >= MiniPlayer._kWideBreakpoint;
 
     return GestureDetector(
@@ -87,7 +89,8 @@ class _MiniPlayerBar extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               kCardColor,
-              Color.lerp(kCardColor, song.gradientColors.first, 0.22) ?? kCardColor,
+              Color.lerp(kCardColor, song.gradientColors.first, 0.22) ??
+                  kCardColor,
             ],
           ),
           // No border of its own: the mini player lives INSIDE the nav bar's
@@ -98,12 +101,17 @@ class _MiniPlayerBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: wide ? 20 : 12, vertical: 8),
+              padding:
+                  EdgeInsets.symmetric(horizontal: wide ? 20 : 12, vertical: 8),
               child: Row(
                 children: [
                   Hero(
                     tag: 'artwork_${song.id}',
-                    child: ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: wide ? 48 : 44, radius: 8),
+                    child: ArtworkThumb(
+                        gradientColors: song.gradientColors,
+                        artwork: song.artwork,
+                        size: wide ? 48 : 44,
+                        radius: 8),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -115,14 +123,21 @@ class _MiniPlayerBar extends StatelessWidget {
                           song.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: wide ? 14 : 13.5, fontWeight: FontWeight.w600),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white,
+                              fontSize: wide ? 14 : 13.5,
+                              fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          wide ? '${song.artist} · ${appState.albumById(song.albumId)?.title ?? ''}'.trim() : song.artist,
+                          wide
+                              ? '${song.artist} · ${appState.albumById(song.albumId)?.title ?? ''}'
+                                  .trim()
+                              : song.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 12),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white60, fontSize: 12),
                         ),
                       ],
                     ),
@@ -138,8 +153,10 @@ class _MiniPlayerBar extends StatelessWidget {
                   if (wide)
                     IconButton(
                       tooltip: 'Queue',
-                      icon: const Icon(Icons.queue_music_rounded, color: Colors.white70, size: 22),
-                      onPressed: () => pushRisingOnce(context, const QueueScreen()),
+                      icon: const Icon(Icons.queue_music_rounded,
+                          color: Colors.white70, size: 22),
+                      onPressed: () =>
+                          pushRisingOnce(context, const QueueScreen()),
                     ),
                   _TransportButton(
                     icon: ShuroGlyph.previous,
@@ -203,11 +220,13 @@ class _SeekBarState extends State<_SeekBar> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        double fractionAt(double dx) => (dx / constraints.maxWidth).clamp(0.0, 1.0);
+        double fractionAt(double dx) =>
+            (dx / constraints.maxWidth).clamp(0.0, 1.0);
 
         Future<void> commit(double fraction) {
           if (!isActive) return Future<void>.value();
-          return player.seekTo(Duration(milliseconds: (totalMs * fraction).round()));
+          return player
+              .seekTo(Duration(milliseconds: (totalMs * fraction).round()));
         }
 
         return GestureDetector(
@@ -216,7 +235,8 @@ class _SeekBarState extends State<_SeekBar> {
             final target = fractionAt(details.localPosition.dx);
             setState(() => _preview = target);
             commit(target).whenComplete(() {
-              if (mounted && _preview == target) setState(() => _preview = null);
+              if (mounted && _preview == target)
+                setState(() => _preview = null);
             });
           },
           onHorizontalDragStart: (details) =>
@@ -229,7 +249,8 @@ class _SeekBarState extends State<_SeekBar> {
             // Hold the preview until the engine confirms, exactly like the
             // ring: clearing first made the bar snap back then jump.
             commit(target).whenComplete(() {
-              if (mounted && _preview == target) setState(() => _preview = null);
+              if (mounted && _preview == target)
+                setState(() => _preview = null);
             });
           },
           onHorizontalDragCancel: () => setState(() => _preview = null),
@@ -264,7 +285,13 @@ class SmoothProgressBar extends StatelessWidget {
   /// so the bar follows the finger without touching the engine.
   final double? previewFraction;
 
-  const SmoothProgressBar({super.key, required this.player, required this.songId, required this.totalMs, required this.accent, this.previewFraction});
+  const SmoothProgressBar(
+      {super.key,
+      required this.player,
+      required this.songId,
+      required this.totalMs,
+      required this.accent,
+      this.previewFraction});
 
   @override
   Widget build(BuildContext context) {
@@ -273,8 +300,10 @@ class SmoothProgressBar extends StatelessWidget {
       builder: (context, snapshot) {
         final isActive = player.currentSong?.id == songId;
         final live = isActive && player.loadedSongId == songId;
-        final position = live ? (snapshot.data ?? player.position) : Duration.zero;
-        final value = previewFraction ?? (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
+        final position =
+            live ? (snapshot.data ?? player.position) : Duration.zero;
+        final value = previewFraction ??
+            (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
         return LinearProgressIndicator(
           value: value,
           minHeight: 2,
@@ -291,7 +320,8 @@ class _TransportButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
 
-  const _TransportButton({required this.icon, required this.label, required this.onPressed});
+  const _TransportButton(
+      {required this.icon, required this.label, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -313,7 +343,11 @@ class _PlayPauseButton extends StatelessWidget {
   final Color accent;
   final VoidCallback onPressed;
 
-  const _PlayPauseButton({required this.isPlaying, required this.isBuffering, required this.accent, required this.onPressed});
+  const _PlayPauseButton(
+      {required this.isPlaying,
+      required this.isBuffering,
+      required this.accent,
+      required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -329,15 +363,25 @@ class _PlayPauseButton extends StatelessWidget {
             shape: BoxShape.circle,
             color: accent,
             boxShadow: [
-              BoxShadow(color: accent.withValues(alpha: 0.45), blurRadius: 14, spreadRadius: 1),
+              BoxShadow(
+                  color: accent.withValues(alpha: 0.45),
+                  blurRadius: 14,
+                  spreadRadius: 1),
             ],
           ),
           child: IconButton(
             tooltip: isPlaying ? 'Pause' : 'Play',
             onPressed: onPressed,
             icon: isBuffering
-                ? const SizedBox(width: 22, height: 22, child: Padding(padding: EdgeInsets.all(2), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
-                : ShuroIcon(isPlaying ? ShuroGlyph.pause : ShuroGlyph.play, color: Colors.white, size: 26),
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: Padding(
+                        padding: EdgeInsets.all(2),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white)))
+                : ShuroIcon(isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
+                    color: Colors.white, size: 26),
           ),
         ),
       ),

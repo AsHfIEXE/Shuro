@@ -69,7 +69,9 @@ class _GreetingTextState extends State<_GreetingText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(greetingFor(DateTime.now()), style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 13));
+    return Text(greetingFor(DateTime.now()),
+        style: GoogleFonts.getFont(currentFontFamily,
+            color: Colors.white60, fontSize: 13));
   }
 }
 
@@ -105,20 +107,24 @@ class HomeScreen extends StatelessWidget {
     // fetch is still in flight. This used to be a 650 ms timer on every visit —
     // content that had already loaded was hidden behind a fake wait, which is
     // exactly what makes an app feel slow for no reason.
-    final awaitingLibrary =
-        !appState.hasAnyMusic && appState.connectionStatus == ConnectionStatus.connecting;
+    final awaitingLibrary = !appState.hasAnyMusic &&
+        appState.connectionStatus == ConnectionStatus.connecting;
 
     // Server-sourced rails only mean anything once there's a server catalog
     // to source them from — a local-only user sees their own imported files
     // standing in for "Recently Added" instead, and nothing at all in the
     // rails that have no local equivalent (Recommended, Recently Played
     // Albums) rather than ever mixing in a mock catalog.
-    final recentlyPlayed = hasServer ? appState.recentlyPlayedSongs() : const <Song>[];
-    final recentlyAdded = hasServer ? appState.recentlyAddedSongs() : appState.localSongs.reversed.take(10).toList();
+    final recentlyPlayed =
+        hasServer ? appState.recentlyPlayedSongs() : const <Song>[];
+    final recentlyAdded = hasServer
+        ? appState.recentlyAddedSongs()
+        : appState.localSongs.reversed.take(10).toList();
     final favorites = appState.songsByIds(appState.favoriteSongIds.toList());
     // "Recommended" is Shuro Pulse's real heuristic ranking (affinity +
     // discovery, see ShuroPulse.forYou), not a hardcoded list.
-    final recommended = hasServer ? ShuroPulse.forYou(appState, limit: 10) : const <Song>[];
+    final recommended =
+        hasServer ? ShuroPulse.forYou(appState, limit: 10) : const <Song>[];
     // "Recently Played Albums" — distinct albums behind what's actually
     // been played (see listeningHistory), falling back to newest albums
     // for a freshly-connected server with no play history yet.
@@ -134,7 +140,8 @@ class HomeScreen extends StatelessWidget {
         }
         if (recentAlbums.length >= 10) break;
       }
-      if (recentAlbums.isEmpty) recentAlbums.addAll(appState.recentlyAddedAlbums());
+      if (recentAlbums.isEmpty)
+        recentAlbums.addAll(appState.recentlyAddedAlbums());
     }
 
     return Scaffold(
@@ -162,14 +169,20 @@ class HomeScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const _GreetingText(),
-                                    Text('Your library', style: headingFont(color: kTextColor, fontSize: 20, fontWeight: FontWeight.w600)),
+                                    Text('Your library',
+                                        style: headingFont(
+                                            color: kTextColor,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w600)),
                                   ],
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.download_rounded, color: Colors.white70),
+                                icon: const Icon(Icons.download_rounded,
+                                    color: Colors.white70),
                                 tooltip: 'Downloads',
-                                onPressed: () => Navigator.of(context).push(drillDownRoute(const DownloadsScreen())),
+                                onPressed: () => Navigator.of(context).push(
+                                    drillDownRoute(const DownloadsScreen())),
                               ),
                               // 44px minimum touch target around an 18px-radius
                               // avatar, which was a 36px hit area before.
@@ -178,14 +191,22 @@ class HomeScreen extends StatelessWidget {
                                 label: 'Settings and profile',
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(24),
-                                  onTap: () => Navigator.of(context).push(drillDownRoute(const SettingsScreen())),
+                                  onTap: () => Navigator.of(context).push(
+                                      drillDownRoute(const SettingsScreen())),
                                   child: Padding(
                                     padding: const EdgeInsets.all(4),
                                     child: CircleAvatar(
                                       radius: 18,
                                       backgroundColor: kCardColor,
-                                      backgroundImage: appState.userAvatarBytes != null ? MemoryImage(appState.userAvatarBytes!) : null,
-                                      child: appState.userAvatarBytes == null ? const Icon(Icons.person_rounded, color: Colors.white70, size: 18) : null,
+                                      backgroundImage:
+                                          appState.userAvatarBytes != null
+                                              ? MemoryImage(
+                                                  appState.userAvatarBytes!)
+                                              : null,
+                                      child: appState.userAvatarBytes == null
+                                          ? const Icon(Icons.person_rounded,
+                                              color: Colors.white70, size: 18)
+                                          : null,
                                     ),
                                   ),
                                 ),
@@ -205,15 +226,27 @@ class HomeScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(22),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(22),
-                                onTap: () => Navigator.of(context).push(drillDownRoute(const SearchScreen())),
+                                onTap: () => Navigator.of(context)
+                                    .push(drillDownRoute(const SearchScreen())),
                                 child: Container(
                                   height: 44,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.search_rounded, color: Colors.white70, size: 20),
+                                      const Icon(Icons.search_rounded,
+                                          color: Colors.white70, size: 20),
                                       const SizedBox(width: 8),
-                                      Text('Search songs, artists, albums...', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 13)),
+                                      Expanded(
+                                        child: Text(
+                                            'Search songs, artists, albums...',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.getFont(
+                                                currentFontFamily,
+                                                color: Colors.white60,
+                                                fontSize: 13)),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -234,20 +267,25 @@ class HomeScreen extends StatelessWidget {
                             title: 'Recently Played',
                             songs: recentlyPlayed,
                             currentSongId: player.currentSong?.id,
-                            onTapSong: (song) => player.playOrToggle(song, queue: recentlyPlayed),
-                            onSeeAll: () => openSongList(context, 'Recently played', recentlyPlayed),
+                            onTapSong: (song) => player.playOrToggle(song,
+                                queue: recentlyPlayed),
+                            onSeeAll: () => openSongList(
+                                context, 'Recently played', recentlyPlayed),
                           ),
                         _SongRail(
                           title: 'Recently Added',
                           songs: recentlyAdded,
                           currentSongId: player.currentSong?.id,
-                          onTapSong: (song) => player.playOrToggle(song, queue: recentlyAdded),
-                          onSeeAll: () => openSongList(context, 'Recently added', recentlyAdded),
+                          onTapSong: (song) =>
+                              player.playOrToggle(song, queue: recentlyAdded),
+                          onSeeAll: () => openSongList(
+                              context, 'Recently added', recentlyAdded),
                         ),
                         SliverToBoxAdapter(
                           child: SectionHeader(
                             title: 'Favorites',
-                            onSeeAll: () => Navigator.of(context).push(drillDownRoute(const FavoritesScreen())),
+                            onSeeAll: () => Navigator.of(context)
+                                .push(drillDownRoute(const FavoritesScreen())),
                           ),
                         ),
                         if (favorites.isEmpty)
@@ -257,7 +295,8 @@ class HomeScreen extends StatelessWidget {
                               child: EmptyStateView(
                                 icon: Icons.favorite_border_rounded,
                                 title: 'No favorites yet',
-                                subtitle: 'Tap the heart on a song and it will show up here.',
+                                subtitle:
+                                    'Tap the heart on a song and it will show up here.',
                               ),
                             ),
                           )
@@ -266,7 +305,8 @@ class HomeScreen extends StatelessWidget {
                             title: '',
                             songs: favorites,
                             currentSongId: player.currentSong?.id,
-                            onTapSong: (song) => player.playOrToggle(song, queue: favorites),
+                            onTapSong: (song) =>
+                                player.playOrToggle(song, queue: favorites),
                             showHeader: false,
                             onSeeAll: null,
                           ),
@@ -275,7 +315,8 @@ class HomeScreen extends StatelessWidget {
                             title: 'Recommended for you',
                             songs: recommended,
                             currentSongId: player.currentSong?.id,
-                            onTapSong: (song) => player.playOrToggle(song, queue: recommended),
+                            onTapSong: (song) =>
+                                player.playOrToggle(song, queue: recommended),
                             onSeeAll: () => openSongList(
                               context,
                               'Recommended for you',
@@ -289,25 +330,31 @@ class HomeScreen extends StatelessWidget {
                               onSeeAll: recentAlbums.isEmpty
                                   ? null
                                   : () => Navigator.of(context).push(
-                                        drillDownRoute(AlbumGridScreen(title: 'Recently played albums', albums: recentAlbums)),
+                                        drillDownRoute(AlbumGridScreen(
+                                            title: 'Recently played albums',
+                                            albums: recentAlbums)),
                                       ),
                             ),
                           ),
                           SliverToBoxAdapter(
                             child: SizedBox(
-                              height: 200,
+                              height: cardRailHeight(context),
                               child: ListView.separated(
                                 scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 20),
                                 itemCount: recentAlbums.length,
-                                separatorBuilder: (_, __) => const SizedBox(width: 16),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 16),
                                 itemBuilder: (context, i) {
                                   final album = recentAlbums[i];
                                   return SizedBox(
                                     width: 150,
                                     child: AlbumCard(
                                       album: album,
-                                      onTap: () => Navigator.of(context).push(drillDownRoute(AlbumDetailScreen(album: album))),
+                                      onTap: () => Navigator.of(context).push(
+                                          drillDownRoute(
+                                              AlbumDetailScreen(album: album))),
                                     ),
                                   );
                                 },
@@ -404,16 +451,24 @@ class _GetStartedEmptyState extends StatelessWidget {
             Container(
               width: 72,
               height: 72,
-              decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: kBrandGradient)),
-              child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 32),
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: kBrandGradient)),
+              child: const Icon(Icons.music_note_rounded,
+                  color: Colors.white, size: 32),
             ),
             const SizedBox(height: 20),
-            Text('Nothing to play yet', style: headingFont(color: kTextColor, fontSize: 17, fontWeight: FontWeight.w600)),
+            Text('Nothing to play yet',
+                style: headingFont(
+                    color: kTextColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(
               'Add a music folder from this device, or connect a Navidrome server to stream your library.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 13, height: 1.5),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white60, fontSize: 13, height: 1.5),
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -426,13 +481,22 @@ class _GetStartedEmptyState extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kBrandColor,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
                 ),
                 icon: appState.importingLocalFiles
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.folder_rounded, size: 18),
-                label: Text(appState.importingLocalFiles ? 'Importing…' : 'Add a music folder',
-                    style: GoogleFonts.getFont(currentFontFamily, fontSize: 14, fontWeight: FontWeight.w600)),
+                label: Text(
+                    appState.importingLocalFiles
+                        ? 'Importing…'
+                        : 'Add a music folder',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        fontSize: 14, fontWeight: FontWeight.w600)),
               ),
             ),
             const SizedBox(height: 10),
@@ -442,13 +506,25 @@ class _GetStartedEmptyState extends StatelessWidget {
                 TextButton(
                   onPressed: appState.importingLocalFiles
                       ? null
-                      : () => runLocalImport(context, appState.importLocalFiles),
-                  child: Text('Add files', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                      : () =>
+                          runLocalImport(context, appState.importLocalFiles),
+                  child: Text('Add files',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
                 ),
-                Text('·', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white54, fontSize: 13)),
+                Text('·',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white54, fontSize: 13)),
                 TextButton(
-                  onPressed: () => Navigator.of(context).push(drillDownRoute(const ServerSetupScreen())),
-                  child: Text('Connect a server', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                  onPressed: () => Navigator.of(context)
+                      .push(drillDownRoute(const ServerSetupScreen())),
+                  child: Text('Connect a server',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -481,14 +557,15 @@ class _SongRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (songs.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+    if (songs.isEmpty)
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
     return SliverToBoxAdapter(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (showHeader) SectionHeader(title: title, onSeeAll: onSeeAll),
           SizedBox(
-            height: 200,
+            height: cardRailHeight(context),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),

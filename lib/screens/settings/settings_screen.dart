@@ -502,11 +502,17 @@ class SettingsScreen extends StatelessWidget {
                       Text(row.key,
                           style: GoogleFonts.getFont(currentFontFamily,
                               color: kMutedTextColor, fontSize: 12.5)),
-                      Text(row.value,
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 16),
+                      // Long values (model, OS build, screen description) wrap
+                      // instead of overflowing the row.
+                      Flexible(
+                        child: Text(row.value,
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: Colors.white,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                      ),
                     ],
                   ),
                 ),

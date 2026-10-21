@@ -29,7 +29,8 @@ void openLyricsScreen(BuildContext context, Song song) {
   // Wrapped at the route level so the immersive mode (when the setting is on)
   // lasts exactly as long as this screen exists and is always undone on pop.
   // pushRisingOnce: a fast double-tap used to stack two copies (audit F4-5).
-  pushRisingOnce(context, ImmersiveScope(child: LyricsScreen(initialSong: song)));
+  pushRisingOnce(
+      context, ImmersiveScope(child: LyricsScreen(initialSong: song)));
 }
 
 /// One track's lyrics, or the reason there are none. The screen renders the
@@ -39,7 +40,9 @@ class _LyricsView {
   final LyricsFailureKind? failure;
   final String? detail;
 
-  const _LyricsView.found(LyricsTrack this.track) : failure = null, detail = null;
+  const _LyricsView.found(LyricsTrack this.track)
+      : failure = null,
+        detail = null;
   const _LyricsView.miss(this.failure, {this.detail}) : track = null;
 
   bool get hasTrack => track != null;
@@ -111,7 +114,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// The playback clock within the current line — drives the karaoke fill.
   /// Updated ~30x/sec from [PlayerController.smoothPositionStream], while the
   /// rest of the list only rebuilds when the *line* changes.
-  final ValueNotifier<Duration> _position = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _position =
+      ValueNotifier<Duration>(Duration.zero);
 
   final Map<int, GlobalKey> _lineKeys = {};
 
@@ -262,7 +266,10 @@ class _LyricsScreenState extends State<LyricsScreen> {
   }
 
   void _autoScrollTo(int index) {
-    if (index < 0 || index == _lastAutoScrolledLine || !_autoScrollEnabled || _manualScrolling) return;
+    if (index < 0 ||
+        index == _lastAutoScrolledLine ||
+        !_autoScrollEnabled ||
+        _manualScrolling) return;
     if (_readingUp) return; // the reader owns the position while reading up
     _lastAutoScrolledLine = index;
     // After the frame that built this line, so its rendered box exists to
@@ -280,11 +287,13 @@ class _LyricsScreenState extends State<LyricsScreen> {
       // change. If the nearest scrollable is not ours, we do nothing.
       final scrollable = Scrollable.maybeOf(target);
       if (scrollable == null) return;
-      if (!_scroll.hasClients || scrollable.position != _scroll.position) return;
+      if (!_scroll.hasClients || scrollable.position != _scroll.position)
+        return;
       final position = scrollable.position;
       final viewport = RenderAbstractViewport.of(renderObject);
       final reveal = viewport.getOffsetToReveal(renderObject, 0.34).offset;
-      final targetOffset = reveal.clamp(position.minScrollExtent, position.maxScrollExtent);
+      final targetOffset =
+          reveal.clamp(position.minScrollExtent, position.maxScrollExtent);
       if ((targetOffset - position.pixels).abs() < 1.0) return;
       if (reduceMotionEnabled) {
         position.jumpTo(targetOffset);
@@ -355,7 +364,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
     final live = player.currentSong ?? _song ?? widget.initialSong;
 
     if (live == null) {
-      return _shell(accent: kBrandColor, child: const _Message(icon: Icons.music_off_rounded, message: 'Nothing is playing right now.'));
+      return _shell(
+          accent: kBrandColor,
+          child: const _Message(
+              icon: Icons.music_off_rounded,
+              message: 'Nothing is playing right now.'));
     }
 
     if (_song?.id != live.id) {
@@ -371,7 +384,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
       return _shell(
         accent: live.gradientColors.last,
         song: live,
-        child: const _Message(icon: null, loading: true, message: 'Loading lyrics…'),
+        child: const _Message(
+            icon: null, loading: true, message: 'Loading lyrics…'),
       );
     }
 
@@ -387,19 +401,28 @@ class _LyricsScreenState extends State<LyricsScreen> {
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const _Message(icon: null, loading: true, message: 'Loading lyrics…');
+              return const _Message(
+                  icon: null, loading: true, message: 'Loading lyrics…');
             }
             final result = snapshot.data;
             if (result == null || !result.hasTrack) {
-              final fallback = widget.embedded && widget.embeddedFallback != null ? widget.embeddedFallback : null;
+              final fallback =
+                  widget.embedded && widget.embeddedFallback != null
+                      ? widget.embeddedFallback
+                      : null;
               if (fallback != null) return fallback;
               return _failureView(result);
             }
             final track = result.track!;
             if (track.lines.isEmpty) {
-              final fallback = widget.embedded && widget.embeddedFallback != null ? widget.embeddedFallback : null;
+              final fallback =
+                  widget.embedded && widget.embeddedFallback != null
+                      ? widget.embeddedFallback
+                      : null;
               if (fallback != null) return fallback;
-              return const _Message(icon: Icons.music_off_rounded, message: 'This track has no lyrics to show.');
+              return const _Message(
+                  icon: Icons.music_off_rounded,
+                  message: 'This track has no lyrics to show.');
             }
             return _buildLyrics(track, colors.last);
           },
@@ -422,7 +445,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
         return _Message(
           icon: Icons.hourglass_bottom_rounded,
           message: 'Lyrics lookup is temporarily rate-limited.',
-          caption: detail ?? 'LRCLIB asked this app to slow down — try again in a minute.',
+          caption: detail ??
+              'LRCLIB asked this app to slow down — try again in a minute.',
           onRetry: _retry,
         );
       case LyricsFailureKind.rejected:
@@ -469,7 +493,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
     // within-line fill at all — the whole current line takes the white + glow
     // treatment, everything else stays on the opacity ladder. The fill only
     // runs in word mode.
-    final highlightWords = context.watch<AppearanceSettings>().lyricsHighlight == LyricsHighlight.word;
+    final highlightWords =
+        context.watch<AppearanceSettings>().lyricsHighlight ==
+            LyricsHighlight.word;
     final karaoke = isSynced && highlightWords;
 
     return Stack(
@@ -480,41 +506,42 @@ class _LyricsScreenState extends State<LyricsScreen> {
             return false;
           },
           child: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (notification) {
-            if (_manualScrolling) _onUserScrollUpdate(notification.metrics.pixels);
-            return false;
-          },
-          child: SingleChildScrollView(
-            controller: _scroll,
-            // Every line is laid out (lyric counts are small and text-only):
-            // that is what lets the active line be scrolled to by measurement
-            // instead of by estimated pixel offsets.
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 140),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < track.lines.length; i++)
-                  ValueListenableBuilder<int>(
-                    valueListenable: _currentLine,
-                    builder: (context, currentIndex, _) {
-                      final isCurrent = currentIndex == i;
-                      _lineKeys.putIfAbsent(i, () => GlobalKey());
-                      return _LyricsLineView(
-                        key: _lineKeys[i],
-                        line: track.lines[i],
-                        isCurrent: isCurrent,
-                        karaoke: karaoke && isCurrent,
-                        position: _position,
-                        accent: accent,
-                        dimmed: !isSynced,
-                        textAlign: widget.textAlign,
-                        onTap: () => _seekToLine(track.lines[i], isCurrent),
-                      );
-                    },
-                  ),
-              ],
+            onNotification: (notification) {
+              if (_manualScrolling)
+                _onUserScrollUpdate(notification.metrics.pixels);
+              return false;
+            },
+            child: SingleChildScrollView(
+              controller: _scroll,
+              // Every line is laid out (lyric counts are small and text-only):
+              // that is what lets the active line be scrolled to by measurement
+              // instead of by estimated pixel offsets.
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 140),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < track.lines.length; i++)
+                    ValueListenableBuilder<int>(
+                      valueListenable: _currentLine,
+                      builder: (context, currentIndex, _) {
+                        final isCurrent = currentIndex == i;
+                        _lineKeys.putIfAbsent(i, () => GlobalKey());
+                        return _LyricsLineView(
+                          key: _lineKeys[i],
+                          line: track.lines[i],
+                          isCurrent: isCurrent,
+                          karaoke: karaoke && isCurrent,
+                          position: _position,
+                          accent: accent,
+                          dimmed: !isSynced,
+                          textAlign: widget.textAlign,
+                          onTap: () => _seekToLine(track.lines[i], isCurrent),
+                        );
+                      },
+                    ),
+                ],
+              ),
             ),
-          ),
           ),
         ),
         if (_manualScrolling || _readingUp)
@@ -550,14 +577,25 @@ class _LyricsScreenState extends State<LyricsScreen> {
     }
   }
 
-  Widget _shell({required Color accent, required Widget child, Song? song, List<Color>? colors}) {
+  Widget _shell(
+      {required Color accent,
+      required Widget child,
+      Song? song,
+      List<Color>? colors}) {
     final content = Column(
       children: [
         if (!widget.embedded) _Header(song: song, accent: accent),
         Expanded(child: child),
-        if (!widget.compact && !widget.embedded && _loadedView?.track != null) _AttributionFooter(track: _loadedView!.track!, detail: _loadedView!.detail),
-        if (!widget.compact) _SyncBar(accent: accent, offsetMs: _offset.inMilliseconds, enabled: _track?.hasTiming ?? false),
-        if (!widget.embedded && song != null) MiniTransportBar(song: song, accentColor: accent),
+        if (!widget.compact && !widget.embedded && _loadedView?.track != null)
+          _AttributionFooter(
+              track: _loadedView!.track!, detail: _loadedView!.detail),
+        if (!widget.compact)
+          _SyncBar(
+              accent: accent,
+              offsetMs: _offset.inMilliseconds,
+              enabled: _track?.hasTiming ?? false),
+        if (!widget.embedded && song != null)
+          MiniTransportBar(song: song, accentColor: accent),
       ],
     );
     final stack = Stack(
@@ -577,7 +615,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
         SafeArea(child: content),
       ],
     );
-    return widget.embedded ? stack : Scaffold(backgroundColor: Colors.black, body: stack);
+    return widget.embedded
+        ? stack
+        : Scaffold(backgroundColor: Colors.black, body: stack);
   }
 }
 
@@ -622,7 +662,12 @@ class _LyricsLineView extends StatelessWidget {
     );
 
     final Widget content = karaoke
-        ? _KaraokeFill(line: line, position: position, accent: accent, baseStyle: baseStyle, textAlign: textAlign)
+        ? _KaraokeFill(
+            line: line,
+            position: position,
+            accent: accent,
+            baseStyle: baseStyle,
+            textAlign: textAlign)
         : AnimatedDefaultTextStyle(
             // Line-by-line mode: the colour/glow change between states fades
             // over 200 ms instead of snapping — the line-level counterpart of
@@ -635,8 +680,17 @@ class _LyricsLineView extends StatelessWidget {
               // Contrast ladder: current pure white, upcoming 78%, past 60%.
               // The previous 66/46% left upcoming lines hard to read on the
               // blurred backdrop (reported).
-              color: isCurrent ? Colors.white : (dimmed ? const Color(0x9CFFFFFF) : const Color(0xC8FFFFFF)),
-              shadows: isCurrent ? [Shadow(color: accent.withValues(alpha: 0.35), blurRadius: 24)] : null,
+              color: isCurrent
+                  ? Colors.white
+                  : (dimmed
+                      ? const Color(0x9CFFFFFF)
+                      : const Color(0xC8FFFFFF)),
+              shadows: isCurrent
+                  ? [
+                      Shadow(
+                          color: accent.withValues(alpha: 0.35), blurRadius: 24)
+                    ]
+                  : null,
             ),
             child: Text(
               line.plainText,
@@ -656,7 +710,8 @@ class _LyricsLineView extends StatelessWidget {
     final Widget painted = (!isCurrent && !dimmed)
         ? (kIsWeb
             ? Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                 child: Opacity(opacity: 0.42, child: content),
               )
             : ClipRRect(
@@ -665,9 +720,11 @@ class _LyricsLineView extends StatelessWidget {
                   // Subtle: 0.3 keeps surrounding lines readable while the
                   // sung line stays clearly the focus (owner tune-down from
                   // 0.8 — still reads as "defocused", not "blurred").
-                  imageFilter: ImageFilter.blur(sigmaX: 0.3, sigmaY: 0.3, tileMode: TileMode.decal),
+                  imageFilter: ImageFilter.blur(
+                      sigmaX: 0.3, sigmaY: 0.3, tileMode: TileMode.decal),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 14),
                     child: content,
                   ),
                 ),
@@ -710,7 +767,10 @@ class _LyricsLineView extends StatelessWidget {
                     height: 3,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [accent.withValues(alpha: 0.95), accent.withValues(alpha: 0.30)],
+                        colors: [
+                          accent.withValues(alpha: 0.95),
+                          accent.withValues(alpha: 0.30)
+                        ],
                       ),
                       borderRadius: BorderRadius.circular(2),
                     ),
@@ -749,7 +809,12 @@ class _KaraokeFill extends StatelessWidget {
   final TextStyle baseStyle;
   final TextAlign textAlign;
 
-  const _KaraokeFill({required this.line, required this.position, required this.accent, required this.baseStyle, required this.textAlign});
+  const _KaraokeFill(
+      {required this.line,
+      required this.position,
+      required this.accent,
+      required this.baseStyle,
+      required this.textAlign});
 
   @override
   Widget build(BuildContext context) {
@@ -762,7 +827,8 @@ class _KaraokeFill extends StatelessWidget {
         for (final syllable in line.syllables) {
           final length = syllable.text.length.clamp(1, 1 << 20).toDouble();
           final coverage = ((sungChars - consumed) / length).clamp(0.0, 1.0);
-          spans.add(TextSpan(text: syllable.text, style: _styleForCoverage(coverage)));
+          spans.add(TextSpan(
+              text: syllable.text, style: _styleForCoverage(coverage)));
           consumed += length;
         }
         return RichText(textAlign: textAlign, text: TextSpan(children: spans));
@@ -781,7 +847,10 @@ class _KaraokeFill extends StatelessWidget {
         sung += length;
       } else if (current > syllable.start) {
         final total = (syllable.end - syllable.start).inMilliseconds;
-        final within = total <= 0 ? 1.0 : ((current - syllable.start).inMilliseconds / total).clamp(0.0, 1.0);
+        final within = total <= 0
+            ? 1.0
+            : ((current - syllable.start).inMilliseconds / total)
+                .clamp(0.0, 1.0);
         sung += length * within;
       }
     }
@@ -789,16 +858,25 @@ class _KaraokeFill extends StatelessWidget {
   }
 
   TextStyle _styleForCoverage(double coverage) {
-    const upcoming = Color(0xFF999DA3); // cool grey, ≈4.5:1 against the sung white
+    const upcoming =
+        Color(0xFF999DA3); // cool grey, ≈4.5:1 against the sung white
     // easeOut on coverage: quick to leave the grey, gentle settling into
     // white — reads as motion rather than as a switch.
-    final color = Color.lerp(upcoming, Colors.white, Curves.easeOut.transform(coverage)) ?? Colors.white;
+    final color = Color.lerp(
+            upcoming, Colors.white, Curves.easeOut.transform(coverage)) ??
+        Colors.white;
     // The glow peaks mid-syllable and fades to nothing at both ends, so the
     // highlight travels as one continuous wave instead of flashing per word.
-    final glow = coverage <= 0 || coverage >= 1 ? 0.0 : (1 - (2 * coverage - 1).abs());
+    final glow =
+        coverage <= 0 || coverage >= 1 ? 0.0 : (1 - (2 * coverage - 1).abs());
     return baseStyle.copyWith(
       color: color,
-      shadows: glow > 0.03 ? [Shadow(color: accent.withValues(alpha: 0.45 * glow), blurRadius: 18)] : null,
+      shadows: glow > 0.03
+          ? [
+              Shadow(
+                  color: accent.withValues(alpha: 0.45 * glow), blurRadius: 18)
+            ]
+          : null,
     );
   }
 }
@@ -821,20 +899,28 @@ class _Header extends StatelessWidget {
             label: 'Close lyrics',
             child: IconButton(
               onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 28),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white, size: 28),
               tooltip: 'Close',
             ),
           ),
           Expanded(
             child: Column(
               children: [
-                Text('LYRICS', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11, letterSpacing: 1.4)),
+                Text('LYRICS',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white60,
+                        fontSize: 11,
+                        letterSpacing: 1.4)),
                 const SizedBox(height: 2),
                 Text(
                   song?.title ?? 'Nothing playing',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -860,13 +946,21 @@ class _ResumeChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(color: kCardColor.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(20), border: Border.all(color: accent.withValues(alpha: 0.5))),
+          decoration: BoxDecoration(
+              color: kCardColor.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withValues(alpha: 0.5))),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.vertical_align_center_rounded, size: 16, color: accent),
+              Icon(Icons.vertical_align_center_rounded,
+                  size: 16, color: accent),
               const SizedBox(width: 8),
-              Text('Follow lyrics', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text('Follow lyrics',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -884,19 +978,26 @@ class _SyncBar extends StatelessWidget {
   final Color accent;
   final int offsetMs;
   final bool enabled;
-  const _SyncBar({required this.accent, required this.offsetMs, required this.enabled});
+  const _SyncBar(
+      {required this.accent, required this.offsetMs, required this.enabled});
 
   @override
   Widget build(BuildContext context) {
     final appState = context.read<AppState>();
-    final label = offsetMs == 0 ? 'Lyrics in sync' : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)}s';
+    final label = offsetMs == 0
+        ? 'Lyrics in sync'
+        : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)}s';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      // Wrap: the controls total ~290 dp and overflowed in a narrow lyrics pane.
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           IconButton(
-            onPressed: enabled ? () => appState.updateLyricsOffset(offsetMs - 500) : null,
+            onPressed: enabled
+                ? () => appState.updateLyricsOffset(offsetMs - 500)
+                : null,
             icon: const Icon(Icons.replay_10_rounded, size: 20),
             color: Colors.white70,
             tooltip: 'Shift lyrics 0.5s earlier',
@@ -906,11 +1007,14 @@ class _SyncBar extends StatelessWidget {
             child: Text(
               enabled ? label : 'No timing to adjust',
               textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 12),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white70, fontSize: 12),
             ),
           ),
           IconButton(
-            onPressed: enabled ? () => appState.updateLyricsOffset(offsetMs + 500) : null,
+            onPressed: enabled
+                ? () => appState.updateLyricsOffset(offsetMs + 500)
+                : null,
             icon: const Icon(Icons.forward_10_rounded, size: 20),
             color: Colors.white70,
             tooltip: 'Shift lyrics 0.5s later',
@@ -918,7 +1022,9 @@ class _SyncBar extends StatelessWidget {
           if (offsetMs != 0)
             TextButton(
               onPressed: () => appState.updateLyricsOffset(0),
-              child: Text('Reset', style: GoogleFonts.getFont(currentFontFamily, color: accent, fontSize: 12)),
+              child: Text('Reset',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: accent, fontSize: 12)),
             ),
         ],
       ),
@@ -935,7 +1041,8 @@ class _AttributionFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final parts = <String>['Lyrics via ${track.source.label}'];
     if (track.maker != null) parts.add('written by ${track.maker!.username}');
-    if (track.uploader != null) parts.add('added by ${track.uploader!.username}');
+    if (track.uploader != null)
+      parts.add('added by ${track.uploader!.username}');
     final precision = switch (track.type) {
       LyricsSyncType.syllable => 'word-synced',
       LyricsSyncType.line => 'line-synced · word timing estimated',
@@ -950,7 +1057,8 @@ class _AttributionFooter extends StatelessWidget {
           Text(
             parts.join(' · '),
             textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11),
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white60, fontSize: 11),
           ),
           if (detail != null)
             Padding(
@@ -960,7 +1068,8 @@ class _AttributionFooter extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 10),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white38, fontSize: 10),
               ),
             ),
         ],
@@ -977,7 +1086,12 @@ class _Message extends StatelessWidget {
   final String? caption;
   final bool loading;
   final VoidCallback? onRetry;
-  const _Message({required this.icon, required this.message, this.caption, this.loading = false, this.onRetry});
+  const _Message(
+      {required this.icon,
+      required this.message,
+      this.caption,
+      this.loading = false,
+      this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -988,21 +1102,38 @@ class _Message extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (loading)
-              const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white70))
+              const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.4, color: Colors.white70))
             else if (icon != null)
               Icon(icon, color: Colors.white54, size: 32),
             const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w600)),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white,
+                    fontSize: 14,
+                    height: 1.5,
+                    fontWeight: FontWeight.w600)),
             if (caption != null) ...[
               const SizedBox(height: 8),
-              Text(caption!, textAlign: TextAlign.center, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 12, height: 1.5)),
+              Text(caption!,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white60, fontSize: 12, height: 1.5)),
             ],
             if (onRetry != null) ...[
               const SizedBox(height: 16),
               OutlinedButton(
                 onPressed: onRetry,
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: kDividerColor)),
-                child: Text('Try again', style: GoogleFonts.getFont(currentFontFamily, fontSize: 13, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: kDividerColor)),
+                child: Text('Try again',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        fontSize: 13, fontWeight: FontWeight.w600)),
               ),
             ],
           ],
@@ -1033,7 +1164,11 @@ class MiniTransportBar extends StatelessWidget {
         children: [
           Hero(
             tag: 'artwork_${song.id}',
-            child: ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 40, radius: 8),
+            child: ArtworkThumb(
+                gradientColors: song.gradientColors,
+                artwork: song.artwork,
+                size: 40,
+                radius: 8),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1041,10 +1176,18 @@ class MiniTransportBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
-                Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 11)),
+                Text(song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+                Text(song.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white60, fontSize: 11)),
               ],
             ),
           ),
@@ -1052,7 +1195,8 @@ class MiniTransportBar extends StatelessWidget {
             button: true,
             label: 'Previous track',
             child: IconButton(
-              icon: const ShuroIcon(ShuroGlyph.previous, size: 22, color: Colors.white70),
+              icon: const ShuroIcon(ShuroGlyph.previous,
+                  size: 22, color: Colors.white70),
               onPressed: player.previous,
               tooltip: 'Previous',
             ),
@@ -1061,21 +1205,28 @@ class MiniTransportBar extends StatelessWidget {
             button: true,
             label: isActive && player.isPlaying ? 'Pause' : 'Play',
             child: GestureDetector(
-              onTap: () => (isActive && player.currentSong?.id == song.id) ? player.togglePlayPause() : player.playSong(song),
+              onTap: () => (isActive && player.currentSong?.id == song.id)
+                  ? player.togglePlayPause()
+                  : player.playSong(song),
               child: Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: accent),
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: accent),
                 child: player.isBuffering && isActive
                     ? const Padding(
                         padding: EdgeInsets.all(13),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : AnimatedSwitcher(
                         duration: const Duration(milliseconds: 160),
-                        transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                        transitionBuilder: (child, animation) =>
+                            ScaleTransition(scale: animation, child: child),
                         child: ShuroIcon(
-                          isActive && player.isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
+                          isActive && player.isPlaying
+                              ? ShuroGlyph.pause
+                              : ShuroGlyph.play,
                           key: ValueKey(isActive && player.isPlaying),
                           color: Colors.white,
                           size: 20,
@@ -1088,7 +1239,8 @@ class MiniTransportBar extends StatelessWidget {
             button: true,
             label: 'Next track',
             child: IconButton(
-              icon: const ShuroIcon(ShuroGlyph.next, size: 22, color: Colors.white70),
+              icon: const ShuroIcon(ShuroGlyph.next,
+                  size: 22, color: Colors.white70),
               onPressed: player.next,
               tooltip: 'Next',
             ),
