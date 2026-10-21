@@ -726,6 +726,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return Scaffold(
         backgroundColor: kSurfaceColor,
         body: Row(
+          // stretch: the rail is a scroll view, which shrink-wraps its content
+          // — with the default centred cross-axis it floated mid-screen as a
+          // short block (black gaps above and below it in landscape).
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ShuroRail(
               currentIndex: _tabIndex,
@@ -733,15 +737,23 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             ),
             const VerticalDivider(width: 1, color: kDividerColor),
             Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                      child: IndexedStack(
-                          key: _tabStackKey,
-                          index: _tabIndex,
-                          children: _tabChildren)),
-                  const MiniPlayer(),
-                ],
+              // The app draws edge to edge: in landscape the 3-button
+              // navigation bar sits on the RIGHT and used to cover the mini
+              // player's next button; a bottom gesture bar covered its seek
+              // line. The content column keeps clear of both.
+              child: SafeArea(
+                top: false,
+                left: false,
+                child: Column(
+                  children: [
+                    Expanded(
+                        child: IndexedStack(
+                            key: _tabStackKey,
+                            index: _tabIndex,
+                            children: _tabChildren)),
+                    const MiniPlayer(),
+                  ],
+                ),
               ),
             ),
           ],

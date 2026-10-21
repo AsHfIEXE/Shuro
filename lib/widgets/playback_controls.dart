@@ -73,7 +73,7 @@ class TrackInfoRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: dense ? 12.5 : 14, height: dense ? 17 / 12.5 : 20 / 14, fontWeight: FontWeight.w500),
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: dense ? 12.5 : 14, height: dense ? 17 / 12.5 : 20 / 14, fontWeight: FontWeight.w500, shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)]),
                 ),
                 if (isFavorite != null && onToggleFavorite != null) ...[
                   SizedBox(height: dense ? 2 : 6),
@@ -87,7 +87,7 @@ class TrackInfoRow extends StatelessWidget {
                       child: AnimatedFavoriteIcon(
                         isFavorite: isFavorite!,
                         activeColor: accent,
-                        inactiveColor: Colors.white38,
+                        inactiveColor: Colors.white60,
                         size: dense ? 17 : 20,
                         onTap: onToggleFavorite!,
                       ),
@@ -136,8 +136,15 @@ class PlaybackControls extends StatelessWidget {
   /// screen's bottom edge.
   final bool compact;
 
+  /// Optional widgets at the far ends of the row (e.g. shuffle / repeat), so a
+  /// short window can show the whole control cluster on one line.
+  final Widget? leading;
+  final Widget? trailing;
+
   const PlaybackControls({
     super.key,
+    this.leading,
+    this.trailing,
     required this.isPlaying,
     required this.accentColor,
     required this.onPlayPause,
@@ -155,6 +162,7 @@ class PlaybackControls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        if (leading != null) ...[leading!, SizedBox(width: gap * 0.5)],
         Semantics(
           button: true,
           label: 'Previous track',
@@ -213,6 +221,7 @@ class PlaybackControls extends StatelessWidget {
             tooltip: 'Next',
           ),
         ),
+        if (trailing != null) ...[SizedBox(width: gap * 0.5), trailing!],
       ],
     );
   }

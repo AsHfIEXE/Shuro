@@ -144,14 +144,23 @@ class QueueScreen extends StatelessWidget {
                         ),
                 ),
                 if (upNext.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: player.clearQueue,
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent.shade100, side: const BorderSide(color: kDividerColor)),
-                        child: const Text('Clear Queue'),
+                  // SafeArea: the button sat under the Android navigation bar
+                  // (edge-to-edge app), where it was both covered and unreadable.
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: player.clearQueue,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent.shade100,
+                            backgroundColor: Colors.redAccent.withValues(alpha: 0.10),
+                            side: BorderSide(color: Colors.redAccent.shade100.withValues(alpha: 0.55)),
+                          ),
+                          child: const Text('Clear Queue'),
+                        ),
                       ),
                     ),
                   ),
