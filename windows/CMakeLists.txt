@@ -32,6 +32,12 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# just_audio_windows (0.2.x) still uses <experimental/coroutine>. Current MSVC
+# turns that into a hard error (STL1011). Silence it for the plugin targets
+# until either the plugin is replaced by a maintained Windows audio backend or
+# we move the desktop player to media_kit. Documented in the README.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
