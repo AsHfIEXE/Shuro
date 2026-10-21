@@ -54,6 +54,7 @@ dependencies:
   # honest limitation worth upgrading to flutter_secure_storage later, not
   # something papered over here.
   shared_preferences: ^2.3.3
+  just_audio_windows: ^0.2.3
 
 dev_dependencies:
   flutter_test:

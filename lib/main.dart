@@ -84,18 +84,27 @@ Future<void> main() async {
   // blank" freeze. After 8 s we give up on the media session and start the
   // app anyway; in-app playback still works, and a user can always stop the
   // stray service from the notification.
+  // The media-session layer (audio_service) exists on Android and iOS only.
+  // On Windows/macOS/Linux playback comes from the platform implementation of
+  // just_audio (just_audio_windows on Windows) and there is no notification
+  // service to start, so skip it instead of letting a missing plugin throw.
+  final bool hasMediaSession = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
   try {
-    await JustAudioBackground.init(
-      androidNotificationChannelId: 'com.shuro.audio.channel',
-      androidNotificationChannelName: 'Shuro playback',
-      // Shown in Android's notification settings under the channel, where the
-      // per-app look of the media notification is also controlled.
-      androidNotificationChannelDescription:
-          'Now playing information and playback controls.',
-      androidNotificationOngoing: true,
-      androidNotificationIcon: 'mipmap/ic_launcher',
-      androidShowNotificationBadge: true,
-    ).timeout(const Duration(seconds: 8));
+    if (hasMediaSession) {
+      await JustAudioBackground.init(
+        androidNotificationChannelId: 'com.shuro.audio.channel',
+        androidNotificationChannelName: 'Shuro playback',
+        // Shown in Android's notification settings under the channel, where the
+        // per-app look of the media notification is also controlled.
+        androidNotificationChannelDescription:
+            'Now playing information and playback controls.',
+        androidNotificationOngoing: true,
+        androidNotificationIcon: 'mipmap/ic_launcher',
+        androidShowNotificationBadge: true,
+      ).timeout(const Duration(seconds: 8));
+    }
   } on TimeoutException {
     debugPrint(
         'JustAudioBackground.init timed out — starting without system media controls; is an old audio service still running?');

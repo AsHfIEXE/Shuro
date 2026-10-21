@@ -197,6 +197,29 @@ Vorbis tag enrichment — artwork, palettes and the same player pipeline.
 Targets Android API 24+ on 3 GB RAM devices and up. The same code runs as
 desktop and web builds.
 
+### Windows desktop
+
+The windows/ target is scaffolded and playback uses the platform
+implementation of just_audio (just_audio_windows). Building it needs two
+machine-level prerequisites, both one-time:
+
+1. **Developer Mode** (Windows Settings → Privacy & security → For developers)
+   — Flutter needs symlink support for plugin links.
+2. **Visual Studio 2022** with the *Desktop development with C++* workload
+   (the Flutter Windows toolchain).
+
+Then:
+
+`ash
+flutter config --enable-windows-desktop
+flutter build windows --release   # build/windows/x64/runner/Release/
+`
+
+What works on Windows: library browsing, streaming from your server, local
+files, Pulse, lyrics, equalizer UI (system EQ is Android-only — the sheet says
+so), offline downloads. System media keys / lock-screen controls are a mobile
+media-session feature and are simply absent, not broken.
+
 ---
 
 ## 🚀 Getting started
