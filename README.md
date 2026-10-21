@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20desktop%20%C2%B7%20web-8A5CF6" alt="platform" />
+  <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux-8A5CF6" alt="platform" />
   <img src="https://img.shields.io/badge/Flutter-3.47-02569B" alt="Flutter" />
-  <img src="https://img.shields.io/badge/tests-160%2B%20%C2%B7%2040k%20chaos%20actions-2EA043" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-143%20cases%20%C2%B7%2012%20suites-2EA043" alt="tests" />
   <img src="https://img.shields.io/badge/telemetry-none-2EA043" alt="no telemetry" />
   <img src="https://img.shields.io/badge/streams-format%3Draw%20%26%23x2014%3B%20no%20hidden%20transcode-F5A623" alt="original quality" />
 </p>
@@ -15,7 +15,7 @@
 **Shuro** is a fast, dark, cinematic music player for people who run their own
 server. It speaks the **Subsonic / OpenSubsonic API** — built for
 **Navidrome** and every compatible server — and plays your **local files**
-with real tag support. One library, every source.
+with real ID3v2 / FLAC tag support. One library, every source, every screen.
 
 No accounts. No telemetry. No transcoding unless you ask for it.
 
@@ -28,40 +28,44 @@ No accounts. No telemetry. No transcoding unless you ask for it.
 - **Adaptive artwork backdrop** — a slow-breathing mesh gradient generated
   from each track's own palette, with the cover blurred into it. Tune the
   blur, pick the motion speed (Normal · Subtle · Lively), or switch it off.
-- **Karaoke lyrics** — word-by-word fill or line-by-line highlight, from
-  LRCLIB or your files' embedded tags. Tap a line to seek, nudge sync
-  ±0.5 s, and read without being dragged: auto-follow can only move the
-  lyric list itself, never the page.
+- **Karaoke lyrics** — word-by-word fill or line-by-line highlight. Sources:
+  your files' embedded OpenSubsonic tags, embedded LRC, and **LRCLIB** (exact
+  match → search → best-candidate scoring, with ±2 s duration tolerance).
+  Honors the `[offset:±ms]` tag, `[AU: instrumental]` markers, and real
+  enhanced-LRC word timestamps. Tap a line to seek; nudge sync ±0.5 s.
 - **A positional cue, not just bold** — the sung line carries an accent
   caret (left-aligned) or underline (centred), with a 78 % / 60 % contrast
-  ladder for upcoming and past lines — repeated lines ("oh oh oh") are
-  unambiguous.
-- **Scrubbing artwork ring** — the progress bar *is* the artwork: a white
-  knob with a glow marks the position, grows while you drag, and previews
-  the target before a single seek is issued on release.
-- **Split-screen landscape** — player left, live lyrics right, the sung
-  line always in view; a bottom transport stays in the full lyrics view.
-- **Sleep timer suite** — presets, a custom clock picker (*"pause at 12:17"*
-  means exactly that, tomorrow if it already passed), *End of track*,
-  *End of queue*, fade-out, +10 minutes, live countdown, cancel-safe.
-- **Immersive mode** that re-asserts itself after rotation.
+  ladder — repeated lines ("oh oh oh") are unambiguous.
+- **Reading mode** — scroll up into earlier lines and auto-follow steps aside
+  completely; a Resume chip brings it back. Tapping a line seeks *and*
+  re-follows.
+- **Scrubbing artwork ring** — the progress bar *is* the artwork: a glowing
+  knob marks the position, grows while you drag, previews the target, and
+  commits **one seek on release**.
+- **Split-screen landscape & two-pane wide** — player left, live lyrics
+  right on phones; a true two-pane layout ≥1024 dp.
+- **Audio Info that tells the truth** — file codec/bit depth/sample
+  rate/channels/bitrate (with provenance), the request actually made
+  (original vs capped), effects applied, the classified output route, the
+  platform's direct-playback answer with mode, and the **output device's
+  accepted sample rates, channel counts and PCM encodings**. A live stream
+  probe shows what the server *actually sends* vs what you asked for.
+  Unknowns read "not reported" — never a guess, never a "bit-perfect" claim.
+- **Sleep timer suite** — 15/30/45/60/90 presets, a custom clock picker
+  (*"pause at 12:17"*), *End of track*, *End of queue*, 0–60 s fade-out,
+  +10 min extend, live countdown, cancel-safe generation guard.
+- **Volume sheet** — system media volume with an honest player-volume
+  fallback (web), drag pill with % bubble, mute that restores pre-mute,
+  haptics at 0/100 %.
 
-### 🎚️ Audiophile controls — real DSP, honest reporting
+### 🖥️ Multi-server, one library
 
-- **System equalizer (Android)** — the player is built with an
-  `AudioPipeline` carrying Android's `AndroidEqualizer`, so EQ is a
-  multi-band system effect applied before the mixer, not a volume trick.
-  Bands persist across restarts, flat-reset included; unsupported
-  platforms say so instead of showing dead sliders.
-- **While EQ is on**, the sheet states plainly that Android is processing
-  the audio, so direct/bit-perfect USB output is not in use.
-- **Audio Info that tells the truth** — file codec/bitrate/channels, the
-  request actually made (original vs capped), the classified output route,
-  the platform's direct-playback answer, and the **output device's accepted
-  sample rates, channel counts and PCM encodings**. Unknowns read
-  "not reported" — never a guess, and never a "bit-perfect" claim.
-- **Original quality by default** — streams request the file's own bytes
-  (`format=raw`); High/Medium/Low caps exist for metered connections.
+Several servers **merge into one collection**: songs, albums, artists,
+genres and playlists side by side, deduplicated (title+artist+duration
+identity, first server wins), with per-server enable switches in Settings
+and **per-song routing** that streams from whichever server owns the track —
+even mid-queue. Servers connect in parallel with per-server timeouts, and a
+dead server never takes the library down.
 
 ### 🧠 Shuro Pulse — recommendations that rotate, not repeat
 
@@ -70,83 +74,102 @@ No accounts. No telemetry. No transcoding unless you ask for it.
 | 🕐 Session rotation | Every launch re-seeds every list — fresh mix, stable while you listen |
 | 📈 Recency decay | Recently heard tracks sink; unheard ones rise |
 | 🎨 Genre-affinity graph | Genres score by the taste of the songs living in them |
+| ❤️ Feedback loop | More-like / Less-like / Not-interested on recommendations feed artist affinity |
 | 🌙 Time-of-day | Late night leans mellow, evening leans energy |
 | 🎭 Diversity cap | Max 2 tracks per artist until everyone had a turn |
 | 🧭 Anti-echo | Because-You-Like favours under-listened artists near your taste |
 
-Rows **never come back thin**: For You and Tonight's Flow guarantee their
-length, Rediscover tops up, and Because-You-Like / Deep Cuts have honest
-local-library fallbacks instead of empty sections. Results are memoized per
-library signature + hour, so Pulse never janks a frame.
+Rows are **memoized per library signature + hour** (no frame jank) and
+**guaranteed their length** — small and single-artist libraries fill too.
 
-**Discover rows:** For You · Tonight's Flow · Because You Like <artist> ·
-Rediscover · Deep Cuts · Fresh From Your Library.
+**Discover:** For You · Tonight's Flow (24-track generated session) ·
+Because You Like <artist> · Rediscover · Deep Cuts · Fresh From Your
+Library.
 
 ### 🪄 Ask for a mood, get a mix
 
 - **Build with Shuro** — *"something calm for studying"*, *"high energy for
-  the gym"* → a ranked queue.
+  the gym"* → a ranked 20-track queue; artist mentions narrow it.
 - **Build from this** — every song is a seed: Similar · Same era · Deeper
-  cuts · Surprise me · Smooth continuation.
+  cuts · Surprise me · Smooth continuation (duration-budgeted).
 - **10 Smart Playlists** — Rediscover, Deep Cuts, Late Night, Favorites Mix,
   Recently Added, Forgotten Favorites, High Energy, Chill, Focus, Long
   Drive. Re-evaluated live, never a stale stored list.
-
-### 🖥️ Multi-server, one library
-
-Several servers **merge into one collection** — songs, albums, artists and
-playlists side by side, deduplicated, per-server switches in Settings, and
-per-song routing that keeps playing across a server switch.
+- **Feedback buttons** on recommendations (More like / Less like) feed the
+  affinity graph.
 
 ### 🔀 Shuffle that means what it says
 
-Turning shuffle **on** shuffles what's ahead while the playing track stays
-put; the native queue is re-laid in that order so **"Up next" is exactly
-what plays**; turning it **off restores the saved queue order**. Queue
-integrity is enforced by the chaos harness — the playing track can never
-leave the queue.
+On: shuffles what's ahead, pins the playing track first, re-lays the native
+window so **"Up next" is exactly what plays**. Off: restores the saved order
+when it still contains the playing track. Queue integrity is enforced by the
+chaos harness.
 
-### 📥 Real offline. Real quality.
+### 📥 Real offline. Real tags. Real quality.
 
-Original-quality downloads that survive app updates (or any folder you
-pick), automatic download-preferred playback, and a cache-first library
-that works in airplane mode.
+- Original `format=raw` bytes downloaded to storage that survives app
+  updates (or any folder you pick), real byte progress, cancel with file
+  cleanup, Wi-Fi-only guard.
+- Download-preferred playback automatically; cache-first library works in
+  airplane mode.
+- **Local files are first-class**: recursive folder import, pure-Dart
+  ID3v2.2/2.3/2.4 + FLAC Vorbis parsing (title/artist/album/genre/artwork),
+  "Artist - Title" filename fallback, palette extraction — same pipeline as
+  server tracks.
 
 ### 🔊 Serious playback engineering
 
-- Windowed native queue — instant starts even in huge queues, gapless
-  hand-off, full lock-screen / Bluetooth / **Android Auto** controls.
-- Fade between songs, speed 0.75×–2×, skip silence, ReplayGain from your
-  server's tags.
-- **Direct streaming** — the loopback proxy only engages when the DNS
-  health check fails; a healthy network streams straight to the engine, and
-  `Range` requests are honoured so seeking doesn't re-download.
+- **Windowed native queue**: 12 before / 15 after the playhead (whole queue
+  ≤60), inserted and removed in place — instant starts, gapless hand-off,
+  no reloads. Full lock-screen / Bluetooth / **Android Auto** controls.
+- Play next · add to queue · reorder · remove · clear · shuffle · **restore
+  queue + position across launches** · autoplay suggestions past the end.
+- Fade between songs (2/4/6 s), speed 0.75×–2×, skip silence, ReplayGain
+  from your server's tags.
 - **Scrobbles that count** — now-playing ping, Last.fm's documented rule
-  (submit at 50 % or 4 min, skip ≤30 s), ordered persistent queue with
-  retry, plus Navidrome play reporting.
-- **Wrong-song self-heal** — if engine and UI ever disagree, Shuro detects
-  and resyncs in the background.
+  (submit at 50 % or 4 min, skip ≤30 s), corrected timestamps, ordered
+  persistent queue (cap 500, batches ≤50) with error-aware retry/re-auth,
+  plus Navidrome play reporting. Optional "send loves to Last.fm".
+- **Wrong-song self-heal** — if engine and app ever disagree about the
+  track, Shuro detects and resyncs, and logs it.
+- Stream probe verifies what the server actually sends (206 range support,
+  served format vs tagged format).
+
+### 🎚️ Honest audio reporting
+
+- Quality tiers: **Original** (`format=raw`, never silently downgraded) or
+  explicit High/Medium/Low caps — with a request-vs-served check that flags
+  transcodes.
+- Output path: classified route, **direct-playback support and mode**
+  (offload/bitstream, API 33+), the output device's accepted **sample rates,
+  channel counts and PCM encodings**, hi-res-PCM and USB status as
+  requested/accepted.
+- Never claims "bit-perfect": Shuro reports what the platform answers.
 
 ### 📐 Adaptive to every window
 
 - **Navigation rail in every landscape window** (from 400 dp wide) and on
   portrait tablets/foldables from 720 dp; bottom bar only on portrait
-  phones, where it costs nothing.
+  phones.
 - Rail width scales **86 / 104 / 116 dp**; below **420 dp tall** it goes
   icon-only, hides the logo and scrolls — no overflow stripes at any size.
-- Tab state survives the rail↔bar switch (shared key), sheets are
-  height-bounded and scroll, and rows that can't fit wrap instead of
-  overflowing.
-- Song rails measure the user's **text scale**, so large system fonts don't
-  clip cards.
+- Tab state survives the rail↔bar switch; sheets are height-bounded and
+  scroll; rows wrap instead of overflowing; song rails follow the user's
+  **text scale**.
+- **Desktop shell** (Windows/Linux): sidebar navigation, a persistent
+  now-playing bar with preview-then-commit seeking and volume, a lyrics
+  side panel, and keyboard shortcuts (Space, Ctrl+←/→, Ctrl+1–5, Ctrl+L).
 
 ### 🔒 Privacy that isn't a promise, it's a design
 
 - First-launch **consent screen** listing exactly what leaves the device.
 - **Zero telemetry**: no analytics SDK, no crash uploader, no ads.
-- Credentials in **encrypted secure storage**.
+- Server passwords in **encrypted secure storage** (Android
+  `encryptedSharedPreferences`; Linux uses libsecret).
 - **Report a problem** exports a *redacted* event log (last 300 playback
-  events, URLs and credentials scrubbed) — you choose where it goes.
+  events; `u=`/`t=`/`s=`/`p=` params scrubbed; re-redacted on export) —
+  copy or share, nothing sent on its own.
+- Memory-pressure aware: caches drop on `onTrimMemory` so playback survives.
 
 ---
 
@@ -154,72 +177,44 @@ that works in airplane mode.
 
 | Screen | What you'll see |
 |---|---|
-| **Splash → Onboarding** | Animated dark launch on the brand mark, welcome, consent, guided server setup |
-| **Home** | Pulse rows that change every session, recent queues, quick jumps |
-| **Library** | Songs · Albums · Artists · Genres · Playlists · Local — sort and Play/Shuffle everywhere |
-| **Album & Artist detail** | Full discographies, artist pages, server artwork |
-| **Collections** | Curated server groupings, browsed like native playlists |
-| **Now Playing** | Breathing backdrop, karaoke lyrics with caret cue, scrubbing ring, quick actions (Queue · Sleep · Volume · Audio info) |
-| **Lyrics** | Full-screen word-fill karaoke, sync nudge, tap-to-seek, reading mode that never yanks you back |
-| **Queue** | Reorder, remove, play-next, clear, shuffle — resumes exactly where you left off after a reboot |
-| **Discover** | Six Pulse rows + Smart Playlists + Build with Shuro |
-| **Favorites & Downloads** | Two-way favourites with your server; downloads hub with real progress and storage control |
-| **Playlists** | Create locally, edit server playlists (owner-gated), save your queue as a playlist |
-| **Search** | Instant, across songs, albums, artists, genres and playlists |
-| **Settings** | Servers, quality tiers, playback, **Equalizer**, appearance (fonts, artwork styles, motion, blur), downloads, About with device facts, licences and Report a problem |
+| **Splash → Onboarding** | Animated brand launch, welcome with one-tap reconnects, consent, guided server setup (password visibility, per-row connect states) |
+| **Home** | Greeting by time of day, search pill, Downloads + avatar, real pull-to-refresh, Pulse rails, recently played/added, favorites |
+| **Library** | Songs (count, Play all, Shuffle, 3 sorts) · Albums · Artists (auto-resolved artwork) · Genres (gradient tiles) · Playlists (local + server) · Local — per-tab pull-to-refresh |
+| **Album & Artist detail** | Discography and artist pages, per-item action sheets (shuffle, download, favourite, rating) |
+| **Now Playing** | Breathing backdrop, karaoke lyrics with caret cue, scrubbing ring, ⋮ actions, quick actions (Queue · Sleep · Volume · Audio info) |
+| **Lyrics** | Full-screen word-fill karaoke, sync nudge, tap-to-seek, reading mode, embedded compact preview |
+| **Queue** | Now-playing row, reorderable Up-Next, per-row actions, Clear, Save-as-playlist |
+| **Discover** | Six Pulse rows + Smart Playlists + Build with Shuro + feedback buttons |
+| **Favorites** | Tabbed Songs / Albums / Artists |
+| **Downloads** | Stats card, location picker, per-song remove/cancel, original-quality note |
+| **Playlists** | Create with photo cover or auto-collage, rename/delete, server playlist management, save queue as playlist |
+| **Search** | Live grouped results, recent-search chips |
+| **Settings** | Servers, quality per network, **Equalizer**, crossfade/ReplayGain/speed/skip-silence, lyrics options, downloads, cache, appearance (fonts, artwork styles, motion, blur, immersive), behaviour (autoplay, resume), performance profile, rescan, reset, About with device facts, Report a problem, licences |
 
 Dark-only by design. Skeletons for every loading state. Reduce-animations
-honoured everywhere — and the Performance profile disables motion, blur and
-the per-frame ring ticker for low-RAM devices.
-
-**Personalization:** font family picker, artwork styles, backdrop blur and
-motion, profile avatar editor, adaptive launcher icon and animated splash.
-
-**Local files are first-class:** recursive folder import with ID3v2 / FLAC
-Vorbis tag enrichment — artwork, palettes and the same player pipeline.
+honoured everywhere. Personalization: font family picker, artwork styles
+(square/rounded/circle), blur + motion tuning, profile avatar editor
+(pinch/pan/rotate crop), adaptive launcher icon, animated splash.
 
 ---
 
 ## ⚡ Built the hard way
 
-- 🧪 **160+ tests**, including a **seeded chaos harness** firing **40,000
-  random playback actions** (skips, seeks, queue edits, injected failures)
-  with invariants asserted after every action — any failure reproduces from
-  its seed.
-- 🩺 A **redacted event log** + Report a problem, so bug reports are
-  evidence rather than vibes.
+- 🧪 **143 test cases across 12 suites**, including a **seeded chaos
+  harness** (20 seeds × 2,000 random actions = **40,000 actions** with
+  invariants asserted after every one — any failure reproduces from its
+  seed), lyrics parser suite (39 tests: formats, offsets, word sync,
+  instrumental, tolerance), scrobble/error-routing tests, capability-monitor
+  tests, and layout tests from 320×568 to 1920×1080.
+- 🩺 A **redacted event log** (300-event ring) + **Report a problem** export,
+  so bug reports are evidence rather than vibes.
 - ⏱️ Startup that **cannot hang**: every boot dependency has a hard timeout.
-- 📐 Layouts verified from 320×568 phones to tablets, TVs and landscape,
-  plus large-font and narrow-split-screen cases.
-- 📄 Engineering notes in the repo: `docs/playback-audit.md`,
-  `docs/audio-feature-review.md`, `docs/perf-report.md`.
+- 🩹 **Self-healing**: engine↔app desync detection, dead-source retry,
+  stream-error surfacing, queue-state adoption after engine restart.
+- 🧹 **Zero analyzer issues** (fatal-warning CI gate) across the whole repo.
 
-Targets Android API 24+ on 3 GB RAM devices and up. The same code runs as
-desktop and web builds.
-
-### Windows desktop
-
-Windows and Linux playback uses the **libmpv** backend through
-Media Kit. Shuro keeps its tested queue/controller API while both desktop
-platforms share the same decoder for server streams and local files.
-Building Windows needs two machine-level prerequisites, both one-time:
-
-1. **Developer Mode** (Windows Settings → Privacy & security → For developers)
-   — Flutter needs symlink support for plugin links.
-2. **Visual Studio 2022** with the *Desktop development with C++* workload
-   (the Flutter Windows toolchain).
-
-Then:
-
-`ash
-flutter config --enable-windows-desktop
-flutter build windows --release   # build/windows/x64/runner/Release/
-`
-
-What works on Windows: library browsing, streaming from your server, local
-files, Pulse, lyrics, equalizer UI (system EQ is Android-only — the sheet says
-so), offline downloads. System media keys / lock-screen controls are a mobile
-media-session feature and are simply absent, not broken.
+Targets Android API 24+ on 3 GB RAM devices and up. Windows and Linux
+desktop builds are produced by CI.
 
 ---
 
@@ -229,28 +224,28 @@ media-session feature and are simply absent, not broken.
    only). Multiple servers welcome; credentials are stored encrypted.
 2. **Listen** — tap any song. Portrait gives the ring and lyric preview;
    landscape splits player + lyrics.
-3. **Make it yours** — quality tiers, fade, ReplayGain, speed, skip silence,
-   **equalizer bands**, backdrop motion, fonts, downloads location, sleep
-   defaults.
+3. **Make it yours** — quality tiers, fade, ReplayGain, speed, skip
+   silence, equalizer, backdrop motion, fonts, artwork styles, downloads
+   location, sleep defaults.
 
 ### Build from source
 
 ```bash
 flutter pub get
-flutter test                # includes the seeded chaos suite
-flutter build apk --release # build/app/outputs/flutter-apk/app-release.apk
-flutter build appbundle --release  # Play upload artifact
+flutter test --no-pub          # 143 cases + chaos suite
+flutter build apk --release            # Android
+flutter build appbundle --release      # Play upload
+flutter build windows --release        # Windows (needs VS C++ + Developer Mode)
+flutter build linux --release          # Linux (needs GTK3/libmpv dev packages)
 ```
 
-Pull requests and pushes to `main` run analysis, the full test suite, and
-release builds for Android, Windows, and Linux. A GitHub Release is created
-only from a `v<pubspec-version>` tag or a manual run with **Publish** enabled,
-after every platform artifact succeeds and Android signing is configured.
+### CI/CD
 
-For signed Android releases, add these GitHub Actions secrets:
-`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-and `ANDROID_KEY_PASSWORD`. The workflow publishes a `SHA256SUMS.txt` file
-alongside the APK, AAB, Windows installer, and Debian/Ubuntu package.
+Pushes to `main` run analyze + the full test suite, then build **Android
+(APK + AAB)**, **Windows** (InnoSetup installer) and **Linux (.deb package)**
+artifacts. Signed Android releases and tagged publishes (`v<version>`)
+require repository secrets — see the workflow and
+`docs/audio-feature-review.md`.
 
 ---
 
@@ -289,4 +284,8 @@ Open-source packages are listed in-app: **Settings → About → Open source
 licenses**. External services are credited under **Settings → About →
 Services & data sources**.
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CHANGELOG.md](CHANGELOG.md) for release history,
+[docs/playback-audit.md](docs/playback-audit.md) for the playback audit,
+[docs/audio-feature-review.md](docs/audio-feature-review.md) for audio
+decisions, and [docs/perf-report.md](docs/perf-report.md) for measured
+performance.
