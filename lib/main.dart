@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:provider/provider.dart';
 import 'app_info.dart';
 import 'backend/subsonic_api.dart';
@@ -31,6 +32,12 @@ Future<void> main() async {
   // limits before any artwork decodes. Non-fatal — a missing prefs store
   // must never block boot.
   unawaited(DeviceProfileService.applyStoredOnBoot());
+
+  // Desktop audio backends. Linux has no just_audio implementation, so the
+  // media_kit (libmpv) bridge supplies one; Windows uses just_audio_windows.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux) {
+    JustAudioMediaKit.ensureInitialized(linux: true);
+  }
   debugPrint('[boot] binding ready');
 
   // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
