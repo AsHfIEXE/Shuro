@@ -18,6 +18,7 @@ class PlaybackPrefs extends ChangeNotifier {
   static const String _kReplayGain = 'playback_replay_gain_v1';
   static const String _kSpeed = 'playback_speed_v1';
   static const String _kSkipSilence = 'playback_skip_silence_v1';
+  static const String _kAppVolume = 'playback_app_volume_v1';
 
   /// 0 = off. Otherwise the fade length in seconds (2/4/6 in the picker).
   int crossfadeSeconds = 0;
@@ -30,6 +31,11 @@ class PlaybackPrefs extends ChangeNotifier {
 
   bool skipSilence = false;
 
+  /// Shuro's own output level. This is deliberately separate from the OS
+  /// media volume: desktop users can lower Shuro without changing the volume
+  /// of other applications.
+  double appVolume = 1.0;
+
   bool _restored = false;
 
   Future<void> restore() async {
@@ -41,6 +47,7 @@ class PlaybackPrefs extends ChangeNotifier {
       replayGain = prefs.getBool(_kReplayGain) ?? replayGain;
       playbackSpeed = prefs.getDouble(_kSpeed) ?? playbackSpeed;
       skipSilence = prefs.getBool(_kSkipSilence) ?? skipSilence;
+      appVolume = (prefs.getDouble(_kAppVolume) ?? appVolume).clamp(0.0, 1.0);
       notifyListeners();
     } catch (_) {
       // No storage: defaults.
@@ -77,5 +84,14 @@ class PlaybackPrefs extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kSkipSilence, value);
+  }
+
+  Future<void> setAppVolume(double value) async {
+    final next = value.clamp(0.0, 1.0);
+    if (appVolume == next) return;
+    appVolume = next;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kAppVolume, next);
   }
 }

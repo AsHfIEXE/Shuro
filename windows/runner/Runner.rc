@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.shuro" "\0"
-            VALUE "FileDescription", "shuro" "\0"
+            VALUE "CompanyName", "AsHfIEXE" "\0"
+            VALUE "FileDescription", "Shuro music player" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "shuro" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.shuro. All rights reserved." "\0"
+            VALUE "InternalName", "Shuro" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 AsHfIEXE. All rights reserved." "\0"
             VALUE "OriginalFilename", "shuro.exe" "\0"
-            VALUE "ProductName", "shuro" "\0"
+            VALUE "ProductName", "Shuro" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

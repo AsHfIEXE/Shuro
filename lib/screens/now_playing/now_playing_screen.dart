@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
+import '../../services/playback_prefs.dart';
 
 import '../../models/download_state.dart';
 import '../../models/song.dart';
@@ -1508,8 +1509,14 @@ class _VolumeSheetState extends State<_VolumeSheet> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      _systemTried = true; // browsers: player-volume fallback immediately
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
+    if (kIsWeb || isDesktop) {
+      // Desktop controls Shuro's own output. System volume would alter every
+      // other Windows/Linux app, which is surprising and not what this
+      // player affordance promises.
+      _systemTried = true;
       return;
     }
     try {
@@ -1559,7 +1566,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
         await VolumeController.instance.setVolume(v);
       } catch (_) {}
     } else {
-      await widget.player.setPlayerVolume(v);
+      await context.read<PlaybackPrefs>().setAppVolume(v);
     }
   }
 
@@ -1766,7 +1773,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
                 ? 'System media volume'
                 : (kIsWeb
                     ? 'Player volume — in a browser the tab/speaker volume is the system control'
-                    : 'Player volume — this device did not expose its system control'),
+                    : 'Shuro volume — does not change other applications'),
             style: GoogleFonts.getFont(currentFontFamily,
                 color: kMutedTextColor, fontSize: 11.5),
           ),

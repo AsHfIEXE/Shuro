@@ -498,7 +498,15 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   bool _fadingOut = false;
 
+  /// Gain contributed by ReplayGain. Kept separately so the user-controlled
+  /// app level is never overwritten when a song changes.
+  double _contentVolume = 1.0;
+
+  /// The effective engine level: content gain multiplied by the Shuro app
+  /// volume. Fade/sleep operations work from this value without touching the
+  /// operating system's global media volume.
   double _targetVolume = 1.0;
+  double _appVolume = 1.0;
 
   /// Applies the per-track playback settings: speed, skip-silence (Android),
   /// replay-gain volume and the crossfade fade-in. Everything guarded — a
@@ -526,7 +534,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
               .clamp(0.0, 1.25);
         }
       }
-      _targetVolume = volume;
+      _contentVolume = volume;
+      _targetVolume = volume * _appVolume;
 
       if (crossfadeSeconds > 0) {
         // Fade-in over the crossfade window, in a few steps.
@@ -538,17 +547,17 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           await Future<void>.delayed(
               Duration(milliseconds: crossfadeSeconds * 1000 ~/ steps));
           try {
-            await _audioPlayer.setVolume(volume * (s / steps));
+            await _audioPlayer.setVolume(_targetVolume * (s / steps));
           } catch (_) {}
         }
       } else {
         try {
-          await _audioPlayer.setVolume(volume);
+          await _audioPlayer.setVolume(_targetVolume);
         } catch (_) {}
       }
     } catch (_) {
       try {
-        await _audioPlayer.setVolume(1.0);
+        await _audioPlayer.setVolume(_appVolume);
       } catch (_) {}
     }
   }
@@ -1454,15 +1463,18 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     notifyListeners();
   }
 
-  /// Player-level output level (0..1). Used by the volume sheet's honest
-  /// fallback when the system-volume plugin is unavailable (browsers): a
-  /// REAL control of the player's own volume, never a fake one.
-  double get playerVolume => _audioPlayer.volume;
+  /// Shuro's player-level output (0..1). Unlike the old desktop slider this
+  /// never writes Windows/Linux system volume. [PlaybackPrefs] persists it;
+  /// the player only owns application of the live value.
+  double get playerVolume => _appVolume;
 
   Future<void> setPlayerVolume(double value) async {
+    _appVolume = value.clamp(0.0, 1.0);
+    _targetVolume = _contentVolume * _appVolume;
     try {
-      await _audioPlayer.setVolume(value.clamp(0.0, 1.0));
+      await _audioPlayer.setVolume(_targetVolume);
     } catch (_) {}
+    notifyListeners();
   }
 
   /// Sleep timer: fade (optionally), pause, restore volume. The UI reads

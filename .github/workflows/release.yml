@@ -185,18 +185,27 @@ jobs:
           $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^\+]+)' | Select-Object -First 1).Matches[0].Groups[1].Value.Trim()
           @"
           [Setup]
+          AppId={{A9E8CCB8-132B-4F6F-B01E-30AF1F18DF8A}
           AppName=Shuro
           AppVersion=$version
           AppPublisher=AsHfIEXE
+          AppPublisherURL=https://github.com/AsHfIEXE/Shuro
+          AppSupportURL=https://github.com/AsHfIEXE/Shuro/issues
+          AppUpdatesURL=https://github.com/AsHfIEXE/Shuro/releases
           DefaultDirName={autopf}\Shuro
           DefaultGroupName=Shuro
+          DisableProgramGroupPage=yes
           SetupIconFile=windows\runner\resources\app_icon.ico
           OutputDir=.
           OutputBaseFilename=Shuro-Setup-x64
+          WizardStyle=modern
+          CloseApplications=yes
+          RestartApplications=no
           Compression=lzma2
           SolidCompression=yes
           ArchitecturesAllowed=x64
           ArchitecturesInstallIn64BitMode=x64
+          UninstallDisplayName=Shuro
           UninstallDisplayIcon={app}\shuro.exe
 
           [Tasks]
@@ -207,6 +216,7 @@ jobs:
 
           [Icons]
           Name: "{autoprograms}\Shuro"; Filename: "{app}\shuro.exe"
+          Name: "{autoprograms}\Shuro\Uninstall Shuro"; Filename: "{uninstallexe}"
           Name: "{autodesktop}\Shuro"; Filename: "{app}\shuro.exe"; Tasks: desktopicon
 
           [Run]

@@ -439,6 +439,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         player.replayGainEnabled = playbackPrefs.replayGain;
         player.playbackSpeed = playbackPrefs.playbackSpeed;
         player.skipSilence = playbackPrefs.skipSilence;
+        unawaited(player.setPlayerVolume(playbackPrefs.appVolume));
         unawaited(player.applyPlaybackTweaksNow());
       }
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:volume_controller/volume_controller.dart';
 
 import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
@@ -11,6 +10,7 @@ import '../screens/now_playing/lyrics_screen.dart';
 import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../services/playback_prefs.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
@@ -513,36 +513,10 @@ class _PlayerDock extends StatefulWidget {
 }
 
 class _PlayerDockState extends State<_PlayerDock> {
-  double _volume = .8;
-  bool _volumeReady = false;
-
-  @override
-  void initState() {
-    super.initState();
-    try {
-      VolumeController.instance.showSystemUI = false;
-      VolumeController.instance.getVolume().then((value) {
-        if (mounted) {
-          setState(() {
-            _volume = value;
-            _volumeReady = true;
-          });
-        }
-      }).catchError((_) {});
-    } catch (_) {}
-  }
-
-  void _setVolume(double value) {
-    final next = value.clamp(0.0, 1.0);
-    setState(() => _volume = next);
-    try {
-      VolumeController.instance.setVolume(next);
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
+    final playbackPrefs = context.watch<PlaybackPrefs>();
     final appState = context.watch<AppState>();
     final song = player.currentSong;
     if (song == null) return const _EmptyPlayerDock();
@@ -601,9 +575,9 @@ class _PlayerDockState extends State<_PlayerDock> {
               if (!compact) ...[
                 const SizedBox(width: 10),
                 _VolumeControl(
-                  volume: _volume,
-                  enabled: _volumeReady,
-                  onChanged: _setVolume,
+                  volume: playbackPrefs.appVolume,
+                  enabled: true,
+                  onChanged: playbackPrefs.setAppVolume,
                 ),
                 IconButton(
                   tooltip: 'Lyrics',
