@@ -137,3 +137,41 @@ jobs:
               await github.rest.git.deleteRef({ owner, repo, ref: `tags/${r.tag_name}` })
                 .catch(() => {});
             }
+
+  # Windows desktop build. GitHub's windows-latest image already carries the
+  # Visual Studio C++ toolchain Flutter needs; the artifact is a runnable
+  # folder architected as a zip, so a desktop build exists without a local
+  # Visual Studio install.
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.6
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Build Windows (release)
+        run: flutter build windows --release
+
+      - name: Package portable folder
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* `
+            -DestinationPath Shuro-windows-x64.zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shuro-windows-x64
+          path: Shuro-windows-x64.zip
