@@ -33,10 +33,14 @@ Future<void> main() async {
   // must never block boot.
   unawaited(DeviceProfileService.applyStoredOnBoot());
 
-  // Desktop audio backends. Linux has no just_audio implementation, so the
-  // media_kit (libmpv) bridge supplies one; Windows uses just_audio_windows.
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux) {
-    JustAudioMediaKit.ensureInitialized(linux: true);
+  // Desktop audio is libmpv through Media Kit on both supported desktop
+  // platforms. It keeps the existing just_audio controller API while giving
+  // Windows and Linux the same decoder and stream/file playback path.
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows)) {
+    JustAudioMediaKit.title = 'Shuro';
+    JustAudioMediaKit.ensureInitialized(linux: true, windows: true);
   }
   debugPrint('[boot] binding ready');
 
@@ -92,8 +96,7 @@ Future<void> main() async {
   // app anyway; in-app playback still works, and a user can always stop the
   // stray service from the notification.
   // The media-session layer (audio_service) exists on Android and iOS only.
-  // On Windows/macOS/Linux playback comes from the platform implementation of
-  // just_audio (just_audio_windows on Windows) and there is no notification
+  // On Windows/macOS/Linux playback stays in-app and there is no notification
   // service to start, so skip it instead of letting a missing plugin throw.
   final bool hasMediaSession = !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||

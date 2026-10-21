@@ -1,30 +1,79 @@
-name: Release (Android · Windows · Linux)
+name: CI and release (Android · Windows · Linux)
 
-# One workflow builds every platform and publishes ONE prerelease containing
-# all four artifacts: the signed APK, the Play App Bundle, the portable
-# Windows folder (zip) and the Linux bundle (tar.gz).
-#
-# A single workflow (rather than one per platform) is what makes the release
-# atomic: three parallel workflows would race to create the same tag, and
-# desktop assets could land on a different release than the APK.
-
+# Pull requests and main pushes prove the app builds everywhere. Publishing is
+# deliberately narrower: a version tag, or an explicit manual release with
+# signing secrets available. That keeps incomplete or debug-signed builds out
+# of GitHub Releases.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Create a prerelease after every platform build succeeds
+        required: true
+        default: false
+        type: boolean
+      prerelease:
+        description: Mark a manually published release as prerelease
+        required: true
+        default: true
+        type: boolean
 
+# Jobs receive read-only access unless they explicitly need to publish.
 permissions:
-  contents: write
+  contents: read
+
+# A newer commit supersedes an in-flight run on the same branch or tag.
+concurrency:
+  group: shuro-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.6"
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: "5"
 
 jobs:
-  android:
+  verify:
+    name: Analyze and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test --no-pub
+
+  android:
+    name: Android release artifacts
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      signing_ready: ${{ steps.signing.outputs.ready }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -33,21 +82,52 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.6
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
-      - name: Analyze
-        run: flutter analyze --no-pub
+      - name: Configure upload signing
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          values=("$ANDROID_KEYSTORE_BASE64" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD")
+          present=0
+          for value in "${values[@]}"; do
+            [[ -n "$value" ]] && ((present += 1))
+          done
 
-      - name: Test
-        run: flutter test --no-pub
+          if [[ "$present" -eq 0 ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android signing secrets are unavailable; artifacts will not be published."
+            exit 0
+          fi
+          if [[ "$present" -ne "${#values[@]}" ]]; then
+            echo "::error::Configure all Android signing secrets or none of them."
+            exit 1
+          fi
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          chmod 600 android/upload-keystore.jks
+          {
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Read version
         id: version
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -59,10 +139,8 @@ jobs:
 
       - name: Stage artifacts
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             "Shuro_v${{ steps.version.outputs.version }}.apk"
-          cp build/app/outputs/bundle/release/app-release.aab \
-             "Shuro_v${{ steps.version.outputs.version }}.aab"
+          cp build/app/outputs/flutter-apk/app-release.apk "Shuro_v${{ steps.version.outputs.version }}.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "Shuro_v${{ steps.version.outputs.version }}.aab"
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
@@ -72,44 +150,87 @@ jobs:
             Shuro_v${{ steps.version.outputs.version }}.apk
             Shuro_v${{ steps.version.outputs.version }}.aab
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove ephemeral signing files
+        if: always()
+        run: rm -f android/key.properties android/upload-keystore.jks
 
   windows:
+    name: Windows installer
+    needs: verify
     runs-on: windows-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.6
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Build Windows (release)
         run: flutter build windows --release
 
-      - name: Package portable folder
+      - name: Build Windows installer
         shell: pwsh
         run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* `
-            -DestinationPath Shuro-windows-x64.zip -Force
+          choco install innosetup --no-progress --limit-output
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^\+]+)' | Select-Object -First 1).Matches[0].Groups[1].Value.Trim()
+          @"
+          [Setup]
+          AppName=Shuro
+          AppVersion=$version
+          AppPublisher=AsHfIEXE
+          DefaultDirName={autopf}\Shuro
+          DefaultGroupName=Shuro
+          SetupIconFile=windows\runner\resources\app_icon.ico
+          OutputDir=.
+          OutputBaseFilename=Shuro-Setup-x64
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesAllowed=x64
+          ArchitecturesInstallIn64BitMode=x64
+          UninstallDisplayIcon={app}\shuro.exe
 
-      - name: Upload Windows artifact
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{autoprograms}\Shuro"; Filename: "{app}\shuro.exe"
+          Name: "{autodesktop}\Shuro"; Filename: "{app}\shuro.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{app}\shuro.exe"; Description: "Launch Shuro"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path installer.iss -Encoding utf8
+          $iscc = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          & $iscc installer.iss
+
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: Shuro-windows-x64.zip
+          path: Shuro-Setup-x64.exe
           if-no-files-found: error
+          retention-days: 14
 
   linux:
+    name: Linux Debian package
+    needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Flutter Linux toolchain
         run: |
@@ -123,35 +244,77 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.6
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Build Linux (release)
         run: flutter build linux --release
 
-      - name: Package bundle
+      - name: Build Debian package
+        shell: bash
         run: |
-          tar -czf Shuro-linux-x64.tar.gz \
-            -C build/linux/x64/release/bundle .
+          set -euo pipefail
+          VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+          ROOT=package-root
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/lib/shuro" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/icons/hicolor/512x512/apps"
+          cp -a build/linux/x64/release/bundle/. "$ROOT/usr/lib/shuro/"
+          cp _assets/icon_512.png "$ROOT/usr/share/icons/hicolor/512x512/apps/shuro.png"
+          ln -s ../lib/shuro/shuro "$ROOT/usr/bin/shuro"
+          cat > "$ROOT/DEBIAN/control" <<EOF
+          Package: shuro
+          Version: $VERSION
+          Section: sound
+          Priority: optional
+          Architecture: amd64
+          Maintainer: AsHfIEXE
+          Depends: libgtk-3-0, libmpv1
+          Description: Self-hosted Navidrome/OpenSubsonic music player
+           Shuro is a privacy-first music player for your own server.
+          EOF
+          cat > "$ROOT/usr/share/applications/shuro.desktop" <<EOF
+          [Desktop Entry]
+          Name=Shuro
+          Comment=Self-hosted music player
+          Exec=shuro
+          Icon=shuro
+          Terminal=false
+          Type=Application
+          Categories=AudioVideo;Audio;Player;
+          EOF
+          dpkg-deb --root-owner-group --build "$ROOT" Shuro-linux-amd64.deb
 
-      - name: Upload Linux artifact
+      - name: Upload Linux package
         uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: Shuro-linux-x64.tar.gz
+          path: Shuro-linux-amd64.deb
           if-no-files-found: error
+          retention-days: 14
 
   publish:
-    # Publish whatever built. A failed desktop job must not hide the APK.
+    name: Publish signed release
     needs: [android, windows, linux]
-    if: always()
+    if: >-
+      ${{
+        needs.android.result == 'success' &&
+        needs.windows.result == 'success' &&
+        needs.linux.result == 'success' &&
+        needs.android.outputs.signing_ready == 'true' &&
+        (
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.publish)
+        )
+      }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -159,39 +322,50 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Read version
-        id: version
+      - name: Read release metadata and create checksums
+        id: release
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            [[ "$TAG" == "v$VERSION" ]] || { echo "::error::Tag $TAG must match pubspec version v$VERSION."; exit 1; }
+          else
+            TAG="Shuro_v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          fi
+          (cd dist && sha256sum * > SHA256SUMS.txt)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
-      - name: Publish prerelease with every platform
+      - name: Publish every platform artifact
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: Shuro_v${{ steps.version.outputs.version }}-build.${{ github.run_number }}
-          name: "Shuro v${{ steps.version.outputs.version }}"
-          prerelease: true
-          fail_on_unmatched_files: false
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: "Shuro v${{ steps.release.outputs.version }}"
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease }}
+          fail_on_unmatched_files: true
           files: |
-            dist/Shuro_v${{ steps.version.outputs.version }}.apk
-            dist/Shuro_v${{ steps.version.outputs.version }}.aab
-            dist/Shuro-windows-x64.zip
-            dist/Shuro-linux-x64.tar.gz
+            dist/Shuro_v${{ steps.release.outputs.version }}.apk
+            dist/Shuro_v${{ steps.release.outputs.version }}.aab
+            dist/Shuro-Setup-x64.exe
+            dist/Shuro-linux-amd64.deb
+            dist/SHA256SUMS.txt
           body: |
-            **Shuro v${{ steps.version.outputs.version }}** (build ${{ github.run_number }})
+            **Shuro v${{ steps.release.outputs.version }}**
 
-            - Commit: `${{ steps.version.outputs.sha }}`
-            - Date: ${{ steps.version.outputs.date }}
+            - Commit: ${{ steps.release.outputs.sha }}
+            - Built: ${{ steps.release.outputs.date }}
+            - Integrity: verify the download against SHA256SUMS.txt.
 
             ### Downloads
-            - **Android**: `Shuro_v${{ steps.version.outputs.version }}.apk` (install directly) · `.aab` (Play upload)
-            - **Windows**: `Shuro-windows-x64.zip` — extract anywhere, run `shuro.exe`
-            - **Linux**: `Shuro-linux-x64.tar.gz` — extract, run `./shuro` (needs GTK 3 + libmpv)
+            - **Android**: Shuro_v${{ steps.release.outputs.version }}.apk (install directly) · .aab (Play upload)
+            - **Windows**: Shuro-Setup-x64.exe — double-click to install
+            - **Debian/Ubuntu**: Shuro-linux-amd64.deb — open it or install with your package manager
 
-      - name: Prune old prereleases (keep latest 5)
-        if: success()
+      - name: Prune old automated prereleases (keep latest 5)
         uses: actions/github-script@v7
         with:
           script: |
@@ -204,9 +378,9 @@ jobs:
             const ours = releases
               .filter(r => r.prerelease && /^Shuro_v.*-build\.\d+$/.test(r.tag_name))
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            for (const r of ours.slice(keep)) {
-              core.info(`Deleting old release: ${r.tag_name}`);
-              await github.rest.repos.deleteRelease({ owner, repo, release_id: r.id });
-              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${r.tag_name}` })
+            for (const release of ours.slice(keep)) {
+              core.info('Deleting old release: ' + release.tag_name);
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+              await github.rest.git.deleteRef({ owner, repo, ref: 'tags/' + release.tag_name })
                 .catch(() => {});
             }

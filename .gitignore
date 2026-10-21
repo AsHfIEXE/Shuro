@@ -47,11 +47,8 @@ app.*.map.json
 android/local.properties
 android/.gradle/
 
-# NOTE: the release keystore and its credentials ARE committed deliberately
-# (android/key.properties + android/app/shuro-release.jks) so CI builds and
-# local builds produce identically-signed, update-compatible APKs. If this
-# repository is ever made public, rotate the key first (see README — Release
-# signing).
+# Release signing material is never committed. CI receives it through GitHub
+# Actions secrets and writes these files only for the Android build.
 
 # Generated plugin registrants
 

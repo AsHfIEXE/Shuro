@@ -11,6 +11,33 @@ import '../models/audio_info.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
 
+/// A song and its authenticated stream URL, used for a queued album download.
+class DownloadRequest {
+  const DownloadRequest({required this.song, required this.streamUrl});
+
+  final Song song;
+  final String streamUrl;
+}
+
+/// The outcome of a sequential batch download.
+class DownloadBatchResult {
+  const DownloadBatchResult({
+    required this.queued,
+    required this.completed,
+    required this.failed,
+    required this.skipped,
+  });
+
+  final int queued;
+  final int completed;
+  final int failed;
+  final int skipped;
+}
+
+class _DownloadCancelled implements Exception {
+  const _DownloadCancelled();
+}
+
 /// Real offline downloads — files on disk, not a progress animation.
 ///
 /// Why this exists: [startDownload] in AppState (the previous implementation)
@@ -47,6 +74,8 @@ class DownloadService extends ChangeNotifier {
   /// directory.
   String? customLocation;
 
+  final Map<String, http.Client> _activeClients = {};
+  final Set<String> _cancelled = {};
   bool _restored = false;
 
   /// All downloaded songs (for the Downloads screen).
@@ -57,7 +86,10 @@ class DownloadService extends ChangeNotifier {
   }
 
   DownloadStatus statusFor(String songId) =>
-      status[songId] ?? (_entries.containsKey(songId) ? const DownloadStatus(stage: DownloadStage.downloaded, progress: 1) : const DownloadStatus(stage: DownloadStage.notDownloaded));
+      status[songId] ??
+      (_entries.containsKey(songId)
+          ? const DownloadStatus(stage: DownloadStage.downloaded, progress: 1)
+          : const DownloadStatus(stage: DownloadStage.notDownloaded));
 
   bool isDownloaded(String songId) => _entries.containsKey(songId);
 
@@ -82,7 +114,8 @@ class DownloadService extends ChangeNotifier {
       if (raw != null && raw.isNotEmpty) {
         final decoded = json.decode(raw) as Map<String, dynamic>;
         for (final entry in decoded.entries) {
-          _entries[entry.key] = _DownloadEntry.fromJson(entry.value as Map<String, dynamic>);
+          _entries[entry.key] =
+              _DownloadEntry.fromJson(entry.value as Map<String, dynamic>);
         }
       }
       notifyListeners();
@@ -115,43 +148,100 @@ class DownloadService extends ChangeNotifier {
     return path;
   }
 
+  /// Queues tracks and downloads them one at a time. Sequential transfers keep
+  /// album downloads friendly to the user's connection and media server.
+  Future<DownloadBatchResult> enqueueAll(
+      Iterable<DownloadRequest> requests) async {
+    final queue = <DownloadRequest>[];
+    var skipped = 0;
+    for (final request in requests) {
+      final stage = statusFor(request.song.id).stage;
+      if (stage == DownloadStage.notDownloaded ||
+          stage == DownloadStage.failed) {
+        _cancelled.remove(request.song.id);
+        status[request.song.id] =
+            const DownloadStatus(stage: DownloadStage.queued);
+        queue.add(request);
+      } else {
+        skipped++;
+      }
+    }
+    if (queue.isNotEmpty) notifyListeners();
+
+    var completed = 0;
+    var failed = 0;
+    for (final request in queue) {
+      // A queued song can be cancelled from the Downloads screen before its
+      // turn starts.
+      if (statusFor(request.song.id).stage != DownloadStage.queued) {
+        skipped++;
+        continue;
+      }
+      if (await start(request.song, request.streamUrl)) {
+        completed++;
+      } else if (statusFor(request.song.id).stage == DownloadStage.failed) {
+        failed++;
+      } else {
+        skipped++;
+      }
+    }
+    return DownloadBatchResult(
+      queued: queue.length,
+      completed: completed,
+      failed: failed,
+      skipped: skipped,
+    );
+  }
+
   /// Streams [song] from [streamUrl] (built by the caller with original
   /// quality) into the download directory. Returns true when the file is
   /// complete on disk. The URL is routed through the loopback stream proxy so
   /// device DNS failures cannot break it.
   Future<bool> start(Song song, String streamUrl) async {
-    if (status[song.id]?.stage == DownloadStage.downloading) return false;
-    status[song.id] = const DownloadStatus(stage: DownloadStage.downloading, progress: 0);
+    final stage = statusFor(song.id).stage;
+    if (stage == DownloadStage.downloading || stage == DownloadStage.downloaded)
+      return false;
+    _cancelled.remove(song.id);
+    status[song.id] =
+        const DownloadStatus(stage: DownloadStage.downloading, progress: 0);
     notifyListeners();
+
+    File? file;
+    IOSink? sink;
+    http.Client? client;
     try {
       final dir = await _directory();
-      final ext = (song.audioInfo.format ?? 'audio').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final ext = (song.audioInfo.format ?? 'audio')
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]'), '');
       final safeId = song.id.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-      final file = File('${dir.path}${Platform.pathSeparator}shuro-$safeId.$ext');
+      file = File('${dir.path}${Platform.pathSeparator}shuro-$safeId.$ext');
 
-      final client = http.Client();
-      try {
-        final request = http.Request('GET', Uri.parse(streamUrl));
-        final response = await client.send(request);
-        if (response.statusCode != 200) {
-          throw HttpException('HTTP ${response.statusCode}');
-        }
-        final total = response.contentLength;
-        final sink = file.openWrite();
-        var received = 0;
-        await for (final chunk in response.stream) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (total != null && total > 0) {
-            status[song.id] = DownloadStatus(stage: DownloadStage.downloading, progress: (received / total).clamp(0.0, 1.0));
-            notifyListeners();
-          }
-        }
-        await sink.flush();
-        await sink.close();
-      } finally {
-        client.close();
+      client = http.Client();
+      _activeClients[song.id] = client;
+      final request = http.Request('GET', Uri.parse(streamUrl));
+      final response = await client.send(request);
+      if (response.statusCode != 200) {
+        throw HttpException('HTTP ${response.statusCode}');
       }
+      final total = response.contentLength;
+      sink = file.openWrite();
+      var received = 0;
+      await for (final chunk in response.stream) {
+        if (_cancelled.contains(song.id)) throw const _DownloadCancelled();
+        sink.add(chunk);
+        received += chunk.length;
+        if (total != null && total > 0) {
+          status[song.id] = DownloadStatus(
+              stage: DownloadStage.downloading,
+              progress: (received / total).clamp(0.0, 1.0));
+          notifyListeners();
+        }
+      }
+      if (_cancelled.contains(song.id)) throw const _DownloadCancelled();
+      await sink.flush();
+      await sink.close();
+      sink = null;
 
       _entries[song.id] = _DownloadEntry(
         path: file.path,
@@ -161,21 +251,46 @@ class DownloadService extends ChangeNotifier {
         albumId: song.albumId,
         durationMs: song.duration.inMilliseconds,
         format: song.audioInfo.format,
-        artworkUrl: song.artwork is NetworkImage ? (song.artwork as NetworkImage).url : null,
+        artworkUrl: song.artwork is NetworkImage
+            ? (song.artwork as NetworkImage).url
+            : null,
         gradient: song.gradientColors.map((c) => c.toARGB32()).toList(),
       );
-      status[song.id] = const DownloadStatus(stage: DownloadStage.downloaded, progress: 1);
+      status[song.id] =
+          const DownloadStatus(stage: DownloadStage.downloaded, progress: 1);
       await _persist();
       notifyListeners();
       return true;
-    } catch (error) {
-      status[song.id] = const DownloadStatus(stage: DownloadStage.failed);
+    } catch (_) {
+      try {
+        await sink?.close();
+      } catch (_) {
+        // The stream may already be closed by the HTTP client cancellation.
+      }
+      if (file != null) {
+        try {
+          if (file.existsSync()) file.deleteSync();
+        } catch (_) {
+          // Cleanup failure must not crash the Downloads screen.
+        }
+      }
+      if (_cancelled.remove(song.id)) {
+        status.remove(song.id);
+      } else {
+        status[song.id] = const DownloadStatus(stage: DownloadStage.failed);
+      }
       notifyListeners();
       return false;
+    } finally {
+      client?.close();
+      if (identical(_activeClients[song.id], client))
+        _activeClients.remove(song.id);
     }
   }
 
   Future<void> remove(String songId) async {
+    _cancelled.add(songId);
+    _activeClients[songId]?.close();
     final entry = _entries.remove(songId);
     if (entry != null) {
       try {
@@ -191,7 +306,9 @@ class DownloadService extends ChangeNotifier {
   Future<void> _persist() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final map = {for (final entry in _entries.entries) entry.key: entry.value.toJson()};
+      final map = {
+        for (final entry in _entries.entries) entry.key: entry.value.toJson()
+      };
       await prefs.setString(_registryKey, json.encode(map));
     } catch (_) {
       // Storage unavailable: downloads still work this session.
@@ -232,11 +349,17 @@ class _DownloadEntry {
         durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
         format: json['format'] as String?,
         artworkUrl: json['artworkUrl'] as String?,
-        gradient: [for (final v in (json['gradient'] as List<dynamic>? ?? const [])) (v as num).toInt()],
+        gradient: [
+          for (final v in (json['gradient'] as List<dynamic>? ?? const []))
+            (v as num).toInt()
+        ],
       );
 
   Song toSong() => Song(
-        id: path.split(Platform.pathSeparator).last.replaceAll(RegExp(r'^shuro-|\.audio$|\.[a-z0-9]+$'), ''),
+        id: path
+            .split(Platform.pathSeparator)
+            .last
+            .replaceAll(RegExp(r'^shuro-|\.audio$|\.[a-z0-9]+$'), ''),
         title: title,
         artist: artist,
         artistId: artistId,

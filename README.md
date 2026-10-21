@@ -199,9 +199,10 @@ desktop and web builds.
 
 ### Windows desktop
 
-The windows/ target is scaffolded and playback uses the platform
-implementation of just_audio (just_audio_windows). Building it needs two
-machine-level prerequisites, both one-time:
+Windows and Linux playback uses the **libmpv** backend through
+Media Kit. Shuro keeps its tested queue/controller API while both desktop
+platforms share the same decoder for server streams and local files.
+Building Windows needs two machine-level prerequisites, both one-time:
 
 1. **Developer Mode** (Windows Settings → Privacy & security → For developers)
    — Flutter needs symlink support for plugin links.
@@ -241,9 +242,15 @@ flutter build apk --release # build/app/outputs/flutter-apk/app-release.apk
 flutter build appbundle --release  # Play upload artifact
 ```
 
-Or push to `main` — GitHub Actions
-(`.github/workflows/android-release.yml`) builds, tests, publishes the APK
-and the App Bundle, and prunes old prereleases.
+Pull requests and pushes to `main` run analysis, the full test suite, and
+release builds for Android, Windows, and Linux. A GitHub Release is created
+only from a `v<pubspec-version>` tag or a manual run with **Publish** enabled,
+after every platform artifact succeeds and Android signing is configured.
+
+For signed Android releases, add these GitHub Actions secrets:
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+and `ANDROID_KEY_PASSWORD`. The workflow publishes a `SHA256SUMS.txt` file
+alongside the APK, AAB, Windows installer, and Debian/Ubuntu package.
 
 ---
 

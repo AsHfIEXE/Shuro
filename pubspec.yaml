@@ -54,9 +54,12 @@ dependencies:
   # honest limitation worth upgrading to flutter_secure_storage later, not
   # something papered over here.
   shared_preferences: ^2.3.3
-  just_audio_windows: ^0.2.3
+  # Desktop playback is libmpv through just_audio_media_kit on both Windows
+  # and Linux. Keep just_audio as the app-facing API so queues, media tags and
+  # the tested controller do not need a second desktop implementation.
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
+  media_kit_libs_windows_audio: ^1.0.9
 
 dev_dependencies:
   flutter_test:
