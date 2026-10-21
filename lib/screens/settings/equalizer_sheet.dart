@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,11 +34,38 @@ class _EqualizerSheet extends StatefulWidget {
 class _EqualizerSheetState extends State<_EqualizerSheet> {
   AndroidEqualizerParameters? _params;
   bool _loading = true;
+  Timer? _retry;
+  int _attempts = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // A sheet opened before the first track would otherwise keep the
+    // "play something" hint forever: the platform only answers once audio
+    // exists. Poll briefly instead of asking the user to reopen.
+    _retry = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_params != null) {
+        timer.cancel();
+        return;
+      }
+      _attempts++;
+      if (_attempts > 15) {
+        timer.cancel();
+        return;
+      }
+      _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _retry?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -131,7 +160,9 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                         child: Text(
                           'While the equalizer is on, audio is processed by Android, so bit-perfect / direct USB output is not in use.',
                           style: GoogleFonts.getFont(currentFontFamily,
-                              color: kMutedTextColor, fontSize: 11.5, height: 1.35),
+                              color: kMutedTextColor,
+                              fontSize: 11.5,
+                              height: 1.35),
                         ),
                       ),
                     const SizedBox(height: 4),
@@ -142,7 +173,8 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                         min: _minDb,
                         max: _maxDb,
                         enabled: service.enabled,
-                        onChanged: (v) => service.setGain(band.index, v, persist: false),
+                        onChanged: (v) =>
+                            service.setGain(band.index, v, persist: false),
                         onChangeEnd: (_) => service.commit(),
                       ),
                     const SizedBox(height: 6),

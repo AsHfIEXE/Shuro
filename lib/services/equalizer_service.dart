@@ -67,29 +67,29 @@ class EqualizerService extends ChangeNotifier {
       return;
     }
     try {
-    _enabled = prefs.getBool(_kEnabled) ?? false;
-    final raw = prefs.getString(_kGains);
-    if (raw != null) {
-      for (final part in raw.split(',')) {
-        final bits = part.split(':');
-        if (bits.length != 2) continue;
-        final index = int.tryParse(bits[0]);
-        final db = double.tryParse(bits[1]);
-        if (index != null && db != null) _gains[index] = db;
+      _enabled = prefs.getBool(_kEnabled) ?? false;
+      final raw = prefs.getString(_kGains);
+      if (raw != null) {
+        for (final part in raw.split(',')) {
+          final bits = part.split(':');
+          if (bits.length != 2) continue;
+          final index = int.tryParse(bits[0]);
+          final db = double.tryParse(bits[1]);
+          if (index != null && db != null) _gains[index] = db;
+        }
       }
-    }
-    notifyListeners();
-    final params = await parameters();
-    if (params == null) return;
-    try {
-      await _effect?.setEnabled(_enabled);
-      for (final band in params.bands) {
-        final db = _gains[band.index] ?? 0.0;
-        if (db != 0.0) await band.setGain(db);
+      notifyListeners();
+      final params = await parameters();
+      if (params == null) return;
+      try {
+        await _effect?.setEnabled(_enabled);
+        for (final band in params.bands) {
+          final db = _gains[band.index] ?? 0.0;
+          if (db != 0.0) await band.setGain(db);
+        }
+      } catch (_) {
+        // A missing effect must never take the player down.
       }
-    } catch (_) {
-      // A missing effect must never take the player down.
-    }
     } catch (_) {
       // Any other failure (platform channel absent, malformed prefs): flat EQ.
     }
@@ -107,7 +107,8 @@ class EqualizerService extends ChangeNotifier {
   /// Applies a band gain. While a slider is dragged pass `persist: false`
   /// (the engine follows live) and call [commit] on release — otherwise every
   /// drag tick wrote to SharedPreferences.
-  Future<void> setGain(int index, double decibels, {bool persist = true}) async {
+  Future<void> setGain(int index, double decibels,
+      {bool persist = true}) async {
     _gains[index] = decibels;
     notifyListeners();
     try {
