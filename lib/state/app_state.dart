@@ -91,25 +91,35 @@ class AppState extends ChangeNotifier {
         try {
           final map = jsonDecode(settingsJson) as Map<String, dynamic>;
           wifiQuality = _qualityFromName(map['wifiQuality']) ?? wifiQuality;
-          mobileQuality = _qualityFromName(map['mobileQuality']) ?? mobileQuality;
-          downloadQuality = _qualityFromName(map['downloadQuality']) ?? downloadQuality;
-          downloadWifiOnly = map['downloadWifiOnly'] as bool? ?? downloadWifiOnly;
+          mobileQuality =
+              _qualityFromName(map['mobileQuality']) ?? mobileQuality;
+          downloadQuality =
+              _qualityFromName(map['downloadQuality']) ?? downloadQuality;
+          downloadWifiOnly =
+              map['downloadWifiOnly'] as bool? ?? downloadWifiOnly;
           gaplessPlayback = map['gaplessPlayback'] as bool? ?? gaplessPlayback;
           crossfade = map['crossfade'] as bool? ?? crossfade;
-          volumeNormalization = map['volumeNormalization'] as bool? ?? volumeNormalization;
+          volumeNormalization =
+              map['volumeNormalization'] as bool? ?? volumeNormalization;
           replayGain = map['replayGain'] as bool? ?? replayGain;
           autoplay = map['autoplay'] as bool? ?? autoplay;
           rememberQueue = map['rememberQueue'] as bool? ?? rememberQueue;
           resumePlayback = map['resumePlayback'] as bool? ?? resumePlayback;
           dynamicColors = map['dynamicColors'] as bool? ?? dynamicColors;
-          reduceAnimations = map['reduceAnimations'] as bool? ?? reduceAnimations;
+          reduceAnimations =
+              map['reduceAnimations'] as bool? ?? reduceAnimations;
           reduceMotionEnabled = reduceAnimations;
           fontFamily = map['fontFamily'] as String? ?? fontFamily;
           currentFontFamily = fontFamily;
-          lyricsProvider = LyricsProviderType.values.firstWhere((e) => e.name == map['lyricsProvider'], orElse: () => lyricsProvider);
-          artworkStyle = ArtworkStyle.values.firstWhere((e) => e.name == map['artworkStyle'], orElse: () => artworkStyle);
+          lyricsProvider = LyricsProviderType.values.firstWhere(
+              (e) => e.name == map['lyricsProvider'],
+              orElse: () => lyricsProvider);
+          artworkStyle = ArtworkStyle.values.firstWhere(
+              (e) => e.name == map['artworkStyle'],
+              orElse: () => artworkStyle);
           lyricsOffsetMs = map['lyricsOffsetMs'] as int? ?? lyricsOffsetMs;
-          lyricsAutoScroll = map['lyricsAutoScroll'] as bool? ?? lyricsAutoScroll;
+          lyricsAutoScroll =
+              map['lyricsAutoScroll'] as bool? ?? lyricsAutoScroll;
         } catch (_) {
           // Malformed/old-shape JSON (a future version changed a field
           // type) — keep the in-code defaults rather than crashing startup.
@@ -125,7 +135,8 @@ class AppState extends ChangeNotifier {
       if (affinityJson != null) {
         try {
           final map = jsonDecode(affinityJson) as Map<String, dynamic>;
-          artistAffinity.addAll(map.map((k, v) => MapEntry(k, (v as num).toDouble())));
+          artistAffinity
+              .addAll(map.map((k, v) => MapEntry(k, (v as num).toDouble())));
         } catch (_) {}
       }
 
@@ -143,7 +154,9 @@ class AppState extends ChangeNotifier {
               name: m['name'] as String,
               songIds: (m['songIds'] as List<dynamic>).cast<String>(),
               smartPreset: m['smartPreset'] != null
-                  ? SmartPlaylistPreset.values.firstWhere((p) => p.name == m['smartPreset'], orElse: () => SmartPlaylistPreset.rediscover)
+                  ? SmartPlaylistPreset.values.firstWhere(
+                      (p) => p.name == m['smartPreset'],
+                      orElse: () => SmartPlaylistPreset.rediscover)
                   : null,
             );
           }).toList();
@@ -164,7 +177,8 @@ class AppState extends ChangeNotifier {
         unawaited(() async {
           try {
             await _rescanFolder(folder);
-            if (!localFolderPaths.contains(folder)) localFolderPaths.add(folder);
+            if (!localFolderPaths.contains(folder))
+              localFolderPaths.add(folder);
           } catch (_) {
             // Folder moved/unmounted/permission revoked since last launch —
             // drop it silently rather than block the rest of startup.
@@ -192,8 +206,18 @@ class AppState extends ChangeNotifier {
               password = legacy;
               migratedLegacyPassword = true;
             }
-            servers.add(ServerConfig(id: id, name: m['name'] as String, url: m['url'] as String, username: m['username'] as String, password: password));
-            sanitized.add({'id': m['id'], 'name': m['name'], 'url': m['url'], 'username': m['username']});
+            servers.add(ServerConfig(
+                id: id,
+                name: m['name'] as String,
+                url: m['url'] as String,
+                username: m['username'] as String,
+                password: password));
+            sanitized.add({
+              'id': m['id'],
+              'name': m['name'],
+              'url': m['url'],
+              'username': m['username']
+            });
           }
           if (migratedLegacyPassword) {
             for (final s in servers) {
@@ -277,7 +301,8 @@ class AppState extends ChangeNotifier {
     }
     notifyListeners();
     unawaited(_persistServers());
-    final anchorId = activeServerId ?? (servers.isNotEmpty ? servers.first.id : null);
+    final anchorId =
+        activeServerId ?? (servers.isNotEmpty ? servers.first.id : null);
     if (anchorId == null) return;
     if (isMultiServer) {
       unawaited(connectMultiServer());
@@ -309,7 +334,8 @@ class AppState extends ChangeNotifier {
     final cachedEntries = <MapEntry<String, MusicLibrarySnapshot>>[];
     for (final config in picked) {
       final cached = await LibraryCache.load(config.id);
-      if (cached != null) cachedEntries.add(MapEntry(config.id, cached.snapshot));
+      if (cached != null)
+        cachedEntries.add(MapEntry(config.id, cached.snapshot));
     }
     if (cachedEntries.isNotEmpty) {
       _librarySnapshot = MultiServerLibrary.merge(cachedEntries);
@@ -333,7 +359,8 @@ class AppState extends ChangeNotifier {
       libraryOffline = true;
       if (cachedEntries.isEmpty) {
         connectionStatus = ConnectionStatus.unreachable;
-        connectionErrorMessage = outcome.lastError ?? "Couldn't reach your servers.";
+        connectionErrorMessage =
+            outcome.lastError ?? "Couldn't reach your servers.";
       } else {
         connectionStatus = ConnectionStatus.connected; // cached browsing
       }
@@ -350,7 +377,8 @@ class AppState extends ChangeNotifier {
     libraryOffline = outcome.failed.isNotEmpty;
     connectionStatus = ConnectionStatus.connected;
     connectionErrorMessage = null;
-    final firstOnline = picked.firstWhere((c) => outcome.online.contains(c.id), orElse: () => picked.first);
+    final firstOnline = picked.firstWhere((c) => outcome.online.contains(c.id),
+        orElse: () => picked.first);
     activeServerId = firstOnline.id;
     unawaited(_persistServers());
     notifyListeners();
@@ -474,13 +502,21 @@ class AppState extends ChangeNotifier {
     // The secret never touches prefs: it goes to OS-backed secure storage
     // (plan §7). Writing the current map also prunes entries for removed
     // servers.
-    await ServerSecretStore.writeAll({for (final s in servers) s.id: s.password});
+    await ServerSecretStore.writeAll(
+        {for (final s in servers) s.id: s.password});
     final list = servers
-        .map((s) => {'id': s.id, 'name': s.name, 'url': s.url, 'username': s.username}) // the secret itself goes to secure storage, below
+        .map((s) => {
+              'id': s.id,
+              'name': s.name,
+              'url': s.url,
+              'username': s.username
+            }) // the secret itself goes to secure storage, below
         .toList();
     await Future.wait([
       p.setString(_kServersKey, jsonEncode(list)),
-      activeServerId != null ? p.setString(_kActiveServerKey, activeServerId!) : p.remove(_kActiveServerKey),
+      activeServerId != null
+          ? p.setString(_kActiveServerKey, activeServerId!)
+          : p.remove(_kActiveServerKey),
       p.setBool(_kLocalOnlyKey, isLocalOnly),
       p.setStringList(_kEnabledServersKey, enabledServerIds.toList()),
     ]);
@@ -498,7 +534,11 @@ class AppState extends ChangeNotifier {
     final songs = songsByIds(ids);
     if (songs.isEmpty) return null;
     final index = (_savedQueueIndex ?? 0).clamp(0, songs.length - 1);
-    return (queue: songs, index: index, position: Duration(milliseconds: _savedPositionMs ?? 0));
+    return (
+      queue: songs,
+      index: index,
+      position: Duration(milliseconds: _savedPositionMs ?? 0)
+    );
   }
 
   /// Saves the current queue/position so [takeSavedQueue] can restore it
@@ -506,7 +546,8 @@ class AppState extends ChangeNotifier {
   /// Gated on [rememberQueue]/[resumePlayback] here (not at the call
   /// site) so both toggles keep meaning exactly what their Settings rows
   /// say: queue remembered at all, and whether position within it is too.
-  Future<void> persistQueueState(List<Song> queue, int index, Duration position) async {
+  Future<void> persistQueueState(
+      List<Song> queue, int index, Duration position) async {
     final p = _persistence;
     if (p == null) return;
     if (!rememberQueue || queue.isEmpty) {
@@ -516,7 +557,8 @@ class AppState extends ChangeNotifier {
     await Future.wait([
       p.setStringList(_kSavedQueueKey, queue.map((s) => s.id).toList()),
       p.setInt(_kSavedQueueIndexKey, index),
-      p.setInt(_kSavedPositionKey, resumePlayback ? position.inMilliseconds : 0),
+      p.setInt(
+          _kSavedPositionKey, resumePlayback ? position.inMilliseconds : 0),
     ]);
   }
 
@@ -560,7 +602,8 @@ class AppState extends ChangeNotifier {
   /// decision this makes — streaming will simply fail downstream and
   /// surface through [PlayerController.lastPlaybackError] instead.
   bool _resolveIsWifi(List<ConnectivityResult> results) {
-    if (results.contains(ConnectivityResult.wifi) || results.contains(ConnectivityResult.ethernet)) return true;
+    if (results.contains(ConnectivityResult.wifi) ||
+        results.contains(ConnectivityResult.ethernet)) return true;
     if (results.contains(ConnectivityResult.mobile)) return false;
     return _isOnWifi;
   }
@@ -568,7 +611,8 @@ class AppState extends ChangeNotifier {
   /// Which of [wifiQuality]/[mobileQuality] actually governs the next
   /// stream, resolved against the device's current connection type —
   /// see [audioSourceFor].
-  StreamingQuality get effectiveStreamingQuality => _isOnWifi ? wifiQuality : mobileQuality;
+  StreamingQuality get effectiveStreamingQuality =>
+      _isOnWifi ? wifiQuality : mobileQuality;
 
   /// The live backend for whichever server is connected, and the one
   /// library fetch taken from it on connect (see [MusicRepository] for
@@ -615,7 +659,8 @@ class AppState extends ChangeNotifier {
   /// while disconnected *and* while in [ConnectionStatus.localOnly], so a
   /// user who skips server setup sees only their own local files, never
   /// server data.
-  bool get hasServer => connectionStatus == ConnectionStatus.connected && activeServer != null;
+  bool get hasServer =>
+      connectionStatus == ConnectionStatus.connected && activeServer != null;
 
   bool get isLocalOnly => connectionStatus == ConnectionStatus.localOnly;
 
@@ -649,9 +694,11 @@ class AppState extends ChangeNotifier {
     }
 
     final url = draft.url.trim();
-    if (url.isEmpty || !(url.startsWith('http://') || url.startsWith('https://'))) {
+    if (url.isEmpty ||
+        !(url.startsWith('http://') || url.startsWith('https://'))) {
       connectionStatus = ConnectionStatus.unreachable;
-      connectionErrorMessage = "Couldn't reach that server. Check the URL and try again.";
+      connectionErrorMessage =
+          "Couldn't reach that server. Check the URL and try again.";
       notifyListeners();
       return;
     }
@@ -662,7 +709,8 @@ class AppState extends ChangeNotifier {
       return;
     }
 
-    final repository = NavidromeMusicRepository(baseUrl: url, username: draft.username, password: draft.password);
+    final repository = NavidromeMusicRepository(
+        baseUrl: url, username: draft.username, password: draft.password);
     try {
       await repository.connect();
       isSyncingLibrary = true;
@@ -677,9 +725,18 @@ class AppState extends ChangeNotifier {
       _repository = repository;
       _librarySnapshot = snapshot;
 
-      final id = draft.id.isNotEmpty ? draft.id : 'server_${DateTime.now().microsecondsSinceEpoch}';
-      final name = draft.name.trim().isNotEmpty ? draft.name.trim() : 'Server ${servers.length + 1}';
-      final saved = ServerConfig(id: id, name: name, url: url, username: draft.username, password: draft.password);
+      final id = draft.id.isNotEmpty
+          ? draft.id
+          : 'server_${DateTime.now().microsecondsSinceEpoch}';
+      final name = draft.name.trim().isNotEmpty
+          ? draft.name.trim()
+          : 'Server ${servers.length + 1}';
+      final saved = ServerConfig(
+          id: id,
+          name: name,
+          url: url,
+          username: draft.username,
+          password: draft.password);
       final existingIndex = servers.indexWhere((s) => s.id == id);
       if (existingIndex >= 0) {
         servers[existingIndex] = saved;
@@ -692,7 +749,8 @@ class AppState extends ChangeNotifier {
       libraryFromCache = false;
       libraryOffline = false;
       isSyncingLibrary = false;
-      if (id.isNotEmpty) unawaited(LibraryCache.save(id, snapshot, lastScan: _cachedLastScan));
+      if (id.isNotEmpty)
+        unawaited(LibraryCache.save(id, snapshot, lastScan: _cachedLastScan));
       unawaited(_persistServers());
     } on MusicRepositoryException catch (e) {
       repository.dispose();
@@ -705,7 +763,8 @@ class AppState extends ChangeNotifier {
         connectionErrorMessage = null;
       } else {
         connectionStatus = switch (e.kind) {
-          MusicRepositoryFailure.invalidCredentials => ConnectionStatus.invalidCredentials,
+          MusicRepositoryFailure.invalidCredentials =>
+            ConnectionStatus.invalidCredentials,
           MusicRepositoryFailure.unreachable => ConnectionStatus.unreachable,
           MusicRepositoryFailure.unknown => ConnectionStatus.unreachable,
         };
@@ -720,7 +779,8 @@ class AppState extends ChangeNotifier {
         connectionErrorMessage = null;
       } else {
         connectionStatus = ConnectionStatus.unreachable;
-        connectionErrorMessage = "Couldn't reach that server. Check the URL and try again.";
+        connectionErrorMessage =
+            "Couldn't reach that server. Check the URL and try again.";
       }
     }
     notifyListeners();
@@ -753,7 +813,9 @@ class AppState extends ChangeNotifier {
       try {
         final scanInfo = await repository.getScanStatus();
         final remote = scanInfo.lastScan?.millisecondsSinceEpoch;
-        if (remote != null && _cachedLastScan != null && remote == _cachedLastScan) {
+        if (remote != null &&
+            _cachedLastScan != null &&
+            remote == _cachedLastScan) {
           libraryOffline = false;
           return;
         }
@@ -770,7 +832,8 @@ class AppState extends ChangeNotifier {
       libraryOffline = false;
       final serverId = activeServerId;
       if (serverId != null && serverId.isNotEmpty) {
-        unawaited(LibraryCache.save(serverId, snapshot, lastScan: _cachedLastScan));
+        unawaited(
+            LibraryCache.save(serverId, snapshot, lastScan: _cachedLastScan));
       }
       isSyncingLibrary = false;
       notifyListeners();
@@ -858,9 +921,12 @@ class AppState extends ChangeNotifier {
   // through when there's no server connected — and so the backend can be
   // swapped without any screen changing.
   List<Song> get catalogSongs => hasServer ? _librarySnapshot.songs : const [];
-  List<Album> get catalogAlbums => hasServer ? _librarySnapshot.albums : const [];
-  List<Artist> get catalogArtists => hasServer ? _librarySnapshot.artists : const [];
-  Map<String, List<String>> get catalogGenres => hasServer ? _librarySnapshot.genreSongIds : const {};
+  List<Album> get catalogAlbums =>
+      hasServer ? _librarySnapshot.albums : const [];
+  List<Artist> get catalogArtists =>
+      hasServer ? _librarySnapshot.artists : const [];
+  Map<String, List<String>> get catalogGenres =>
+      hasServer ? _librarySnapshot.genreSongIds : const {};
 
   /// Everything actually playable right now: the server catalog (if
   /// connected) plus whatever's been imported from the device.
@@ -885,7 +951,8 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
-  List<Song> songsByIds(List<String> ids) => ids.map(songById).whereType<Song>().toList();
+  List<Song> songsByIds(List<String> ids) =>
+      ids.map(songById).whereType<Song>().toList();
 
   Album? albumById(String id) {
     if (!hasServer) return null;
@@ -909,30 +976,42 @@ class AppState extends ChangeNotifier {
     return songsByIds(album.songIds);
   }
 
-  List<Album> albumsForArtist(String artistId) => catalogAlbums.where((a) => a.artistId == artistId).toList();
+  List<Album> albumsForArtist(String artistId) =>
+      catalogAlbums.where((a) => a.artistId == artistId).toList();
 
   /// Songs actually tagged with [genre] — keyed by song ID (see
   /// [MusicLibrarySnapshot.genreSongIds]), not by "any song this artist
   /// has ever released," so an artist who spans several genres doesn't
   /// have their whole catalog show up under each one.
-  List<Song> songsForGenre(String genre) => songsByIds(catalogGenres[genre] ?? const []);
+  List<Song> songsForGenre(String genre) =>
+      songsByIds(catalogGenres[genre] ?? const []);
 
   List<Song> searchCatalogSongs(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogSongs.where((s) => s.title.toLowerCase().contains(q) || s.artist.toLowerCase().contains(q)).toList();
+    return catalogSongs
+        .where((s) =>
+            s.title.toLowerCase().contains(q) ||
+            s.artist.toLowerCase().contains(q))
+        .toList();
   }
 
   List<Album> searchCatalogAlbums(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogAlbums.where((a) => a.title.toLowerCase().contains(q) || a.artist.toLowerCase().contains(q)).toList();
+    return catalogAlbums
+        .where((a) =>
+            a.title.toLowerCase().contains(q) ||
+            a.artist.toLowerCase().contains(q))
+        .toList();
   }
 
   List<Artist> searchCatalogArtists(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogArtists.where((a) => a.name.toLowerCase().contains(q)).toList();
+    return catalogArtists
+        .where((a) => a.name.toLowerCase().contains(q))
+        .toList();
   }
 
   /// A directly-playable source for [song] — its own file path if it was
@@ -946,7 +1025,8 @@ class AppState extends ChangeNotifier {
   String? audioSourceFor(Song song) {
     if (song.localFilePath != null) return song.localFilePath;
     if (isMultiServer) {
-      final viaMulti = _multi.streamUrlFor(song, quality: effectiveStreamingQuality);
+      final viaMulti =
+          _multi.streamUrlFor(song, quality: effectiveStreamingQuality);
       if (viaMulti != null) return viaMulti;
     }
     return _repository?.streamUrlFor(song, quality: effectiveStreamingQuality);
@@ -1001,13 +1081,15 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
-  List<Album> recentlyAddedAlbums({int limit = 10}) => hasServer ? catalogAlbums.take(limit).toList() : const [];
+  List<Album> recentlyAddedAlbums({int limit = 10}) =>
+      hasServer ? catalogAlbums.take(limit).toList() : const [];
 
   /// What's actually been played in this app, most-recent first — real
   /// signal from [listeningHistory], not anything the backend provides
   /// (Subsonic has no durable per-user play-history endpoint this client
   /// relies on).
-  List<Song> recentlyPlayedSongs({int limit = 10}) => songsByIds(listeningHistory).take(limit).toList();
+  List<Song> recentlyPlayedSongs({int limit = 10}) =>
+      songsByIds(listeningHistory).take(limit).toList();
 
   // --- Favorites --------------------------------------------------------
   final Set<String> favoriteSongIds = {};
@@ -1037,14 +1119,27 @@ class AppState extends ChangeNotifier {
   final List<String> listeningHistory = [];
   static const int _listeningHistoryCap = 40;
 
+  /// Session-only privacy switch. It is deliberately not serialized: every
+  /// launch starts in the explicit, predictable non-private mode.
+  bool privateListening = false;
+
+  void setPrivateListening(bool value) {
+    if (privateListening == value) return;
+    privateListening = value;
+    HapticFeedback.selectionClick();
+    notifyListeners();
+  }
+
   final Map<String, double> artistAffinity = {};
   static const double _feedbackStep = 1.5;
 
   void recordPlay(String songId) {
+    if (privateListening) return;
     listeningHistory.remove(songId);
     listeningHistory.insert(0, songId);
     if (listeningHistory.length > _listeningHistoryCap) {
-      listeningHistory.removeRange(_listeningHistoryCap, listeningHistory.length);
+      listeningHistory.removeRange(
+          _listeningHistoryCap, listeningHistory.length);
     }
     notifyListeners();
     unawaited(_persistHistory());
@@ -1057,7 +1152,8 @@ class AppState extends ChangeNotifier {
     if (artistId.isEmpty) return;
     HapticFeedback.selectionClick();
     final current = artistAffinity[artistId] ?? 0;
-    artistAffinity[artistId] = current + (positive ? _feedbackStep : -_feedbackStep);
+    artistAffinity[artistId] =
+        current + (positive ? _feedbackStep : -_feedbackStep);
     notifyListeners();
     unawaited(_persistHistory());
   }
@@ -1065,7 +1161,8 @@ class AppState extends ChangeNotifier {
   // --- Downloads ----------------------------------------------------------
   final Map<String, DownloadStatus> _downloads = {};
 
-  DownloadStatus downloadStatusFor(String songId) => _downloads[songId] ?? const DownloadStatus();
+  DownloadStatus downloadStatusFor(String songId) =>
+      _downloads[songId] ?? const DownloadStatus();
 
   Set<String> get downloadedSongIds => _downloads.entries
       .where((e) => e.value.stage == DownloadStage.downloaded)
@@ -1088,15 +1185,19 @@ class AppState extends ChangeNotifier {
   Future<bool> startDownload(String songId) async {
     if (!canDownloadNow) return false;
     HapticFeedback.lightImpact();
-    _downloads[songId] = const DownloadStatus(stage: DownloadStage.downloading, progress: 0);
+    _downloads[songId] =
+        const DownloadStatus(stage: DownloadStage.downloading, progress: 0);
     notifyListeners();
     for (var i = 1; i <= 10; i++) {
       await Future.delayed(const Duration(milliseconds: 120));
-      if (_downloads[songId]?.stage != DownloadStage.downloading) return true; // cancelled/removed
-      _downloads[songId] = DownloadStatus(stage: DownloadStage.downloading, progress: i / 10);
+      if (_downloads[songId]?.stage != DownloadStage.downloading)
+        return true; // cancelled/removed
+      _downloads[songId] =
+          DownloadStatus(stage: DownloadStage.downloading, progress: i / 10);
       notifyListeners();
     }
-    _downloads[songId] = const DownloadStatus(stage: DownloadStage.downloaded, progress: 1);
+    _downloads[songId] =
+        const DownloadStatus(stage: DownloadStage.downloaded, progress: 1);
     HapticFeedback.lightImpact();
     notifyListeners();
     return true;
@@ -1113,7 +1214,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get storageUsedGb => downloadedSongIds.length * 0.045; // rough mock estimate
+  double get storageUsedGb =>
+      downloadedSongIds.length * 0.045; // rough mock estimate
   static const double storageLimitGb = 64;
 
   // --- Local files --------------------------------------------------------
@@ -1139,7 +1241,16 @@ class AppState extends ChangeNotifier {
   ];
 
   static const Set<String> _audioExtensions = {
-    'mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'opus', 'wma', 'aiff', 'alac',
+    'mp3',
+    'm4a',
+    'aac',
+    'flac',
+    'wav',
+    'ogg',
+    'opus',
+    'wma',
+    'aiff',
+    'alac',
   };
 
   bool _isAudioFile(String path) {
@@ -1163,7 +1274,8 @@ class AppState extends ChangeNotifier {
       artistId: '',
       albumId: '',
       duration: const Duration(minutes: 3, seconds: 30),
-      gradientColors: _localGradients[localSongs.length % _localGradients.length],
+      gradientColors:
+          _localGradients[localSongs.length % _localGradients.length],
       localFilePath: path,
     );
   }
@@ -1189,7 +1301,8 @@ class AppState extends ChangeNotifier {
     importingLocalFiles = true;
     notifyListeners();
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.audio, allowMultiple: true);
       if (result == null) return 0;
       var added = 0;
       for (final file in result.files) {
@@ -1288,7 +1401,9 @@ class AppState extends ChangeNotifier {
     var foldersChanged = false;
     if (path != null) {
       final before = localFolderPaths.length;
-      localFolderPaths.removeWhere((folder) => path!.startsWith(folder) && !localSongs.any((s) => s.localFilePath?.startsWith(folder) ?? false));
+      localFolderPaths.removeWhere((folder) =>
+          path!.startsWith(folder) &&
+          !localSongs.any((s) => s.localFilePath?.startsWith(folder) ?? false));
       foldersChanged = localFolderPaths.length != before;
     }
     notifyListeners();
@@ -1305,7 +1420,8 @@ class AppState extends ChangeNotifier {
   /// pickers stuck showing a spinner forever instead of just doing nothing.
   Future<Uint8List?> pickImageBytes() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.image, withData: true);
       return result?.files.single.bytes;
     } catch (_) {
       return null;
@@ -1332,7 +1448,10 @@ class AppState extends ChangeNotifier {
   // --- Playlists --------------------------------------------------------
   List<Playlist> playlists = [];
 
-  Playlist createPlaylist(String name, {ImageProvider? artwork, List<String> songIds = const [], SmartPlaylistPreset? smartPreset}) {
+  Playlist createPlaylist(String name,
+      {ImageProvider? artwork,
+      List<String> songIds = const [],
+      SmartPlaylistPreset? smartPreset}) {
     HapticFeedback.lightImpact();
     final playlist = Playlist(
       id: 'playlist_${DateTime.now().microsecondsSinceEpoch}',
@@ -1355,14 +1474,22 @@ class AppState extends ChangeNotifier {
   Playlist createSmartPlaylist(SmartPlaylistPreset preset) {
     final existing = playlists.where((p) => p.smartPreset == preset);
     if (existing.isNotEmpty) return existing.first;
-    final previewIds = ShuroPulse.smartPlaylistSongs(preset, this).take(4).map((s) => s.id).toList();
-    return createPlaylist(preset.label, smartPreset: preset, songIds: previewIds);
+    final previewIds = ShuroPulse.smartPlaylistSongs(preset, this)
+        .take(4)
+        .map((s) => s.id)
+        .toList();
+    return createPlaylist(preset.label,
+        smartPreset: preset, songIds: previewIds);
   }
 
-  void updatePlaylistArtwork(String playlistId, ImageProvider? artwork, {bool clear = false}) {
+  void updatePlaylistArtwork(String playlistId, ImageProvider? artwork,
+      {bool clear = false}) {
     playlists = [
       for (final p in playlists)
-        if (p.id == playlistId) p.copyWith(artwork: artwork, clearArtwork: clear) else p,
+        if (p.id == playlistId)
+          p.copyWith(artwork: artwork, clearArtwork: clear)
+        else
+          p,
     ];
     notifyListeners();
   }
@@ -1399,7 +1526,10 @@ class AppState extends ChangeNotifier {
   void removeSongFromPlaylist(String playlistId, String songId) {
     playlists = [
       for (final p in playlists)
-        if (p.id == playlistId) p.copyWith(songIds: p.songIds.where((id) => id != songId).toList()) else p,
+        if (p.id == playlistId)
+          p.copyWith(songIds: p.songIds.where((id) => id != songId).toList())
+        else
+          p,
     ];
     notifyListeners();
     unawaited(_persistPlaylists());

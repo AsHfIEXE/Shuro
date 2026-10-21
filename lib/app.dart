@@ -586,12 +586,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // the diagnostics panel reports against the policy that really applied.
     player.setSourcePolicy(
         SourcePolicy(quality: appState.effectiveStreamingQuality));
+    if (appState.privateListening) {
+      // Do not let a track that was already audible when private listening
+      // began get written as a new history item if privacy is later disabled.
+      _lastRecordedSongId = player.currentSong?.id;
+      _resetScrobbleSession();
+    }
   }
 
   void _recordListeningHistory() {
     final player = _boundPlayer;
     final appState = _boundAppState;
     if (player == null || appState == null) return;
+    if (appState.privateListening) {
+      _lastRecordedSongId = player.currentSong?.id;
+      return;
+    }
     final song = player.currentSong;
     if (song == null || song.id == _lastRecordedSongId) return;
     _lastRecordedSongId = song.id;
@@ -601,6 +611,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Song? _scrobblingSong;
   DateTime? _scrobblingStartedAt;
   Duration _scrobblingLastPosition = Duration.zero;
+  Duration _scrobblingStartPosition = Duration.zero;
+
+  void _resetScrobbleSession() {
+    _scrobblingSong = null;
+    _scrobblingStartedAt = null;
+    _scrobblingLastPosition = Duration.zero;
+    _scrobblingStartPosition = Duration.zero;
+  }
 
   /// Feeds Last.fm: a now-playing ping when a track starts, and a scrobble for
   /// the outgoing track when it had been played long enough to count.
@@ -613,6 +631,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final player = _boundPlayer;
     final appState = _boundAppState;
     if (player == null || appState == null) return;
+    if (appState.privateListening) {
+      // Never send an in-progress track after the user turns privacy on.
+      // Dropping a partial candidate is conservative and prevents a later
+      // track change from submitting private listening time.
+      _resetScrobbleSession();
+      return;
+    }
     if (!sharedScrobbleService.isReady &&
         !sharedScrobbleService.needsAuthorization) return;
 
@@ -641,6 +666,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
       _scrobblingSong = song;
       _scrobblingStartedAt = DateTime.now().toUtc();
+      _scrobblingStartPosition = player.position;
       _scrobblingLastPosition = Duration.zero;
       unawaited(sharedScrobbleService.nowPlaying(ScrobbleEntry(
         artist: song.artist,
@@ -653,7 +679,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return;
     }
 
-    final position = player.position;
+    final position = player.position - _scrobblingStartPosition;
     if (position > _scrobblingLastPosition) _scrobblingLastPosition = position;
   }
 

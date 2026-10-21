@@ -326,6 +326,23 @@ class SettingsScreen extends StatelessWidget {
 
               _SectionLabel('BEHAVIOR'),
               _ToggleRow(
+                label: 'Private listening',
+                value: appState.privateListening,
+                onChanged: appState.setPrivateListening,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Text(
+                  'Session only. New listening history and Last.fm activity stay off; downloads and playback still work.',
+                  style: GoogleFonts.getFont(
+                    currentFontFamily,
+                    color: kMutedTextColor,
+                    fontSize: 11.5,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              _ToggleRow(
                   label: 'Autoplay',
                   value: appState.autoplay,
                   onChanged: (v) =>
