@@ -8,6 +8,7 @@ import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
 import '../screens/downloads/downloads_screen.dart';
 import '../screens/now_playing/lyrics_screen.dart';
+import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../state/app_state.dart';
@@ -561,11 +562,21 @@ class _PlayerDockState extends State<_PlayerDock> {
           return Row(
             children: [
               const SizedBox(width: 18),
-              ArtworkThumb(
-                gradientColors: song.gradientColors,
-                artwork: song.artwork,
-                size: 62,
-                radius: 11,
+              Semantics(
+                button: true,
+                label: 'Open now playing',
+                child: InkWell(
+                  onTap: () => Navigator.of(context).push(
+                    drillDownRoute(NowPlayingScreen(initialSong: song)),
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                  child: ArtworkThumb(
+                    gradientColors: song.gradientColors,
+                    artwork: song.artwork,
+                    size: 62,
+                    radius: 11,
+                  ),
+                ),
               ),
               const SizedBox(width: 13),
               SizedBox(

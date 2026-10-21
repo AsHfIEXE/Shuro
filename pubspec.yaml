@@ -60,6 +60,10 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
+  # Native desktop lifecycle: close-to-tray keeps libmpv playback alive until
+  # the listener explicitly chooses Quit.
+  window_manager: ^0.5.2
+  tray_manager: ^0.5.3
 
 dev_dependencies:
   flutter_test:
@@ -69,3 +73,6 @@ dev_dependencies:
   just_audio_platform_interface: any
 flutter:
   uses-material-design: true
+  assets:
+    - _assets/icon_512.png
+    - windows/runner/resources/app_icon.ico

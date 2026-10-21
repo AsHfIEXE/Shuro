@@ -159,6 +159,10 @@ chaos harness.
 - **Desktop shell** (Windows/Linux): sidebar navigation, a persistent
   now-playing bar with preview-then-commit seeking and volume, a lyrics
   side panel, and keyboard shortcuts (Space, Ctrl+←/→, Ctrl+1–5, Ctrl+L).
+  Playback uses the bundled **libmpv** backend; closing the window keeps the
+  queue playing from the system tray, with an explicit **Quit Shuro** action.
+  On Linux shells without a tray host, close behaves normally so the window
+  can never be hidden without a way back.
 
 ### 🔒 Privacy that isn't a promise, it's a design
 
@@ -236,7 +240,7 @@ flutter test --no-pub          # 143 cases + chaos suite
 flutter build apk --release            # Android
 flutter build appbundle --release      # Play upload
 flutter build windows --release        # Windows (needs VS C++ + Developer Mode)
-flutter build linux --release          # Linux (needs GTK3/libmpv dev packages)
+flutter build linux --release          # Linux (needs GTK3, libmpv and libayatana-appindicator3 dev packages)
 ```
 
 ### CI/CD

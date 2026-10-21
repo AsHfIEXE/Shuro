@@ -49,342 +49,369 @@ class SettingsScreen extends StatelessWidget {
     // nothing reads.
     final playbackPrefs = context.watch<PlaybackPrefs>();
 
-    return Scaffold(
-      backgroundColor: kSurfaceColor,
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text('Settings',
-                  style: headingFont(
-                      color: kTextColor,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600)),
-            ),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        },
+      },
+      child: Scaffold(
+        backgroundColor: kSurfaceColor,
+        body: SafeArea(
+          bottom: false,
+          child: ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Row(
+                  children: [
+                    if (Navigator.of(context).canPop()) ...[
+                      IconButton(
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(
+                      'Settings',
+                      style: headingFont(
+                        color: kTextColor,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-            _SectionLabel('ACCOUNT'),
-            _NavRow(
-              icon: Icons.dns_rounded,
-              label: 'Server',
-              value: appState.activeServer?.name ??
-                  (appState.isLocalOnly ? 'Local files only' : '—'),
-              onTap: () => Navigator.of(context)
-                  .push(drillDownRoute(const ManageServersScreen())),
-            ),
-            if (appState.hasServer)
-              // No tap affordance: there's no separate "account" page to
-              // open (the server connection *is* the account), so this is
-              // honest info display rather than a dead button.
+              _SectionLabel('ACCOUNT'),
               _NavRow(
-                  icon: Icons.person_rounded,
-                  label: 'Account',
-                  value: appState.activeServer?.username ?? '—'),
-            _NavRow(
-              icon: Icons.photo_camera_rounded,
-              label: 'Profile photo',
-              value: appState.userAvatarBytes != null ? 'Set' : 'Default',
-              onTap: () => Navigator.of(context)
-                  .push(drillDownRoute(const AvatarEditorScreen())),
-            ),
-            _NavRow(
-              icon: Icons.logout_rounded,
-              // A local-only user never actually signed into anything, so
-              // the destructive action here is framed as leaving that mode
-              // (back to the Welcome screen) rather than a mismatched
-              // "sign out" that implies an account session that never
-              // existed.
-              label: appState.isLocalOnly ? 'Exit local-only mode' : 'Sign out',
-              destructive: true,
-              onTap: () =>
-                  _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
-            ),
+                icon: Icons.dns_rounded,
+                label: 'Server',
+                value: appState.activeServer?.name ??
+                    (appState.isLocalOnly ? 'Local files only' : '—'),
+                onTap: () => Navigator.of(context)
+                    .push(drillDownRoute(const ManageServersScreen())),
+              ),
+              if (appState.hasServer)
+                // No tap affordance: there's no separate "account" page to
+                // open (the server connection *is* the account), so this is
+                // honest info display rather than a dead button.
+                _NavRow(
+                    icon: Icons.person_rounded,
+                    label: 'Account',
+                    value: appState.activeServer?.username ?? '—'),
+              _NavRow(
+                icon: Icons.photo_camera_rounded,
+                label: 'Profile photo',
+                value: appState.userAvatarBytes != null ? 'Set' : 'Default',
+                onTap: () => Navigator.of(context)
+                    .push(drillDownRoute(const AvatarEditorScreen())),
+              ),
+              _NavRow(
+                icon: Icons.logout_rounded,
+                // A local-only user never actually signed into anything, so
+                // the destructive action here is framed as leaving that mode
+                // (back to the Welcome screen) rather than a mismatched
+                // "sign out" that implies an account session that never
+                // existed.
+                label:
+                    appState.isLocalOnly ? 'Exit local-only mode' : 'Sign out',
+                destructive: true,
+                onTap: () =>
+                    _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
+              ),
 
-            _SectionLabel('PLAYBACK'),
-            _NavRow(
-              icon: Icons.equalizer_rounded,
-              label: 'Equalizer',
-              onTap: () => showEqualizerSheet(context),
-            ),
-            _NavRow(
-              icon: Icons.wifi_rounded,
-              label: 'Wi-Fi quality',
-              value: appState.wifiQuality.label,
-              onTap: () async {
-                final selected = await showQualitySelectorSheet(context,
-                    title: 'Wi-Fi Streaming Quality',
-                    current: appState.wifiQuality);
-                if (selected != null) appState.updateWifiQuality(selected);
-              },
-            ),
-            _NavRow(
-              icon: Icons.signal_cellular_alt_rounded,
-              label: 'Mobile data quality',
-              value: appState.mobileQuality.label,
-              onTap: () async {
-                final selected = await showQualitySelectorSheet(context,
-                    title: 'Mobile Data Streaming Quality',
-                    current: appState.mobileQuality);
-                if (selected != null) appState.updateMobileQuality(selected);
-              },
-            ),
-            // Effects that change real audio, each reading PlaybackPrefs.
-            //
-            // Fade between songs is a real volume fade across the boundary.
-            // Gapless playback deliberately has no switch: the whole queue is
-            // handed to the engine as one playlist (see PlayerController
-            // _jumpTo), so consecutive tracks run into each other with no load
-            // gap by construction rather than by a setting.
-            _NavRow(
-              icon: Icons.graphic_eq_rounded,
-              label: 'Fade between songs',
-              value: playbackPrefs.crossfadeSeconds == 0
-                  ? 'Off'
-                  : '${playbackPrefs.crossfadeSeconds}s',
-              onTap: () => _pickCrossfade(context, playbackPrefs),
-            ),
-            // Loudness normalisation from the server's own ReplayGain tags.
-            _ToggleRow(
-              label: 'Replay gain',
-              value: playbackPrefs.replayGain,
-              onChanged: (v) => playbackPrefs.setReplayGain(v),
-            ),
-            _NavRow(
-              icon: Icons.speed_rounded,
-              label: 'Playback speed',
-              value: '${playbackPrefs.playbackSpeed.toStringAsFixed(2)}×',
-              onTap: () => _pickPlaybackSpeed(context, playbackPrefs),
-            ),
-            _ToggleRow(
-              label: 'Skip silence',
-              value: playbackPrefs.skipSilence,
-              onChanged: (v) => playbackPrefs.setSkipSilence(v),
-            ),
-
-            _SectionLabel('LYRICS'),
-            _ToggleRow(
-                label: 'Auto-scroll',
-                value: appState.lyricsAutoScroll,
-                onChanged: appState.updateLyricsAutoScroll),
-            _NavRow(
-              icon: Icons.sync_rounded,
-              label: 'Sync adjustment',
-              value: appState.lyricsOffsetMs == 0
-                  ? 'On time'
-                  : '${appState.lyricsOffsetMs > 0 ? '+' : ''}${appState.lyricsOffsetMs} ms',
-              onTap: () => _adjustLyricsSync(context, appState),
-            ),
-
-            _SectionLabel('DOWNLOADS'),
-            _NavRow(
-              icon: Icons.download_rounded,
-              label: 'Download quality',
-              value: appState.downloadQuality.label,
-              onTap: () async {
-                final selected = await showQualitySelectorSheet(context,
-                    title: 'Download Quality',
-                    current: appState.downloadQuality);
-                if (selected != null) appState.updateDownloadQuality(selected);
-              },
-            ),
-            _ToggleRow(
-                label: 'Wi-Fi only',
-                value: appState.downloadWifiOnly,
-                onChanged: (v) => appState
-                    .toggleSetting(() => appState.downloadWifiOnly = v)),
-            // Wired to the real download service: opens the system folder
-            // picker, and the chosen folder becomes where downloads are saved.
-            // "App storage" means the default documents dir (which survives
-            // app updates).
-            _NavRow(
-              icon: Icons.folder_rounded,
-              label: 'Storage location',
-              value: context.watch<DownloadService>().customLocation == null
-                  ? 'App storage'
-                  : 'Custom folder',
-              onTap: () => _pickDownloadLocation(context),
-            ),
-            _NavRow(
-              icon: Icons.delete_outline_rounded,
-              label: 'Clear downloads',
-              destructive: true,
-              onTap: () => _confirmClear(
-                context,
-                title: 'Clear all downloads?',
-                message:
-                    "You'll need to download songs again to play them offline.",
-                onConfirm: () async {
-                  final downloads = context.read<DownloadService>();
-                  for (final song in downloads.songs) {
-                    await downloads.remove(song.id);
-                  }
+              _SectionLabel('PLAYBACK'),
+              // This is Android's system DSP. Do not present a dead desktop
+              // control as though libmpv had received an equalizer setting.
+              if (defaultTargetPlatform == TargetPlatform.android)
+                _NavRow(
+                  icon: Icons.equalizer_rounded,
+                  label: 'Equalizer',
+                  onTap: () => showEqualizerSheet(context),
+                ),
+              _NavRow(
+                icon: Icons.wifi_rounded,
+                label: 'Wi-Fi quality',
+                value: appState.wifiQuality.label,
+                onTap: () async {
+                  final selected = await showQualitySelectorSheet(context,
+                      title: 'Wi-Fi Streaming Quality',
+                      current: appState.wifiQuality);
+                  if (selected != null) appState.updateWifiQuality(selected);
                 },
               ),
-            ),
-
-            _SectionLabel('CACHE'),
-            const _CacheSection(),
-
-            _SectionLabel('APPEARANCE'),
-            // No tap affordance: Shuro is deliberately dark-only (part of
-            // its brand identity, not an oversight), so there's no picker
-            // to open — this states that rather than pretending to offer one.
-            _NavRow(
-                icon: Icons.dark_mode_rounded, label: 'Theme', value: 'Dark'),
-            _NavRow(
-                icon: Icons.text_fields_rounded,
-                label: 'Font',
-                value: appState.fontFamily,
-                onTap: () => showFontPickerSheet(context)),
-            _ToggleRow(
-                label: 'Dynamic colors',
-                value: appState.dynamicColors,
-                onChanged: (v) =>
-                    appState.toggleSetting(() => appState.dynamicColors = v)),
-            // Two looks for Now Playing / Lyrics: the animated blurred artwork, or
-            // a static gradient from the same artwork-extracted palette. The
-            // static option is genuinely cheaper per frame, so it doubles as the
-            // low-end-device choice.
-            _NavRow(
-              icon: Icons.blur_on_rounded,
-              label: 'Now Playing background',
-              value: appearance.backgroundStyleLabel,
-              onTap: () => _pickBackgroundStyle(context, appearance),
-            ),
-            // User-tuned blur strength and idle motion — the backdrop is the
-            // surface people stare at longest, so both are preferences, not
-            // constants.
-            _NavRow(
-              icon: Icons.blur_linear_rounded,
-              label: 'Background blur',
-              value: appearance.backdropBlurLabel,
-              onTap: () => _pickBackdropBlur(context, appearance),
-            ),
-            _NavRow(
-              icon: Icons.animation_rounded,
-              label: 'Background motion',
-              value: appearance.backdropMotionLabel,
-              onTap: () => _pickBackdropMotion(context, appearance),
-            ),
-            // Word-by-word karaoke or plain line-by-line highlighting — a real
-            // preference, and line mode is the honest one when only line
-            // timings exist.
-            _NavRow(
-              icon: Icons.lyrics_rounded,
-              label: 'Lyrics highlight',
-              value: appearance.lyricsHighlightLabel,
-              onTap: () => _pickLyricsHighlight(context, appearance),
-            ),
-            // Hides the status/navigation bars on Now Playing and Lyrics only —
-            // deliberately scoped, so the rest of the app keeps its bars.
-            _ToggleRow(
-              label: 'Immersive screens',
-              value: appearance.immersiveScreens,
-              onChanged: appearance.setImmersiveScreens,
-            ),
-            _ToggleRow(
-                label: 'Reduce animations',
-                value: appState.reduceAnimations,
-                onChanged: appState.updateReduceAnimations),
-            _NavRow(
-              icon: Icons.grid_view_rounded,
-              label: 'Artwork style',
-              value: appState.artworkStyle.label,
-              onTap: () async {
-                final selected =
-                    await showArtworkStyleSheet(context, appState.artworkStyle);
-                if (selected != null) appState.updateArtworkStyle(selected);
-              },
-            ),
-
-            _SectionLabel('BEHAVIOR'),
-            _ToggleRow(
-                label: 'Autoplay',
-                value: appState.autoplay,
-                onChanged: (v) =>
-                    appState.toggleSetting(() => appState.autoplay = v)),
-            _ToggleRow(
-                label: 'Remember queue',
-                value: appState.rememberQueue,
-                onChanged: (v) =>
-                    appState.toggleSetting(() => appState.rememberQueue = v)),
-            _ToggleRow(
-                label: 'Resume playback',
-                value: appState.resumePlayback,
-                onChanged: (v) =>
-                    appState.toggleSetting(() => appState.resumePlayback = v)),
-
-            const _SectionLabel('SERVER'),
-            _NavRow(
-              icon: Icons.sync_rounded,
-              label: 'Rescan server library',
-              value: 'Ask Navidrome to look for new files',
-              onTap: () => _rescanServer(context),
-            ),
-
-            const _SectionLabel('RESET'),
-            _NavRow(
-              icon: Icons.restart_alt_rounded,
-              label: 'Reset app data',
-              value: 'Erase everything',
-              destructive: true,
-              onTap: () => _confirmResetApp(context),
-            ),
-            const _Note(
-              'Signs out, forgets servers, favorites, playlists, downloads and every setting, '
-              'then closes the app. Nothing on your Navidrome server is touched.',
-            ),
-
-            const _SectionLabel('PERFORMANCE'),
-            const _PerformanceTile(),
-
-            const _SectionLabel('ABOUT'),
-            const _AboutBlock(),
-            _NavRow(
-                icon: Icons.info_outline_rounded,
-                label: 'Version',
-                value: kAppVersion),
-            // Play Store reviewers and screen-reader users both get real
-            // value here: the exact facts the consent screen discloses, in
-            // plain sight.
-            _NavRow(
-              icon: Icons.phone_android_rounded,
-              label: 'Device & app info',
-              onTap: () => _showDeviceInfoSheet(context),
-            ),
-            _NavRow(
-              icon: Icons.gavel_rounded,
-              label: 'Terms & privacy',
-              onTap: () => _showTermsSheet(context),
-            ),
-            _NavRow(
-              icon: Icons.bug_report_rounded,
-              label: 'Report a problem',
-              onTap: () => _showReportSheet(context),
-            ),
-            // Flutter collects licence text for every package the app links
-            // (pub packages plus engine components) into one OBS-compliant
-            // page — this is the standard, complete way to satisfy the MIT/BSD
-            // "reproduce the copyright notice" clauses.
-            _NavRow(
-              icon: Icons.source_rounded,
-              label: 'Open source licenses',
-              onTap: () => showLicensePage(
-                context: context,
-                applicationName: 'Shuro',
-                applicationVersion: kAppVersion,
+              _NavRow(
+                icon: Icons.signal_cellular_alt_rounded,
+                label: 'Mobile data quality',
+                value: appState.mobileQuality.label,
+                onTap: () async {
+                  final selected = await showQualitySelectorSheet(context,
+                      title: 'Mobile Data Streaming Quality',
+                      current: appState.mobileQuality);
+                  if (selected != null) appState.updateMobileQuality(selected);
+                },
               ),
-            ),
-            // The web services Shuro talks to are not pub packages, so they
-            // never show up in showLicensePage — they get their own page.
-            _NavRow(
-              icon: Icons.public_rounded,
-              label: 'Services & data sources',
-              onTap: () => _showServiceAttributions(context),
-            ),
-            const SizedBox(height: 32),
-          ],
+              // Effects that change real audio, each reading PlaybackPrefs.
+              //
+              // Fade between songs is a real volume fade across the boundary.
+              // Gapless playback deliberately has no switch: the whole queue is
+              // handed to the engine as one playlist (see PlayerController
+              // _jumpTo), so consecutive tracks run into each other with no load
+              // gap by construction rather than by a setting.
+              _NavRow(
+                icon: Icons.graphic_eq_rounded,
+                label: 'Fade between songs',
+                value: playbackPrefs.crossfadeSeconds == 0
+                    ? 'Off'
+                    : '${playbackPrefs.crossfadeSeconds}s',
+                onTap: () => _pickCrossfade(context, playbackPrefs),
+              ),
+              // Loudness normalisation from the server's own ReplayGain tags.
+              _ToggleRow(
+                label: 'Replay gain',
+                value: playbackPrefs.replayGain,
+                onChanged: (v) => playbackPrefs.setReplayGain(v),
+              ),
+              _NavRow(
+                icon: Icons.speed_rounded,
+                label: 'Playback speed',
+                value: '${playbackPrefs.playbackSpeed.toStringAsFixed(2)}×',
+                onTap: () => _pickPlaybackSpeed(context, playbackPrefs),
+              ),
+              _ToggleRow(
+                label: 'Skip silence',
+                value: playbackPrefs.skipSilence,
+                onChanged: (v) => playbackPrefs.setSkipSilence(v),
+              ),
+
+              _SectionLabel('LYRICS'),
+              _ToggleRow(
+                  label: 'Auto-scroll',
+                  value: appState.lyricsAutoScroll,
+                  onChanged: appState.updateLyricsAutoScroll),
+              _NavRow(
+                icon: Icons.sync_rounded,
+                label: 'Sync adjustment',
+                value: appState.lyricsOffsetMs == 0
+                    ? 'On time'
+                    : '${appState.lyricsOffsetMs > 0 ? '+' : ''}${appState.lyricsOffsetMs} ms',
+                onTap: () => _adjustLyricsSync(context, appState),
+              ),
+
+              _SectionLabel('DOWNLOADS'),
+              _NavRow(
+                icon: Icons.download_rounded,
+                label: 'Download quality',
+                value: appState.downloadQuality.label,
+                onTap: () async {
+                  final selected = await showQualitySelectorSheet(context,
+                      title: 'Download Quality',
+                      current: appState.downloadQuality);
+                  if (selected != null)
+                    appState.updateDownloadQuality(selected);
+                },
+              ),
+              _ToggleRow(
+                  label: 'Wi-Fi only',
+                  value: appState.downloadWifiOnly,
+                  onChanged: (v) => appState
+                      .toggleSetting(() => appState.downloadWifiOnly = v)),
+              // Wired to the real download service: opens the system folder
+              // picker, and the chosen folder becomes where downloads are saved.
+              // "App storage" means the default documents dir (which survives
+              // app updates).
+              _NavRow(
+                icon: Icons.folder_rounded,
+                label: 'Storage location',
+                value: context.watch<DownloadService>().customLocation == null
+                    ? 'App storage'
+                    : 'Custom folder',
+                onTap: () => _pickDownloadLocation(context),
+              ),
+              _NavRow(
+                icon: Icons.delete_outline_rounded,
+                label: 'Clear downloads',
+                destructive: true,
+                onTap: () => _confirmClear(
+                  context,
+                  title: 'Clear all downloads?',
+                  message:
+                      "You'll need to download songs again to play them offline.",
+                  onConfirm: () async {
+                    final downloads = context.read<DownloadService>();
+                    for (final song in downloads.songs) {
+                      await downloads.remove(song.id);
+                    }
+                  },
+                ),
+              ),
+
+              _SectionLabel('CACHE'),
+              const _CacheSection(),
+
+              _SectionLabel('APPEARANCE'),
+              // No tap affordance: Shuro is deliberately dark-only (part of
+              // its brand identity, not an oversight), so there's no picker
+              // to open — this states that rather than pretending to offer one.
+              _NavRow(
+                  icon: Icons.dark_mode_rounded, label: 'Theme', value: 'Dark'),
+              _NavRow(
+                  icon: Icons.text_fields_rounded,
+                  label: 'Font',
+                  value: appState.fontFamily,
+                  onTap: () => showFontPickerSheet(context)),
+              _ToggleRow(
+                  label: 'Dynamic colors',
+                  value: appState.dynamicColors,
+                  onChanged: (v) =>
+                      appState.toggleSetting(() => appState.dynamicColors = v)),
+              // Two looks for Now Playing / Lyrics: the animated blurred artwork, or
+              // a static gradient from the same artwork-extracted palette. The
+              // static option is genuinely cheaper per frame, so it doubles as the
+              // low-end-device choice.
+              _NavRow(
+                icon: Icons.blur_on_rounded,
+                label: 'Now Playing background',
+                value: appearance.backgroundStyleLabel,
+                onTap: () => _pickBackgroundStyle(context, appearance),
+              ),
+              // User-tuned blur strength and idle motion — the backdrop is the
+              // surface people stare at longest, so both are preferences, not
+              // constants.
+              _NavRow(
+                icon: Icons.blur_linear_rounded,
+                label: 'Background blur',
+                value: appearance.backdropBlurLabel,
+                onTap: () => _pickBackdropBlur(context, appearance),
+              ),
+              _NavRow(
+                icon: Icons.animation_rounded,
+                label: 'Background motion',
+                value: appearance.backdropMotionLabel,
+                onTap: () => _pickBackdropMotion(context, appearance),
+              ),
+              // Word-by-word karaoke or plain line-by-line highlighting — a real
+              // preference, and line mode is the honest one when only line
+              // timings exist.
+              _NavRow(
+                icon: Icons.lyrics_rounded,
+                label: 'Lyrics highlight',
+                value: appearance.lyricsHighlightLabel,
+                onTap: () => _pickLyricsHighlight(context, appearance),
+              ),
+              // Hides the status/navigation bars on Now Playing and Lyrics only —
+              // deliberately scoped, so the rest of the app keeps its bars.
+              _ToggleRow(
+                label: 'Immersive screens',
+                value: appearance.immersiveScreens,
+                onChanged: appearance.setImmersiveScreens,
+              ),
+              _ToggleRow(
+                  label: 'Reduce animations',
+                  value: appState.reduceAnimations,
+                  onChanged: appState.updateReduceAnimations),
+              _NavRow(
+                icon: Icons.grid_view_rounded,
+                label: 'Artwork style',
+                value: appState.artworkStyle.label,
+                onTap: () async {
+                  final selected = await showArtworkStyleSheet(
+                      context, appState.artworkStyle);
+                  if (selected != null) appState.updateArtworkStyle(selected);
+                },
+              ),
+
+              _SectionLabel('BEHAVIOR'),
+              _ToggleRow(
+                  label: 'Autoplay',
+                  value: appState.autoplay,
+                  onChanged: (v) =>
+                      appState.toggleSetting(() => appState.autoplay = v)),
+              _ToggleRow(
+                  label: 'Remember queue',
+                  value: appState.rememberQueue,
+                  onChanged: (v) =>
+                      appState.toggleSetting(() => appState.rememberQueue = v)),
+              _ToggleRow(
+                  label: 'Resume playback',
+                  value: appState.resumePlayback,
+                  onChanged: (v) => appState
+                      .toggleSetting(() => appState.resumePlayback = v)),
+
+              const _SectionLabel('SERVER'),
+              _NavRow(
+                icon: Icons.sync_rounded,
+                label: 'Rescan server library',
+                value: 'Ask Navidrome to look for new files',
+                onTap: () => _rescanServer(context),
+              ),
+
+              const _SectionLabel('RESET'),
+              _NavRow(
+                icon: Icons.restart_alt_rounded,
+                label: 'Reset app data',
+                value: 'Erase everything',
+                destructive: true,
+                onTap: () => _confirmResetApp(context),
+              ),
+              const _Note(
+                'Signs out, forgets servers, favorites, playlists, downloads and every setting, '
+                'then closes the app. Nothing on your Navidrome server is touched.',
+              ),
+
+              const _SectionLabel('PERFORMANCE'),
+              const _PerformanceTile(),
+
+              const _SectionLabel('ABOUT'),
+              const _AboutBlock(),
+              _NavRow(
+                  icon: Icons.info_outline_rounded,
+                  label: 'Version',
+                  value: kAppVersion),
+              // Play Store reviewers and screen-reader users both get real
+              // value here: the exact facts the consent screen discloses, in
+              // plain sight.
+              _NavRow(
+                icon: Icons.phone_android_rounded,
+                label: 'Device & app info',
+                onTap: () => _showDeviceInfoSheet(context),
+              ),
+              _NavRow(
+                icon: Icons.gavel_rounded,
+                label: 'Terms & privacy',
+                onTap: () => _showTermsSheet(context),
+              ),
+              _NavRow(
+                icon: Icons.bug_report_rounded,
+                label: 'Report a problem',
+                onTap: () => _showReportSheet(context),
+              ),
+              // Flutter collects licence text for every package the app links
+              // (pub packages plus engine components) into one OBS-compliant
+              // page — this is the standard, complete way to satisfy the MIT/BSD
+              // "reproduce the copyright notice" clauses.
+              _NavRow(
+                icon: Icons.source_rounded,
+                label: 'Open source licenses',
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: 'Shuro',
+                  applicationVersion: kAppVersion,
+                ),
+              ),
+              // The web services Shuro talks to are not pub packages, so they
+              // never show up in showLicensePage — they get their own page.
+              _NavRow(
+                icon: Icons.public_rounded,
+                label: 'Services & data sources',
+                onTap: () => _showServiceAttributions(context),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );

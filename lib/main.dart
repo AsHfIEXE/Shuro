@@ -11,6 +11,7 @@ import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
 import 'services/device_profile.dart';
+import 'services/desktop_lifecycle.dart';
 import 'services/download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
@@ -40,7 +41,14 @@ Future<void> main() async {
       (defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.windows)) {
     JustAudioMediaKit.title = 'Shuro';
+    // Desktop streams are buffered by libmpv, not transcoded by the UI.
+    // A larger bounded cache prevents ordinary Wi-Fi jitter from interrupting
+    // original-quality files while leaving the server's selected quality alone.
+    JustAudioMediaKit.bufferSize = 64 * 1024 * 1024;
     JustAudioMediaKit.ensureInitialized(linux: true, windows: true);
+    // Native lifecycle is intentionally independent from the player: failure
+    // to get a tray on a particular Linux shell must never prevent playback.
+    await DesktopLifecycle.instance.initialize();
   }
   debugPrint('[boot] binding ready');
 
