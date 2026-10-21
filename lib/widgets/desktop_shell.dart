@@ -4,17 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:volume_controller/volume_controller.dart';
 
-import '../screens/discover/discover_screen.dart';
 import '../screens/downloads/downloads_screen.dart';
-import '../screens/favorites/favorites_screen.dart';
-import '../screens/home/home_screen.dart';
-import '../screens/library/library_screen.dart';
 import '../screens/now_playing/lyrics_screen.dart';
-import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
-import '../screens/search/search_screen.dart';
 import '../screens/settings/settings_screen.dart';
-import 'package:just_audio/just_audio.dart' show PlayerRepeatMode;
 import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
 import '../state/app_state.dart';
@@ -285,12 +278,6 @@ class _NowPlayingBarState extends State<_NowPlayingBar> {
     } catch (_) {}
   }
 
-  static String _fmt(Duration d) {
-    final m = d.inMinutes.remainder(60).toString();
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
@@ -466,19 +453,18 @@ class _NowPlayingBarState extends State<_NowPlayingBar> {
                   icon: const Icon(Icons.queue_music_rounded,
                       size: 20, color: Colors.white54),
                 ),
-                if (song != null)
-                  IconButton(
-                    tooltip:
-                        isFav ? 'Remove from favourites' : 'Add to favourites',
-                    onPressed: () => appState.toggleFavoriteSong(song.id),
-                    icon: Icon(
-                      isFav
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      size: 20,
-                      color: isFav ? accent : Colors.white54,
-                    ),
+                IconButton(
+                  tooltip:
+                      isFav ? 'Remove from favourites' : 'Add to favourites',
+                  onPressed: () => appState.toggleFavoriteSong(song.id),
+                  icon: Icon(
+                    isFav
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    size: 20,
+                    color: isFav ? accent : Colors.white54,
                   ),
+                ),
                 const SizedBox(width: 8),
               ],
             ),
