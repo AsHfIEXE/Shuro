@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter, TileMode;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -270,14 +271,30 @@ class _LyricsScreenState extends State<LyricsScreen> {
       if (!mounted) return;
       final target = _lineKeys[index]?.currentContext;
       if (target == null) return;
-      Scrollable.ensureVisible(
-        target,
-        // Roughly a third down the viewport: enough context above to read
-        // ahead, and the target never jumps to the very edge.
-        alignment: 0.34,
-        duration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 480),
-        curve: Curves.easeOutCubic,
-      );
+      final renderObject = target.findRenderObject();
+      if (renderObject == null || !renderObject.attached) return;
+      // Reveal ONLY inside this lyrics view's own scrollable. The old
+      // `Scrollable.ensureVisible` walked up the tree and, in the embedded
+      // Now-Playing preview, could resolve to the PAGE scroll view — which
+      // dragged the artwork, header and transport up and down on every lyric
+      // change. If the nearest scrollable is not ours, we do nothing.
+      final scrollable = Scrollable.maybeOf(target);
+      if (scrollable == null) return;
+      if (!_scroll.hasClients || scrollable.position != _scroll.position) return;
+      final position = scrollable.position;
+      final viewport = RenderAbstractViewport.of(renderObject);
+      final reveal = viewport.getOffsetToReveal(renderObject, 0.34).offset;
+      final targetOffset = reveal.clamp(position.minScrollExtent, position.maxScrollExtent);
+      if ((targetOffset - position.pixels).abs() < 1.0) return;
+      if (reduceMotionEnabled) {
+        position.jumpTo(targetOffset);
+      } else {
+        position.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 480),
+          curve: Curves.easeOutCubic,
+        );
+      }
     });
   }
 
