@@ -56,7 +56,17 @@ class EqualizerService extends ChangeNotifier {
   /// before the player has activated: `parameters` waits on the platform.
   Future<void> restore() async {
     if (_effect == null) return;
-    final prefs = await SharedPreferences.getInstance();
+    // Never let a restore failure surface: this runs unawaited from attach(),
+    // and in test harnesses (and any platform without the prefs plugin) the
+    // store throws MissingPluginException. An equalizer that cannot read its
+    // saved state must simply stay flat, not crash the app or a test suite.
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (_) {
+      return;
+    }
+    try {
     _enabled = prefs.getBool(_kEnabled) ?? false;
     final raw = prefs.getString(_kGains);
     if (raw != null) {
@@ -79,6 +89,9 @@ class EqualizerService extends ChangeNotifier {
       }
     } catch (_) {
       // A missing effect must never take the player down.
+    }
+    } catch (_) {
+      // Any other failure (platform channel absent, malformed prefs): flat EQ.
     }
   }
 
