@@ -632,7 +632,10 @@ class _LyricsLineView extends StatelessWidget {
             style: baseStyle.copyWith(
               // Opacity ladder: current white, upcoming 66%, past 46% — one
               // system instead of assorted greys.
-              color: isCurrent ? Colors.white : (dimmed ? const Color(0x75FFFFFF) : const Color(0xA8FFFFFF)),
+              // Contrast ladder: current pure white, upcoming 78%, past 60%.
+              // The previous 66/46% left upcoming lines hard to read on the
+              // blurred backdrop (reported).
+              color: isCurrent ? Colors.white : (dimmed ? const Color(0x9CFFFFFF) : const Color(0xC8FFFFFF)),
               shadows: isCurrent ? [Shadow(color: accent.withValues(alpha: 0.35), blurRadius: 24)] : null,
             ),
             child: Text(
@@ -674,6 +677,47 @@ class _LyricsLineView extends StatelessWidget {
             child: content,
           );
 
+    final Widget cued = !isCurrent
+        ? painted
+        : textAlign == TextAlign.left
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The caret: a clear positional anchor, so the eye lands on
+                  // the right line even when the same words repeat.
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, right: 10),
+                    width: 3,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [accent, accent.withValues(alpha: 0.30)],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Expanded(child: painted),
+                ],
+              )
+            : Column(
+                children: [
+                  painted,
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 22,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [accent.withValues(alpha: 0.95), accent.withValues(alpha: 0.30)],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              );
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -683,7 +727,7 @@ class _LyricsLineView extends StatelessWidget {
         alignment: Alignment.center,
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
-        child: painted,
+        child: cued,
       ),
     );
   }
