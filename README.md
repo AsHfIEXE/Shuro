@@ -5,9 +5,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20desktop%20%C2%B7%20web-8A5CF6" alt="platform" />
   <img src="https://img.shields.io/badge/Flutter-3.47-02569B" alt="Flutter" />
-  <img src="https://img.shields.io/badge/tests-157%20passing%20%C2%B7%2040k%20chaos%20actions-2EA043" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-160%2B%20%C2%B7%2040k%20chaos%20actions-2EA043" alt="tests" />
   <img src="https://img.shields.io/badge/telemetry-none-2EA043" alt="no telemetry" />
-  <img src="https://img.shields.io/badge/quality-format%3Draw%20bitperfect-F5A623" alt="original quality" />
+  <img src="https://img.shields.io/badge/streams-format%3Draw%20%26%23x2014%3B%20no%20hidden%20transcode-F5A623" alt="original quality" />
 </p>
 
 > **Own your music. Stream it at full quality. Let it surprise you.**
@@ -15,7 +15,7 @@
 **Shuro** is a fast, dark, cinematic music player for people who run their own
 server. It speaks the **Subsonic / OpenSubsonic API** — built for
 **Navidrome** and every compatible server — and plays your **local files**
-with real tag support. One library, every source, bit-perfect.
+with real tag support. One library, every source.
 
 No accounts. No telemetry. No transcoding unless you ask for it.
 
@@ -26,94 +26,127 @@ No accounts. No telemetry. No transcoding unless you ask for it.
 ### 🖤 A Now Playing screen that feels alive
 
 - **Adaptive artwork backdrop** — a slow-breathing mesh gradient generated
-  from each track's own color palette, with the cover blurred into it.
-  Tune the blur, pick the motion speed (Normal · Subtle · Lively), or turn
-  it off entirely — your battery, your call.
+  from each track's own palette, with the cover blurred into it. Tune the
+  blur, pick the motion speed (Normal · Subtle · Lively), or switch it off.
 - **Karaoke lyrics** — word-by-word fill or line-by-line highlight, from
-  LRCLIB or your files' embedded tags. Tap any line to seek. Nudge sync
-  ±0.5 s without leaving the view.
-- **Scrubbing artwork ring** — the progress bar *is* the artwork: grab it
-  anywhere and drag.
-- **Split-screen landscape** — player on the left, live lyrics on the right,
-  the sung line always in view.
-- **Audio info sheet** — the truth about what's playing: codec, bitrate,
-  output route, original vs transcoded. Never a lie about your audio path.
-- **Sleep timer suite** — presets, a custom clock picker, *End of track*,
-  *End of queue* (plays everything you queued, then pauses), a real
-  fade-out, +10 minutes, live countdown on the chip, cancel-safe.
+  LRCLIB or your files' embedded tags. Tap a line to seek, nudge sync
+  ±0.5 s, and read without being dragged: auto-follow can only move the
+  lyric list itself, never the page.
+- **A positional cue, not just bold** — the sung line carries an accent
+  caret (left-aligned) or underline (centred), with a 78 % / 60 % contrast
+  ladder for upcoming and past lines — repeated lines ("oh oh oh") are
+  unambiguous.
+- **Scrubbing artwork ring** — the progress bar *is* the artwork: a white
+  knob with a glow marks the position, grows while you drag, and previews
+  the target before a single seek is issued on release.
+- **Split-screen landscape** — player left, live lyrics right, the sung
+  line always in view; a bottom transport stays in the full lyrics view.
+- **Sleep timer suite** — presets, a custom clock picker (*"pause at 12:17"*
+  means exactly that, tomorrow if it already passed), *End of track*,
+  *End of queue*, fade-out, +10 minutes, live countdown, cancel-safe.
+- **Immersive mode** that re-asserts itself after rotation.
 
-### 🖥️ Multi-server, one library
+### 🎚️ Audiophile controls — real DSP, honest reporting
 
-Run more than one music server? Shuro **merges them into a single unified
-library** — songs, albums, artists and playlists side by side, deduplicated,
-with per-server switches in Settings. Your home server and your backup
-server become one collection. Switching servers mid-queue even keeps
-playing, routed per-song.
+- **System equalizer (Android)** — the player is built with an
+  `AudioPipeline` carrying Android's `AndroidEqualizer`, so EQ is a
+  multi-band system effect applied before the mixer, not a volume trick.
+  Bands persist across restarts, flat-reset included; unsupported
+  platforms say so instead of showing dead sliders.
+- **While EQ is on**, the sheet states plainly that Android is processing
+  the audio, so direct/bit-perfect USB output is not in use.
+- **Audio Info that tells the truth** — file codec/bitrate/channels, the
+  request actually made (original vs capped), the classified output route,
+  the platform's direct-playback answer, and the **output device's accepted
+  sample rates, channel counts and PCM encodings**. Unknowns read
+  "not reported" — never a guess, and never a "bit-perfect" claim.
+- **Original quality by default** — streams request the file's own bytes
+  (`format=raw`); High/Medium/Low caps exist for metered connections.
 
 ### 🧠 Shuro Pulse — recommendations that rotate, not repeat
 
-Most players give you the same "similar songs" forever. Shuro Pulse is a
-**session-rotating, on-device recommendation engine**:
-
 | Signal | What it does |
 |---|---|
-| 🕐 Session rotation | Every app launch re-seeds every list — a fresh mix each time, stable while you listen |
-| 📈 Recency decay | What you heard an hour ago sinks; what you haven't heard in weeks rises |
-| 🎨 Genre-affinity graph | Genres score by the taste of the songs living in them — your favorites pull up their unknown neighbors |
-| 🌙 Time-of-day | Late-night mixes lean mellow; evening mixes lean energy |
-| 🎭 Diversity cap | No artist floods your feed — max 2 tracks each until everyone's had a turn |
-| 🧭 Anti-echo | Because-You-Like deliberately recommends under-listened artists adjacent to your taste |
+| 🕐 Session rotation | Every launch re-seeds every list — fresh mix, stable while you listen |
+| 📈 Recency decay | Recently heard tracks sink; unheard ones rise |
+| 🎨 Genre-affinity graph | Genres score by the taste of the songs living in them |
+| 🌙 Time-of-day | Late night leans mellow, evening leans energy |
+| 🎭 Diversity cap | Max 2 tracks per artist until everyone had a turn |
+| 🧭 Anti-echo | Because-You-Like favours under-listened artists near your taste |
+
+Rows **never come back thin**: For You and Tonight's Flow guarantee their
+length, Rediscover tops up, and Because-You-Like / Deep Cuts have honest
+local-library fallbacks instead of empty sections. Results are memoized per
+library signature + hour, so Pulse never janks a frame.
 
 **Discover rows:** For You · Tonight's Flow · Because You Like <artist> ·
 Rediscover · Deep Cuts · Fresh From Your Library.
 
 ### 🪄 Ask for a mood, get a mix
 
-- **Build with Shuro** — type *"something calm for studying"* or *"high
-  energy for the gym"* and get a ranked queue.
-- **Build from this** — every song is a seed: Similar · Same era ·
-  Deeper cuts · Surprise me · Smooth continuation.
+- **Build with Shuro** — *"something calm for studying"*, *"high energy for
+  the gym"* → a ranked queue.
+- **Build from this** — every song is a seed: Similar · Same era · Deeper
+  cuts · Surprise me · Smooth continuation.
 - **10 Smart Playlists** — Rediscover, Deep Cuts, Late Night, Favorites Mix,
   Recently Added, Forgotten Favorites, High Energy, Chill, Focus, Long
   Drive. Re-evaluated live, never a stale stored list.
 
+### 🖥️ Multi-server, one library
+
+Several servers **merge into one collection** — songs, albums, artists and
+playlists side by side, deduplicated, per-server switches in Settings, and
+per-song routing that keeps playing across a server switch.
+
+### 🔀 Shuffle that means what it says
+
+Turning shuffle **on** shuffles what's ahead while the playing track stays
+put; the native queue is re-laid in that order so **"Up next" is exactly
+what plays**; turning it **off restores the saved queue order**. Queue
+integrity is enforced by the chaos harness — the playing track can never
+leave the queue.
+
 ### 📥 Real offline. Real quality.
 
-- **Original-quality downloads** to storage that survives app updates — or
-  any folder you pick. Playback prefers them automatically.
-- **Offline mode** with a cache-first library: airplane mode doesn't lock
-  you out of what you own.
-- **Original quality everywhere** — streams use `format=raw`: the server
-  sends the file's own bytes, never a transcode, unless you pick a capped
-  quality yourself.
+Original-quality downloads that survive app updates (or any folder you
+pick), automatic download-preferred playback, and a cache-first library
+that works in airplane mode.
 
 ### 🔊 Serious playback engineering
 
-- Windowed native queue — instant track starts even in a 10,000-song queue,
-  gapless hand-off, full lock-screen / Bluetooth / **Android Auto** controls.
-- Fade between songs, playback speed 0.75×–2×, skip silence, ReplayGain from
-  your server's tags.
-- **Wrong-song self-heal** — if the engine and the UI ever disagree about
-  what's playing, Shuro detects and resyncs itself in the background.
-- **Scrobbles that count** — now-playing broadcast and proper submissions,
-  so your server's play counts and Last.fm are accurate.
-- **A queue that survives** — your queue and position persist across
-  launches; play-next, reorder, remove, clear, shuffle the queue itself —
-  and when it ends, **autoplay suggestions** keep the session going.
-- **Quality tiers on demand** — original by default, with explicit
-  High/Medium/Low transcode tiers for metered connections.
-- **Immersive mode** — Now Playing fades its chrome away while you listen.
+- Windowed native queue — instant starts even in huge queues, gapless
+  hand-off, full lock-screen / Bluetooth / **Android Auto** controls.
+- Fade between songs, speed 0.75×–2×, skip silence, ReplayGain from your
+  server's tags.
+- **Direct streaming** — the loopback proxy only engages when the DNS
+  health check fails; a healthy network streams straight to the engine, and
+  `Range` requests are honoured so seeking doesn't re-download.
+- **Scrobbles that count** — now-playing ping, Last.fm's documented rule
+  (submit at 50 % or 4 min, skip ≤30 s), ordered persistent queue with
+  retry, plus Navidrome play reporting.
+- **Wrong-song self-heal** — if engine and UI ever disagree, Shuro detects
+  and resyncs in the background.
+
+### 📐 Adaptive to every window
+
+- **Navigation rail in every landscape window** (from 400 dp wide) and on
+  portrait tablets/foldables from 720 dp; bottom bar only on portrait
+  phones, where it costs nothing.
+- Rail width scales **86 / 104 / 116 dp**; below **420 dp tall** it goes
+  icon-only, hides the logo and scrolls — no overflow stripes at any size.
+- Tab state survives the rail↔bar switch (shared key), sheets are
+  height-bounded and scroll, and rows that can't fit wrap instead of
+  overflowing.
+- Song rails measure the user's **text scale**, so large system fonts don't
+  clip cards.
 
 ### 🔒 Privacy that isn't a promise, it's a design
 
-- The app **asks before anything** — a first-launch consent screen explains
-  exactly what leaves the device (lyrics queries, artist art, your own
-  server traffic — that's all).
-- **Zero telemetry.** No analytics SDK, no crash uploader, no ads.
-- Credentials live in **encrypted secure storage**, never in plain prefs.
-- **Report a problem** exports a *redacted* on-device event log — the last
-  300 playback events with credentials and URLs scrubbed. You choose where
-  it goes.
+- First-launch **consent screen** listing exactly what leaves the device.
+- **Zero telemetry**: no analytics SDK, no crash uploader, no ads.
+- Credentials in **encrypted secure storage**.
+- **Report a problem** exports a *redacted* event log (last 300 playback
+  events, URLs and credentials scrubbed) — you choose where it goes.
 
 ---
 
@@ -121,49 +154,45 @@ Rediscover · Deep Cuts · Fresh From Your Library.
 
 | Screen | What you'll see |
 |---|---|
-| **Splash → Onboarding** | Animated dark launch, a welcome flow, a first-run consent screen, and guided server setup |
-| **Home** | Pulse-powered rows that change every session, your recent queues, quick jumps into every library section |
-| **Library** | Songs · Albums · Artists · Genres · Playlists · Local — responsive from phones to TVs, with sort and Play/Shuffle on every list |
-| **Album & Artist detail** | Full discographies and artist pages with server artwork, inline Play/Shuffle, per-item actions |
-| **Collections** | Curated groupings from your server, browsed like native playlists |
-| **Now Playing** | The palette-lit centerpiece: breathing backdrop, karaoke lyrics, scrubbing ring, quick actions (Queue · Sleep · Volume · Audio info) — immersive mode hides the chrome |
-| **Lyrics** | Full-screen word-fill karaoke with a sync nudge, or a live preview under the ring |
-| **Queue** | Reorder, remove, play-next, clear, shuffle — and it resumes exactly where you left off, even after a reboot |
+| **Splash → Onboarding** | Animated dark launch on the brand mark, welcome, consent, guided server setup |
+| **Home** | Pulse rows that change every session, recent queues, quick jumps |
+| **Library** | Songs · Albums · Artists · Genres · Playlists · Local — sort and Play/Shuffle everywhere |
+| **Album & Artist detail** | Full discographies, artist pages, server artwork |
+| **Collections** | Curated server groupings, browsed like native playlists |
+| **Now Playing** | Breathing backdrop, karaoke lyrics with caret cue, scrubbing ring, quick actions (Queue · Sleep · Volume · Audio info) |
+| **Lyrics** | Full-screen word-fill karaoke, sync nudge, tap-to-seek, reading mode that never yanks you back |
+| **Queue** | Reorder, remove, play-next, clear, shuffle — resumes exactly where you left off after a reboot |
 | **Discover** | Six Pulse rows + Smart Playlists + Build with Shuro |
-| **Favorites & Downloads** | Two-way-synced favourites with your server; a downloads hub with real progress and storage control |
+| **Favorites & Downloads** | Two-way favourites with your server; downloads hub with real progress and storage control |
 | **Playlists** | Create locally, edit server playlists (owner-gated), save your queue as a playlist |
 | **Search** | Instant, across songs, albums, artists, genres and playlists |
-| **Settings** | Servers (add/remove/enable per server), quality tiers, playback, appearance — fonts, artwork styles, motion, blur — downloads, About with device facts and licenses |
+| **Settings** | Servers, quality tiers, playback, **Equalizer**, appearance (fonts, artwork styles, motion, blur), downloads, About with device facts, licences and Report a problem |
 
-Dark-only by design — because a music player should disappear into the
-music. Reduce-animations honoured everywhere; every loading state is a real
-skeleton, never a spinner stuck in the void.
+Dark-only by design. Skeletons for every loading state. Reduce-animations
+honoured everywhere — and the Performance profile disables motion, blur and
+the per-frame ring ticker for low-RAM devices.
 
-**Personalization:** pick your own font family, choose how artwork is
-cropped (artwork styles), tune backdrop blur and motion per taste, and set a
-profile avatar in the built-in avatar editor. Adaptive launcher icon and an
-animated dark splash out of the box.
+**Personalization:** font family picker, artwork styles, backdrop blur and
+motion, profile avatar editor, adaptive launcher icon and animated splash.
 
-**Local files are first-class:** import a folder (recursive scan), and Shuro
-enriches it with ID3v2 / FLAC Vorbis tags — real artwork, real palettes,
-same player pipeline as your server tracks.
+**Local files are first-class:** recursive folder import with ID3v2 / FLAC
+Vorbis tag enrichment — artwork, palettes and the same player pipeline.
 
 ---
 
 ## ⚡ Built the hard way
 
-Shuro is developed with the tooling most apps never build:
-
-- 🧪 **157 tests**, including a **seeded chaos harness** that fires
-  **40,000 random playback actions** (skips, seeks, queue edits, injected
-  failures) against the real player and asserts the invariants after every
-  single action — any failure reproduces from its seed.
-- 🩺 A redacted **event log** you can export, so a bug report is evidence,
-  not vibes.
-- ⏱️ Startup that **cannot hang**: every boot-time dependency has a hard
-  timeout — the worst case is a retryable error, never a splash screen
-  forever.
-- 📐 Layout verified at 320×568 phones, tablets, TVs and landscape.
+- 🧪 **160+ tests**, including a **seeded chaos harness** firing **40,000
+  random playback actions** (skips, seeks, queue edits, injected failures)
+  with invariants asserted after every action — any failure reproduces from
+  its seed.
+- 🩺 A **redacted event log** + Report a problem, so bug reports are
+  evidence rather than vibes.
+- ⏱️ Startup that **cannot hang**: every boot dependency has a hard timeout.
+- 📐 Layouts verified from 320×568 phones to tablets, TVs and landscape,
+  plus large-font and narrow-split-screen cases.
+- 📄 Engineering notes in the repo: `docs/playback-audit.md`,
+  `docs/audio-feature-review.md`, `docs/perf-report.md`.
 
 Targets Android API 24+ on 3 GB RAM devices and up. The same code runs as
 desktop and web builds.
@@ -174,33 +203,34 @@ desktop and web builds.
 
 1. **Connect** — your Navidrome / Subsonic URL + account (or local files
    only). Multiple servers welcome; credentials are stored encrypted.
-2. **Listen** — tap any song. Portrait gives you the ring and lyric preview;
+2. **Listen** — tap any song. Portrait gives the ring and lyric preview;
    landscape splits player + lyrics.
-3. **Make it yours** — streaming quality (original by default), fade,
-   ReplayGain, speed, skip silence, backdrop motion, fonts, artwork styles,
-   downloads location, sleep timer defaults.
+3. **Make it yours** — quality tiers, fade, ReplayGain, speed, skip silence,
+   **equalizer bands**, backdrop motion, fonts, downloads location, sleep
+   defaults.
 
 ### Build from source
 
 ```bash
 flutter pub get
-flutter test                # 157 tests, chaos suite included
+flutter test                # includes the seeded chaos suite
 flutter build apk --release # build/app/outputs/flutter-apk/app-release.apk
+flutter build appbundle --release  # Play upload artifact
 ```
 
-Or just push to `main` — GitHub Actions (`.github/workflows/android-release.yml`)
-builds, tests and publishes a release APK automatically.
+Or push to `main` — GitHub Actions
+(`.github/workflows/android-release.yml`) builds, tests, publishes the APK
+and the App Bundle, and prunes old prereleases.
 
 ---
 
 ## 🌐 Services Shuro talks to
 
-- **Your Navidrome / Subsonic server** — your music, your credentials, your
-  machine.
+- **Your Navidrome / Subsonic server** — your music, your credentials.
 - **LRCLIB (lrclib.net)** — synced lyrics, only when you open the lyrics view.
 - **MusicBrainz / Cover Art Archive** — artist pictures and metadata
   fallback, rate-limited and cached.
-- **Last.fm** — optional scrobbling client built in (bring your own account).
+- **Last.fm** — optional scrobbling with your own account.
 
 No account data leaves your server except the queries that power the feature
 you triggered. Everything recommendation-related is computed on-device.
@@ -214,9 +244,9 @@ lib/
 ├── playback/         # Engine contract, source policy, diagnostics, event log
 ├── screens/          # Home, Library, Search, Discover, Favorites,
 │                     # Now Playing, Lyrics, Queue, Downloads, Settings…
-├── services/         # Shuro Pulse, downloads, lyrics, artwork, caching…
+├── services/         # Shuro Pulse, equalizer, downloads, lyrics, caching…
 ├── state/            # AppState (catalog/session), PlayerController,
-│                     # AppearanceSettings
+│                     # AppearanceSettings, DeviceProfile…
 ├── theme/            # Dark theme, brand tokens, dynamic palette
 └── widgets/          # Shared UI (player, nav, cards, sheets, skeletons)
 ```
@@ -225,10 +255,8 @@ lib/
 
 © **AsHfIEXE**. All rights reserved.
 
-Open-source packages are listed inside the app: **Settings → About → Open
-source licenses**. External services are credited under **Settings → About →
+Open-source packages are listed in-app: **Settings → About → Open source
+licenses**. External services are credited under **Settings → About →
 Services & data sources**.
 
-See [CHANGELOG.md](CHANGELOG.md) for the release history and
-[docs/playback-audit.md](docs/playback-audit.md) for how the playback core
-is audited.
+See [CHANGELOG.md](CHANGELOG.md) for release history.
