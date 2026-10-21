@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kDebugMode, kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +32,7 @@ import 'screens/search/search_screen.dart';
 import 'state/app_state.dart';
 import 'state/player_controller.dart';
 import 'theme/app_theme.dart';
+import 'widgets/desktop_shell.dart';
 import 'services/server_link.dart';
 import 'services/stream_proxy.dart';
 import 'widgets/app_logo.dart';
@@ -704,6 +706,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop gets its own shell: sidebar + persistent now-playing bar +
+    // keyboard shortcuts. It is a different navigation model from the phone
+    // shell by design.
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    if (isDesktop) {
+      return DesktopShell(
+        currentIndex: _tabIndex,
+        onSelectTab: _selectTab,
+        tabChildren: _tabChildren,
+        tabStackKey: _tabStackKey,
+      );
+    }
+
     final size = MediaQuery.sizeOf(context);
     final isLandscape = size.width > size.height;
     final useRail = size.width >= kWideShellBreakpoint ||
