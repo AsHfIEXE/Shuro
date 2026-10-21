@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +32,10 @@ class EqualizerService extends ChangeNotifier {
   /// Called once when the player is constructed on Android.
   void attach(AndroidEqualizer effect) {
     _effect = effect;
+    // Restore HERE, not from main(): main() runs before the PlayerController
+    // (and so this effect) exists, so a restore started there saw no effect
+    // and returned immediately — saved bands were never loaded or applied.
+    unawaited(restore());
   }
 
   /// Band layout (count, centre frequencies, permitted dB range). Null while
@@ -85,24 +91,37 @@ class EqualizerService extends ChangeNotifier {
     await _persist();
   }
 
-  Future<void> setGain(int index, double decibels) async {
+  /// Applies a band gain. While a slider is dragged pass `persist: false`
+  /// (the engine follows live) and call [commit] on release — otherwise every
+  /// drag tick wrote to SharedPreferences.
+  Future<void> setGain(int index, double decibels, {bool persist = true}) async {
     _gains[index] = decibels;
     notifyListeners();
     try {
       final params = await parameters();
-      final band = params?.bands.firstWhere((b) => b.index == index,
-          orElse: () => params.bands.first);
-      if (band != null) await band.setGain(decibels);
+      if (params != null) {
+        // Only the band that was asked for — never fall back to another band.
+        for (final band in params.bands) {
+          if (band.index == index) {
+            await band.setGain(decibels);
+            break;
+          }
+        }
+      }
     } catch (_) {}
-    await _persist();
+    if (persist) await _persist();
   }
+
+  /// Persists the current state (call when a slider drag ends).
+  Future<void> commit() => _persist();
 
   Future<void> resetBands() async {
     final params = await parameters();
     if (params == null) return;
     for (final band in params.bands) {
-      await setGain(band.index, 0.0);
+      await setGain(band.index, 0.0, persist: false);
     }
+    await commit();
   }
 
   Future<void> _persist() async {

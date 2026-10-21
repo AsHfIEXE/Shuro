@@ -40,7 +40,11 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
   }
 
   Future<void> _load() async {
-    final params = await EqualizerService.instance.parameters();
+    // Android only creates the equalizer once audio has been loaded, so
+    // before the first track the platform never answers: don't spin forever.
+    final params = await EqualizerService.instance
+        .parameters()
+        .timeout(const Duration(seconds: 3), onTimeout: () => null);
     if (!mounted) return;
     setState(() {
       _params = params;
@@ -88,7 +92,7 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'System equalizer (Android AudioEffect) — applied before the mixer.',
+                    'Android system multi-band equalizer (AudioEffect), applied before the mixer.',
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: kMutedTextColor, fontSize: 12),
                   ),
@@ -105,7 +109,7 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Text(
                         defaultTargetPlatform == TargetPlatform.android
-                            ? 'The system equalizer did not answer on this device.'
+                            ? 'Android creates the equalizer once a track is loaded. Start playing something, then reopen this sheet.'
                             : 'This platform has no system equalizer. Android devices get real DSP here.',
                         style: GoogleFonts.getFont(currentFontFamily,
                             color: Colors.white70, fontSize: 13, height: 1.4),
@@ -121,6 +125,15 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                       activeThumbColor: kBrandColor,
                       onChanged: service.setEnabled,
                     ),
+                    if (service.enabled)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'While the equalizer is on, audio is processed by Android, so bit-perfect / direct USB output is not in use.',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kMutedTextColor, fontSize: 11.5, height: 1.35),
+                        ),
+                      ),
                     const SizedBox(height: 4),
                     for (final band in params.bands)
                       _BandSlider(
@@ -129,7 +142,8 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                         min: _minDb,
                         max: _maxDb,
                         enabled: service.enabled,
-                        onChanged: (v) => service.setGain(band.index, v),
+                        onChanged: (v) => service.setGain(band.index, v, persist: false),
+                        onChangeEnd: (_) => service.commit(),
                       ),
                     const SizedBox(height: 6),
                     Text(
@@ -159,6 +173,7 @@ class _BandSlider extends StatelessWidget {
   final double max;
   final bool enabled;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onChangeEnd;
 
   const _BandSlider({
     required this.label,
@@ -167,6 +182,7 @@ class _BandSlider extends StatelessWidget {
     required this.max,
     required this.enabled,
     required this.onChanged,
+    required this.onChangeEnd,
   });
 
   @override
@@ -193,6 +209,7 @@ class _BandSlider extends StatelessWidget {
               min: min,
               max: max,
               onChanged: enabled ? onChanged : null,
+              onChangeEnd: enabled ? onChangeEnd : null,
             ),
           ),
         ),

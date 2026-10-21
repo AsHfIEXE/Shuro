@@ -10,7 +10,6 @@ import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
 import 'services/device_profile.dart';
-import 'services/equalizer_service.dart';
 import 'services/download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
@@ -32,8 +31,6 @@ Future<void> main() async {
   // limits before any artwork decodes. Non-fatal — a missing prefs store
   // must never block boot.
   unawaited(DeviceProfileService.applyStoredOnBoot());
-  // Persisted equalizer state (no-op on platforms without a system EQ).
-  unawaited(EqualizerService.instance.restore());
   debugPrint('[boot] binding ready');
 
   // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
