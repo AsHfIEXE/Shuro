@@ -64,6 +64,8 @@ class _MiniPlayerBar extends StatelessWidget {
     final isBuffering = isActive && player.isBuffering;
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= MiniPlayer._kWideBreakpoint;
+    // Landscape phones are ~360-410 dp tall: a leaner bar leaves room for content.
+    final short = MediaQuery.sizeOf(context).height < 480;
 
     return GestureDetector(
       onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
@@ -101,8 +103,8 @@ class _MiniPlayerBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding:
-                  EdgeInsets.symmetric(horizontal: wide ? 20 : 12, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                  horizontal: wide ? 20 : 12, vertical: short ? 3 : 8),
               child: Row(
                 children: [
                   Hero(
@@ -110,7 +112,7 @@ class _MiniPlayerBar extends StatelessWidget {
                     child: ArtworkThumb(
                         gradientColors: song.gradientColors,
                         artwork: song.artwork,
-                        size: wide ? 48 : 44,
+                        size: wide ? 48 : (short ? 38 : 44),
                         radius: 8),
                   ),
                   const SizedBox(width: 12),

@@ -65,7 +65,11 @@ class TrackInfoRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: dense ? 18 : 22, height: dense ? 24 / 18 : 28 / 22, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: dense ? 18 : 22,
+                      height: dense ? 24 / 18 : 28 / 22,
+                      fontWeight: FontWeight.w700),
                 ),
                 SizedBox(height: dense ? 2 : 4),
                 Text(
@@ -73,7 +77,14 @@ class TrackInfoRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: dense ? 12.5 : 14, height: dense ? 17 / 12.5 : 20 / 14, fontWeight: FontWeight.w500),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white70,
+                      fontSize: dense ? 12.5 : 14,
+                      height: dense ? 17 / 12.5 : 20 / 14,
+                      fontWeight: FontWeight.w500,
+                      shadows: const [
+                        Shadow(color: Color(0x66000000), blurRadius: 6)
+                      ]),
                 ),
                 if (isFavorite != null && onToggleFavorite != null) ...[
                   SizedBox(height: dense ? 2 : 6),
@@ -83,11 +94,12 @@ class TrackInfoRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     onTap: onToggleFavorite,
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: dense ? 1 : 3),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 10, vertical: dense ? 1 : 3),
                       child: AnimatedFavoriteIcon(
                         isFavorite: isFavorite!,
                         activeColor: accent,
-                        inactiveColor: Colors.white38,
+                        inactiveColor: Colors.white60,
                         size: dense ? 17 : 20,
                         onTap: onToggleFavorite!,
                       ),
@@ -100,7 +112,9 @@ class TrackInfoRow extends StatelessWidget {
           // The icon itself changes for repeat-one, so "one" and "all" are
           // different pictures — plus the badge makes it unmistakable.
           PlayerModeButton(
-            materialIcon: repeatMode == PlayerRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+            materialIcon: repeatMode == PlayerRepeatMode.one
+                ? Icons.repeat_one_rounded
+                : Icons.repeat_rounded,
             modeLabel: switch (repeatMode) {
               PlayerRepeatMode.off => 'Repeat off',
               PlayerRepeatMode.all => 'Repeat all',
@@ -136,8 +150,15 @@ class PlaybackControls extends StatelessWidget {
   /// screen's bottom edge.
   final bool compact;
 
+  /// Optional widgets at the far ends of the row (e.g. shuffle / repeat), so a
+  /// short window can show the whole control cluster on one line.
+  final Widget? leading;
+  final Widget? trailing;
+
   const PlaybackControls({
     super.key,
+    this.leading,
+    this.trailing,
     required this.isPlaying,
     required this.accentColor,
     required this.onPlayPause,
@@ -155,12 +176,15 @@ class PlaybackControls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        if (leading != null) ...[leading!, SizedBox(width: gap * 0.5)],
         Semantics(
           button: true,
           label: 'Previous track',
           child: IconButton(
-            visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
-            icon: ShuroIcon(ShuroGlyph.previous, size: iconSize, color: Colors.white),
+            visualDensity:
+                compact ? VisualDensity.compact : VisualDensity.standard,
+            icon: ShuroIcon(ShuroGlyph.previous,
+                size: iconSize, color: Colors.white),
             onPressed: onPrevious,
             tooltip: 'Previous',
           ),
@@ -178,19 +202,26 @@ class PlaybackControls extends StatelessWidget {
               height: discSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [accentColor, accentColor.withValues(alpha: 0.7)]),
+                gradient: LinearGradient(
+                    colors: [accentColor, accentColor.withValues(alpha: 0.7)]),
                 boxShadow: [
-                  BoxShadow(color: accentColor.withValues(alpha: isPlaying ? 0.65 : 0.4), blurRadius: isPlaying ? 32 : 20, spreadRadius: 1),
+                  BoxShadow(
+                      color:
+                          accentColor.withValues(alpha: isPlaying ? 0.65 : 0.4),
+                      blurRadius: isPlaying ? 32 : 20,
+                      spreadRadius: 1),
                 ],
               ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
                 child: isBuffering
                     ? Padding(
                         key: const ValueKey('buffering'),
                         padding: EdgeInsets.all(compact ? 17 : 26),
-                        child: const CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
+                        child: const CircularProgressIndicator(
+                            strokeWidth: 2.6, color: Colors.white),
                       )
                     : ShuroIcon(
                         isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
@@ -207,12 +238,15 @@ class PlaybackControls extends StatelessWidget {
           button: true,
           label: 'Next track',
           child: IconButton(
-            visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
-            icon: ShuroIcon(ShuroGlyph.next, size: iconSize, color: Colors.white),
+            visualDensity:
+                compact ? VisualDensity.compact : VisualDensity.standard,
+            icon:
+                ShuroIcon(ShuroGlyph.next, size: iconSize, color: Colors.white),
             onPressed: onNext,
             tooltip: 'Next',
           ),
         ),
+        if (trailing != null) ...[SizedBox(width: gap * 0.5), trailing!],
       ],
     );
   }
@@ -266,7 +300,9 @@ class PlayerModeButton extends StatelessWidget {
         tooltip: '$modeLabel — ${active ? 'on' : 'off'}',
         onPressed: onTap,
         style: IconButton.styleFrom(
-          backgroundColor: active ? accent.withValues(alpha: 0.22) : Colors.black.withValues(alpha: 0.28),
+          backgroundColor: active
+              ? accent.withValues(alpha: 0.22)
+              : Colors.black.withValues(alpha: 0.28),
         ),
         icon: badge == null
             ? iconWidget
@@ -279,10 +315,16 @@ class PlayerModeButton extends StatelessWidget {
                     top: -3,
                     child: Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(6)),
+                      decoration: BoxDecoration(
+                          color: accent,
+                          borderRadius: BorderRadius.circular(6)),
                       child: Text(
                         badge!,
-                        style: GoogleFonts.getFont(currentFontFamily, color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800, height: 1),
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.black,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            height: 1),
                       ),
                     ),
                   ),

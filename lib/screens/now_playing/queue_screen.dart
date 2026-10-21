@@ -18,45 +18,71 @@ class QueueScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
     final queue = player.queue;
-    final List<Song> upNext = queue.length > player.queueIndex + 1 ? queue.sublist(player.queueIndex + 1) : const [];
+    final List<Song> upNext = queue.length > player.queueIndex + 1
+        ? queue.sublist(player.queueIndex + 1)
+        : const [];
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
       appBar: AppBar(
         backgroundColor: kSurfaceColor,
         elevation: 0,
-        title: Text('Queue', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16)),
+        title: Text('Queue',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 16)),
         actions: [
           if (upNext.isNotEmpty)
             TextButton(
               onPressed: () async {
                 final name = await _promptName(context);
-                if (name == null || name.trim().isEmpty || !context.mounted) return;
-                final playlist = context.read<AppState>().createPlaylist(name.trim());
+                if (name == null || name.trim().isEmpty || !context.mounted)
+                  return;
+                final playlist =
+                    context.read<AppState>().createPlaylist(name.trim());
                 for (final song in queue) {
-                  context.read<AppState>().addSongToPlaylist(playlist.id, song.id);
+                  context
+                      .read<AppState>()
+                      .addSongToPlaylist(playlist.id, song.id);
                 }
               },
-              child: Text('Save as playlist', style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 12)),
+              child: Text('Save as playlist',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kBrandColor, fontSize: 12)),
             ),
         ],
       ),
       body: queue.isEmpty
-          ? const EmptyStateView(icon: Icons.queue_music_rounded, title: 'Queue is empty')
+          ? const EmptyStateView(
+              icon: Icons.queue_music_rounded, title: 'Queue is empty')
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (player.currentSong != null) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                    child: Text('Now Playing', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text('Now Playing',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ),
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    leading: ArtworkThumb(gradientColors: player.currentSong!.gradientColors, artwork: player.currentSong!.artwork, size: 46, radius: 8),
-                    title: Text(player.currentSong!.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.getFont(currentFontFamily, color: player.currentSong!.gradientColors.last, fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text(player.currentSong!.artist, style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                    leading: ArtworkThumb(
+                        gradientColors: player.currentSong!.gradientColors,
+                        artwork: player.currentSong!.artwork,
+                        size: 46,
+                        radius: 8),
+                    title: Text(player.currentSong!.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: player.currentSong!.gradientColors.last,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                    subtitle: Text(player.currentSong!.artist,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 12)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -67,16 +93,24 @@ class QueueScreen extends StatelessWidget {
                         IconButton(
                           tooltip: player.isPlaying ? 'Pause' : 'Play',
                           icon: player.isBuffering
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white70))
                               : Icon(
-                                  player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                  color: player.currentSong!.gradientColors.last,
+                                  player.isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color:
+                                      player.currentSong!.gradientColors.last,
                                   size: 22,
                                 ),
                           onPressed: player.togglePlayPause,
                         ),
                         IconButton(
-                          icon: const Icon(Icons.more_vert_rounded, color: kMutedTextColor, size: 20),
+                          icon: const Icon(Icons.more_vert_rounded,
+                              color: kMutedTextColor, size: 20),
                           // Guard at tap time: the row was built while a song
                           // existed, but the queue can empty between build
                           // and tap (audit finding F3-1).
@@ -93,32 +127,53 @@ class QueueScreen extends StatelessWidget {
                 if (upNext.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                    child: Text('Up Next', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text('Up Next',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ),
                 Expanded(
                   child: upNext.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.only(top: 24),
-                          child: Text('Nothing queued after this', textAlign: TextAlign.center,
-                              style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+                          child: Text('Nothing queued after this',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: kMutedTextColor, fontSize: 13)),
                         )
                       : ReorderableListView.builder(
                           padding: const EdgeInsets.only(bottom: 24),
                           itemCount: upNext.length,
                           onReorder: (oldIndex, newIndex) {
-                            player.reorderQueue(player.queueIndex + 1 + oldIndex, player.queueIndex + 1 + newIndex);
+                            player.reorderQueue(
+                                player.queueIndex + 1 + oldIndex,
+                                player.queueIndex + 1 + newIndex);
                           },
                           itemBuilder: (context, i) {
                             final song = upNext[i];
                             final queueIndex = player.queueIndex + 1 + i;
                             return ListTile(
                               key: ValueKey('queue_${queueIndex}_${song.id}'),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                              leading: ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 44, radius: 8),
-                              title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                              subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 20),
+                              leading: ArtworkThumb(
+                                  gradientColors: song.gradientColors,
+                                  artwork: song.artwork,
+                                  size: 44,
+                                  radius: 8),
+                              title: Text(song.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500)),
+                              subtitle: Text(song.artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: kMutedTextColor, fontSize: 12)),
                               // A tap target rather than long-press: this row
                               // already has a long-press-to-drag gesture from
                               // ReorderableListView itself (no explicit drag
@@ -129,14 +184,19 @@ class QueueScreen extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.more_vert_rounded, color: kMutedTextColor, size: 20),
-                                    onPressed: () => showSongActionsSheet(context, song),
+                                    icon: const Icon(Icons.more_vert_rounded,
+                                        color: kMutedTextColor, size: 20),
+                                    onPressed: () =>
+                                        showSongActionsSheet(context, song),
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.close_rounded, color: kMutedTextColor, size: 18),
-                                    onPressed: () => player.removeFromQueue(queueIndex),
+                                    icon: const Icon(Icons.close_rounded,
+                                        color: kMutedTextColor, size: 18),
+                                    onPressed: () =>
+                                        player.removeFromQueue(queueIndex),
                                   ),
-                                  const Icon(Icons.drag_handle_rounded, color: kMutedTextColor),
+                                  const Icon(Icons.drag_handle_rounded,
+                                      color: kMutedTextColor),
                                 ],
                               ),
                             );
@@ -144,14 +204,26 @@ class QueueScreen extends StatelessWidget {
                         ),
                 ),
                 if (upNext.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: player.clearQueue,
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent.shade100, side: const BorderSide(color: kDividerColor)),
-                        child: const Text('Clear Queue'),
+                  // SafeArea: the button sat under the Android navigation bar
+                  // (edge-to-edge app), where it was both covered and unreadable.
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: player.clearQueue,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent.shade100,
+                            backgroundColor:
+                                Colors.redAccent.withValues(alpha: 0.10),
+                            side: BorderSide(
+                                color: Colors.redAccent.shade100
+                                    .withValues(alpha: 0.55)),
+                          ),
+                          child: const Text('Clear Queue'),
+                        ),
                       ),
                     ),
                   ),
@@ -167,16 +239,24 @@ Future<String?> _promptName(BuildContext context) {
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: kCardColor,
-      title: Text('Save queue as playlist', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 16)),
+      title: Text('Save queue as playlist',
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: Colors.white, fontSize: 16)),
       content: TextField(
         controller: controller,
         autofocus: true,
         style: GoogleFonts.getFont(currentFontFamily, color: Colors.white),
-        decoration: const InputDecoration(hintText: 'Playlist name', hintStyle: TextStyle(color: kMutedTextColor)),
+        decoration: const InputDecoration(
+            hintText: 'Playlist name',
+            hintStyle: TextStyle(color: kMutedTextColor)),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
-        TextButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Save')),
+        TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save')),
       ],
     ),
   );

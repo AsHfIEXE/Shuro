@@ -25,6 +25,7 @@ import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/smooth_position_builder.dart';
 import '../../widgets/playback_controls.dart';
+import '../../widgets/shuro_icons.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/up_next_list.dart';
 import 'audio_info_sheet.dart';
@@ -41,7 +42,13 @@ const double kNowPlayingWideBreakpoint = 1024;
 /// title block, transport, quick actions and the lyrics affordance, plus their
 /// paddings. The ring is sized from what is *left*, which is what keeps this
 /// screen from overflowing on a short or landscape window.
-const double _kPhoneChromeHeight = 470;
+const double _kPhoneChromeHeight = 520;
+
+/// The inline lyric preview shares what the ring leaves over: it never drops
+/// below the minimum (a sung line plus the next one) and never grows past the
+/// maximum (it must not turn Now Playing into a second lyrics page).
+const double _kLyricPreviewMin = 110;
+const double _kLyricPreviewMax = 190;
 
 /// "09. Now Playing" — artwork, metadata, a drag-to-seek progress ring,
 /// transport controls, and quick access to Queue / Lyrics / Audio info.
@@ -246,10 +253,26 @@ class NowPlayingScreen extends StatelessWidget {
     // The ring gives way before anything else does. Clamped at the low end so a
     // very short window still shows recognisable artwork, and at 320 so a tall
     // phone keeps the design's proportions.
+    //
+    // The chrome constant covers everything EXCEPT the ring and the lyric
+    // preview; the preview's minimum is reserved first. Before, the ring was
+    // sized as if the 150 dp preview did not exist, so on a normal tall phone
+    // the quick-actions row and the Lyrics button ended up below the fold and
+    // the page opened already scrolled/clipped.
+    final ringCap = math.min(constraints.maxWidth * 0.79, 360.0);
     final ringSize = math
-        .min(constraints.maxWidth * 0.79,
-            math.max(160.0, constraints.maxHeight - _kPhoneChromeHeight))
-        .clamp(160.0, 360.0);
+        .min(
+            ringCap,
+            constraints.maxHeight -
+                _kPhoneChromeHeight -
+                _kLyricPreviewMin -
+                10)
+        .clamp(170.0, math.max(170.0, ringCap))
+        .toDouble();
+    final previewHeight =
+        (constraints.maxHeight - _kPhoneChromeHeight - ringSize - 10)
+            .clamp(_kLyricPreviewMin, _kLyricPreviewMax)
+            .toDouble();
 
     return LayoutBuilder(
       builder: (context, viewport) => _RingAwareScroll(
@@ -317,7 +340,7 @@ class NowPlayingScreen extends StatelessWidget {
               // space — the first version swallowed the whole lower screen and
               // turned Now Playing into a second lyrics page.
               SizedBox(
-                height: 150,
+                height: previewHeight,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   // Edge fade = ALPHA-ONLY mask on the lyrics themselves
@@ -416,10 +439,16 @@ class NowPlayingScreen extends StatelessWidget {
     // past the column and clip at the screen edge (the reported screenshot).
     final columnWidth =
         math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
+    // Compact column: header 48 + paddings 6, then ring + gap 6 + times 14 +
+    // gap 2 + title block 43 + gap 2 + one control row 56 + 8 spare — the ring
+    // takes what is left (it was 0.36 × height ≈ 137 dp on a phone, with the
+    // controls still spilling off the bottom).
+    final compactRing =
+        constraints.maxHeight - 48 - 6 - 6 - 14 - 2 - 43 - 2 - 56 - 8;
     final artworkSize = math
         .min(
-            math.min(
-                constraints.maxHeight * (compact ? 0.36 : 0.44), columnWidth),
+            math.min(compact ? compactRing : constraints.maxHeight * 0.44,
+                columnWidth),
             compact ? 210.0 : 340.0)
         .clamp(compact ? 110.0 : 160.0, compact ? 210.0 : 340.0);
 
@@ -433,6 +462,9 @@ class NowPlayingScreen extends StatelessWidget {
           onAudioInfo: () => showAudioInfoSheet(context, song),
           onSleep: () => showSleepTimerSheet(context, player),
           sleepActive: player.sleepUntil != null,
+          // Landscape has no quick-actions row, so volume lives up here.
+          onVolume: () => showVolumeSheet(context, player),
+          dense: compact,
         ),
         Expanded(
           child: Row(
@@ -468,49 +500,63 @@ class NowPlayingScreen extends StatelessWidget {
                             SizedBox(height: compact ? 6 : 30),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 560),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _TimesRow(
+                              child: compact
+                                  ? _compactControls(
+                                      context: context,
+                                      player: player,
+                                      song: song,
+                                      accent: accent,
                                       position: position,
                                       total: total,
-                                      format: _formatDuration),
-                                  SizedBox(height: compact ? 4 : 14),
-                                  // Title + artist stay visible in landscape
-                                  // too — only the controls dissolve.
-                                  _TrackTitleBlock(
-                                    song: song,
-                                    accent: accent,
-                                    duration: _trackChangeDuration,
-                                    shuffleOn: player.shuffle,
-                                    repeatMode: player.repeatMode,
-                                    onShuffleToggle: player.toggleShuffle,
-                                    onRepeatToggle: player.cycleRepeatMode,
-                                    isFavorite: isFav,
-                                    onToggleFavorite: () =>
-                                        Favorites.toggle(context, song.id),
-                                    dense: compact,
-                                  ),
-                                  SizedBox(height: compact ? 3 : 14),
-                                  _transport(player, song, isPlaying, isCurrent,
-                                      accent,
-                                      compact: compact),
-                                  SizedBox(height: compact ? 2 : 10),
-                                  // Landscape volume: same animated control as
-                                  // portrait — a slim chip opening the full
-                                  // volume sheet. The old inline slider was a
-                                  // second seek-bar lookalike and cost layout
-                                  // height this column doesn't have.
-                                  Center(
-                                    child: _QuickAction(
-                                      icon: Icons.volume_up_rounded,
-                                      label: 'Volume',
-                                      onTap: () =>
-                                          showVolumeSheet(context, player),
+                                      isPlaying: isPlaying,
+                                      isCurrent: isCurrent,
+                                      isFav: isFav,
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _TimesRow(
+                                            position: position,
+                                            total: total,
+                                            format: _formatDuration),
+                                        SizedBox(height: compact ? 4 : 14),
+                                        // Title + artist stay visible in landscape
+                                        // too — only the controls dissolve.
+                                        _TrackTitleBlock(
+                                          song: song,
+                                          accent: accent,
+                                          duration: _trackChangeDuration,
+                                          shuffleOn: player.shuffle,
+                                          repeatMode: player.repeatMode,
+                                          onShuffleToggle: player.toggleShuffle,
+                                          onRepeatToggle:
+                                              player.cycleRepeatMode,
+                                          isFavorite: isFav,
+                                          onToggleFavorite: () =>
+                                              Favorites.toggle(
+                                                  context, song.id),
+                                          dense: compact,
+                                        ),
+                                        SizedBox(height: compact ? 3 : 14),
+                                        _transport(player, song, isPlaying,
+                                            isCurrent, accent,
+                                            compact: compact),
+                                        SizedBox(height: compact ? 2 : 10),
+                                        // Landscape volume: same animated control as
+                                        // portrait — a slim chip opening the full
+                                        // volume sheet. The old inline slider was a
+                                        // second seek-bar lookalike and cost layout
+                                        // height this column doesn't have.
+                                        Center(
+                                          child: _QuickAction(
+                                            icon: Icons.volume_up_rounded,
+                                            label: 'Volume',
+                                            onTap: () => showVolumeSheet(
+                                                context, player),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                              ),
                             ),
                           ],
                         ),
@@ -596,10 +642,117 @@ class NowPlayingScreen extends StatelessWidget {
     );
   }
 
+  /// Landscape-phone control cluster: times, title with the heart beside it,
+  /// and ONE row holding shuffle, transport and repeat. The portrait block
+  /// (title, a separate heart row, a separate transport row, a volume chip)
+  /// needs ~60 dp more than a 360-410 dp window has, which is what clipped the
+  /// play button at the bottom edge.
+  Widget _compactControls({
+    required BuildContext context,
+    required PlayerController player,
+    required Song song,
+    required Color accent,
+    required Duration position,
+    required Duration total,
+    required bool isPlaying,
+    required bool isCurrent,
+    required bool isFav,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _TimesRow(position: position, total: total, format: _formatDuration),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            const SizedBox(width: 40),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(song.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white,
+                          fontSize: 18,
+                          height: 24 / 18,
+                          fontWeight: FontWeight.w700)),
+                  Text(song.artist,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70,
+                          fontSize: 12.5,
+                          height: 17 / 12.5,
+                          fontWeight: FontWeight.w500,
+                          shadows: const [
+                            Shadow(color: Color(0x66000000), blurRadius: 6)
+                          ])),
+                ],
+              ),
+            ),
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => Favorites.toggle(context, song.id),
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Center(
+                  child: AnimatedFavoriteIcon(
+                    isFavorite: isFav,
+                    activeColor: accent,
+                    inactiveColor: Colors.white60,
+                    size: 20,
+                    onTap: () => Favorites.toggle(context, song.id),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        _transport(
+          player,
+          song,
+          isPlaying,
+          isCurrent,
+          accent,
+          compact: true,
+          leading: PlayerModeButton(
+            shuroIcon: ShuroGlyph.shuffle,
+            modeLabel: 'Shuffle',
+            active: player.shuffle,
+            accent: accent,
+            onTap: player.toggleShuffle,
+          ),
+          trailing: PlayerModeButton(
+            materialIcon: player.repeatMode == PlayerRepeatMode.one
+                ? Icons.repeat_one_rounded
+                : Icons.repeat_rounded,
+            modeLabel: switch (player.repeatMode) {
+              PlayerRepeatMode.off => 'Repeat off',
+              PlayerRepeatMode.all => 'Repeat all',
+              PlayerRepeatMode.one => 'Repeat one',
+            },
+            active: player.repeatMode != PlayerRepeatMode.off,
+            badge: player.repeatMode == PlayerRepeatMode.one ? '1' : null,
+            accent: accent,
+            onTap: player.cycleRepeatMode,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _transport(PlayerController player, Song song, bool isPlaying,
       bool isCurrent, Color accent,
-      {bool compact = false}) {
+      {bool compact = false, Widget? leading, Widget? trailing}) {
     return PlaybackControls(
+      leading: leading,
+      trailing: trailing,
       isPlaying: isPlaying,
       isBuffering: isCurrent && player.isBuffering,
       accentColor: accent,
@@ -771,6 +924,12 @@ class _Header extends StatelessWidget {
   final VoidCallback? onSleep;
   final bool sleepActive;
 
+  /// Volume entry for layouts without a quick-actions row (landscape).
+  final VoidCallback? onVolume;
+
+  /// Tighter icon buttons for short windows (48 → 40 dp each).
+  final bool dense;
+
   const _Header({
     required this.song,
     required this.accent,
@@ -779,10 +938,13 @@ class _Header extends StatelessWidget {
     this.onAudioInfo,
     this.onSleep,
     this.sleepActive = false,
+    this.onVolume,
+    this.dense = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final density = dense ? VisualDensity.compact : VisualDensity.standard;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
@@ -791,6 +953,7 @@ class _Header extends StatelessWidget {
             button: true,
             label: 'Close Now Playing',
             child: IconButton(
+              visualDensity: density,
               onPressed: () => Navigator.of(context).maybePop(),
               icon: const Icon(Icons.arrow_back_ios_new_rounded,
                   color: Colors.white, size: 18),
@@ -801,7 +964,7 @@ class _Header extends StatelessWidget {
             child: Center(
               child: Text('PLAYING NOW',
                   style: GoogleFonts.getFont(currentFontFamily,
-                      color: const Color(0x80FFFFFF),
+                      color: const Color(0xB3FFFFFF),
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
                       letterSpacing: 2.0)),
@@ -809,8 +972,16 @@ class _Header extends StatelessWidget {
           ),
           // (No favourite here: the heart lives in its sweet spot under the
           // artist — a second one in the header was duplicate clutter.)
+          if (onVolume != null)
+            IconButton(
+              visualDensity: density,
+              onPressed: onVolume,
+              icon: const Icon(Icons.volume_up_rounded, color: Colors.white70),
+              tooltip: 'Volume',
+            ),
           if (onSleep != null)
             IconButton(
+              visualDensity: density,
               onPressed: onSleep,
               icon: Icon(
                 Icons.bedtime_rounded,
@@ -820,6 +991,7 @@ class _Header extends StatelessWidget {
             ),
           if (onQueue != null)
             IconButton(
+              visualDensity: density,
               onPressed: onQueue,
               icon:
                   const Icon(Icons.queue_music_rounded, color: Colors.white70),
@@ -827,12 +999,14 @@ class _Header extends StatelessWidget {
             ),
           if (onAudioInfo != null)
             IconButton(
+              visualDensity: density,
               onPressed: onAudioInfo,
               icon:
                   const Icon(Icons.info_outline_rounded, color: Colors.white70),
               tooltip: 'Audio information',
             ),
           IconButton(
+            visualDensity: density,
             onPressed: onMore,
             icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
             tooltip: 'More options',
@@ -854,7 +1028,9 @@ class _TimesRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = GoogleFonts.getFont(currentFontFamily,
-        color: Colors.white, fontSize: 11);
+        color: Colors.white,
+        fontSize: 11,
+        shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)]);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -1718,7 +1894,7 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(_iconFor(report.routeKind), size: 13, color: Colors.white38),
+          Icon(_iconFor(report.routeKind), size: 13, color: Colors.white70),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -1726,7 +1902,11 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white38, fontSize: 11),
+                  color: Colors.white70,
+                  fontSize: 11,
+                  shadows: const [
+                    Shadow(color: Color(0x66000000), blurRadius: 6)
+                  ]),
             ),
           ),
         ],
