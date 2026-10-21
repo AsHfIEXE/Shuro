@@ -61,6 +61,7 @@ class _DownloadCancelled implements Exception {
 class DownloadService extends ChangeNotifier {
   static const String _registryKey = 'download_registry_v1';
   static const String _locationKey = 'download_location_v1';
+  static const int maxManagedDownloads = 1000;
 
   /// songId → saved entry (path + the display metadata the Downloads screen
   /// and offline playback need).
@@ -92,6 +93,17 @@ class DownloadService extends ChangeNotifier {
           : const DownloadStatus(stage: DownloadStage.notDownloaded));
 
   bool isDownloaded(String songId) => _entries.containsKey(songId);
+
+  int get managedDownloadCount => _entries.length;
+  int get pendingDownloadCount => status.entries
+      .where((entry) =>
+          entry.value.stage == DownloadStage.queued ||
+          entry.value.stage == DownloadStage.downloading)
+      .where((entry) => !_entries.containsKey(entry.key))
+      .length;
+  int get availableDownloadSlots =>
+      (maxManagedDownloads - managedDownloadCount - pendingDownloadCount)
+          .clamp(0, maxManagedDownloads);
 
   /// The local file for [songId], when it is really on disk. Used by offline
   /// playback: if this returns a path, the player plays the file instead of
@@ -153,15 +165,20 @@ class DownloadService extends ChangeNotifier {
   Future<DownloadBatchResult> enqueueAll(
       Iterable<DownloadRequest> requests) async {
     final queue = <DownloadRequest>[];
+    final occupiedSlots = managedDownloadCount + pendingDownloadCount;
     var skipped = 0;
     for (final request in requests) {
       final stage = statusFor(request.song.id).stage;
       if (stage == DownloadStage.notDownloaded ||
           stage == DownloadStage.failed) {
-        _cancelled.remove(request.song.id);
-        status[request.song.id] =
-            const DownloadStatus(stage: DownloadStage.queued);
-        queue.add(request);
+        if (occupiedSlots + queue.length >= maxManagedDownloads) {
+          skipped++;
+        } else {
+          _cancelled.remove(request.song.id);
+          status[request.song.id] =
+              const DownloadStatus(stage: DownloadStage.queued);
+          queue.add(request);
+        }
       } else {
         skipped++;
       }

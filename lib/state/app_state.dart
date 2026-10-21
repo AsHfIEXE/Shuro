@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -16,6 +17,7 @@ import '../models/album.dart';
 import '../models/artist.dart';
 import '../models/artwork_style.dart';
 import '../models/download_state.dart';
+import '../models/offline_plan.dart';
 import '../models/lyrics.dart';
 import '../models/playlist.dart';
 import '../models/personal_shelf.dart';
@@ -71,6 +73,7 @@ class AppState extends ChangeNotifier {
   static const _kAffinityKey = 'artist_affinity_v1';
   static const _kPlaylistsKey = 'playlists_v1';
   static const _kPersonalShelvesKey = 'personal_shelves_v1';
+  static const _kOfflinePlansKey = 'offline_plans_v1';
   static const _kLocalFoldersKey = 'local_folders_v1';
   static const _kServersKey = 'servers_v1';
   static const _kActiveServerKey = 'active_server_v1';
@@ -172,6 +175,18 @@ class AppState extends ChangeNotifier {
           personalShelves = list
               .whereType<Map<String, dynamic>>()
               .map(PersonalShelf.fromJson)
+              .take(100)
+              .toList();
+        } catch (_) {}
+      }
+
+      final offlinePlansJson = persistence.getString(_kOfflinePlansKey);
+      if (offlinePlansJson != null) {
+        try {
+          final list = jsonDecode(offlinePlansJson) as List<dynamic>;
+          offlinePlans = list
+              .whereType<Map<String, dynamic>>()
+              .map(OfflinePlan.fromJson)
               .take(100)
               .toList();
         } catch (_) {}
@@ -509,6 +524,15 @@ class AppState extends ChangeNotifier {
     if (p == null) return;
     await p.setString(_kPersonalShelvesKey,
         jsonEncode(personalShelves.map((s) => s.toJson()).toList()));
+  }
+
+  Future<void> _persistOfflinePlans() async {
+    final p = _persistence;
+    if (p == null) return;
+    await p.setString(
+      _kOfflinePlansKey,
+      jsonEncode(offlinePlans.map((plan) => plan.toJson()).toList()),
+    );
   }
 
   Future<void> _persistLocalFolders() async {
@@ -1053,6 +1077,18 @@ class AppState extends ChangeNotifier {
     return _repository?.streamUrlFor(song, quality: effectiveStreamingQuality);
   }
 
+  /// Original file source for an explicit offline action. Local files are
+  /// already owner-managed and therefore intentionally aren't copied again.
+  String? downloadSourceFor(Song song) {
+    if (song.localFilePath != null) return null;
+    if (isMultiServer) {
+      final source =
+          _multi.streamUrlFor(song, quality: StreamingQuality.original);
+      if (source != null) return source;
+    }
+    return _repository?.streamUrlFor(song, quality: StreamingQuality.original);
+  }
+
   /// Lyrics the connected backend already extracted from [song]'s own
   /// file tags — null for a local import (there's no backend to ask) or
   /// when nothing's connected or embedded. Wired into `LyricsScreen` so
@@ -1472,6 +1508,35 @@ class AppState extends ChangeNotifier {
   // Shelves keep stable, ordered identities rather than copied metadata, so
   // they resolve against the latest library on each open/play action.
   List<PersonalShelf> personalShelves = [];
+  List<OfflinePlan> offlinePlans = [];
+
+  OfflinePlan? createOfflinePlan(String name, Iterable<Song> songs) {
+    final trimmed = name.trim();
+    final seen = <String>{};
+    final songIds =
+        songs.map((song) => song.id).where(seen.add).take(1000).toList();
+    if (trimmed.isEmpty || songIds.isEmpty || offlinePlans.length >= 100) {
+      return null;
+    }
+    final plan = OfflinePlan(
+      id: 'offline_plan_${DateTime.now().microsecondsSinceEpoch}',
+      name: trimmed,
+      songIds: songIds,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    offlinePlans = [...offlinePlans, plan];
+    notifyListeners();
+    unawaited(_persistOfflinePlans());
+    return plan;
+  }
+
+  void deleteOfflinePlan(String id) {
+    offlinePlans = offlinePlans.where((plan) => plan.id != id).toList();
+    notifyListeners();
+    unawaited(_persistOfflinePlans());
+  }
+
+  List<Song> songsForOfflinePlan(OfflinePlan plan) => songsByIds(plan.songIds);
 
   PersonalShelf? createPersonalShelf(String name, {String description = ''}) {
     final trimmed = name.trim();
@@ -1528,6 +1593,111 @@ class AppState extends ChangeNotifier {
     return shelf.copyWith(items: items);
   }
 
+  static const _maxCustomCoverBytes = 5 * 1024 * 1024;
+  static const _maxStoredCoverBytes = 18 * 1024 * 1024;
+
+  /// Imports a device-local PNG/JPEG shelf cover. The bytes stay in Shuro's
+  /// own persistence only; no original audio metadata or server record is
+  /// modified. Returns a concise validation message when a chosen file cannot
+  /// safely be used, otherwise null (including cancellation).
+  Future<String?> choosePersonalShelfCover(String shelfId) async {
+    final shelf =
+        personalShelves.where((item) => item.id == shelfId).firstOrNull;
+    if (shelf == null) return 'This shelf is no longer available.';
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['png', 'jpg', 'jpeg'],
+        allowMultiple: false,
+        withData: true,
+      );
+      final selected = result?.files.single;
+      final bytes = selected?.bytes;
+      if (bytes == null) return null;
+      if (bytes.lengthInBytes > _maxCustomCoverBytes) {
+        return 'Choose an image smaller than 5 MB.';
+      }
+      if (!_isPngOrJpeg(bytes)) return 'Choose a PNG or JPEG image.';
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final width = frame.image.width;
+      final height = frame.image.height;
+      if (width > 4096 || height > 4096) {
+        frame.image.dispose();
+        codec.dispose();
+        return 'Choose an image no larger than 4096 × 4096 pixels.';
+      }
+      // Store one decoded, normalized PNG representation. This rejects malformed
+      // files and prevents retaining a hidden multi-frame or exotic source
+      // format under an innocent filename.
+      final normalizedData =
+          await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      frame.image.dispose();
+      codec.dispose();
+      if (normalizedData == null) {
+        return 'Shuro could not normalize that image.';
+      }
+      final normalized = normalizedData.buffer.asUint8List();
+      if (normalized.lengthInBytes > _maxCustomCoverBytes) {
+        return 'That image is too large after processing; choose a smaller one.';
+      }
+      final currentBytes =
+          _storedShelfCoverBytes() - _coverBytes(shelf.coverBase64);
+      final newCover = shelf.coverBase64 == null;
+      if ((newCover && _storedShelfCoverCount() >= 250) ||
+          currentBytes + normalized.lengthInBytes > _maxStoredCoverBytes) {
+        return 'Custom covers are limited to 250 images and 18 MB in total.';
+      }
+      final encoded = base64Encode(normalized);
+      personalShelves = [
+        for (final item in personalShelves)
+          if (item.id == shelfId) item.copyWith(coverBase64: encoded) else item,
+      ];
+      notifyListeners();
+      unawaited(_persistPersonalShelves());
+      return null;
+    } catch (_) {
+      return 'Shuro could not use that image. Try another PNG or JPEG.';
+    }
+  }
+
+  void clearPersonalShelfCover(String shelfId) {
+    personalShelves = [
+      for (final shelf in personalShelves)
+        if (shelf.id == shelfId) shelf.copyWith(clearCover: true) else shelf,
+    ];
+    notifyListeners();
+    unawaited(_persistPersonalShelves());
+  }
+
+  int _storedShelfCoverBytes() => personalShelves.fold(
+      0, (sum, shelf) => sum + _coverBytes(shelf.coverBase64));
+
+  int _storedShelfCoverCount() =>
+      personalShelves.where((shelf) => shelf.coverBase64 != null).length;
+
+  int _coverBytes(String? base64) {
+    if (base64 == null) return 0;
+    try {
+      return base64Decode(base64).lengthInBytes;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  bool _isPngOrJpeg(Uint8List bytes) {
+    final isPng = bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47;
+    final isJpeg = bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF;
+    return isPng || isJpeg;
+  }
+
   void reorderPersonalShelf(String shelfId, int oldIndex, int newIndex) {
     personalShelves = [
       for (final shelf in personalShelves)
@@ -1541,11 +1711,20 @@ class AppState extends ChangeNotifier {
     unawaited(_persistPersonalShelves());
   }
 
+  /// Moves one saved shelf item without relying on drag and drop. This keeps
+  /// manual ordering available to keyboard, switch, and screen-reader users.
+  void movePersonalShelfItem(String shelfId, int fromIndex, int toIndex) {
+    if (fromIndex == toIndex) return;
+    reorderPersonalShelf(shelfId, fromIndex, toIndex);
+  }
+
   List<ShelfItem> _reorderedShelfItems(
       List<ShelfItem> source, int oldIndex, int newIndex) {
     final items = [...source];
     if (oldIndex < 0 || oldIndex >= items.length) return items;
-    items.insert(newIndex.clamp(0, items.length - 1), items.removeAt(oldIndex));
+    // `onReorderItem` already reports the destination after removing the
+    // dragged row, so the end of the shortened list is a valid target.
+    items.insert(newIndex.clamp(0, items.length), items.removeAt(oldIndex));
     return items;
   }
 

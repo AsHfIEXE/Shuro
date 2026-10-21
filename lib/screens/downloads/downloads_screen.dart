@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../models/offline_plan.dart';
 import '../../services/download_service.dart';
+import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/song_tile.dart';
 import '../../widgets/state_views.dart';
-
 
 /// "12. Downloads / Offline" — downloaded songs & albums, active download
 /// progress (shown inline on each SongTile), and storage usage.
@@ -19,6 +20,7 @@ class DownloadsScreen extends StatelessWidget {
     final player = context.read<PlayerController>();
     // Real downloads: songs that are files on disk, managed by the service.
     final downloads = context.watch<DownloadService>();
+    final appState = context.watch<AppState>();
     final downloadedSongs = downloads.songs;
 
     return Scaffold(
@@ -49,6 +51,10 @@ class DownloadsScreen extends StatelessWidget {
                           value: downloads.customLocation == null
                               ? 'App storage'
                               : 'Custom folder'),
+                      _Stat(
+                          label: 'Capacity',
+                          value:
+                              '${downloads.managedDownloadCount}/${DownloadService.maxManagedDownloads}'),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -94,6 +100,10 @@ class DownloadsScreen extends StatelessWidget {
               ),
             ),
           ),
+          _OfflinePlansSection(
+              plans: appState.offlinePlans,
+              appState: appState,
+              downloads: downloads),
           SectionHeader(title: 'Downloaded Songs'),
           if (downloadedSongs.isEmpty)
             const Padding(
@@ -113,6 +123,105 @@ class DownloadsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OfflinePlansSection extends StatelessWidget {
+  const _OfflinePlansSection({
+    required this.plans,
+    required this.appState,
+    required this.downloads,
+  });
+
+  final List<OfflinePlan> plans;
+  final AppState appState;
+  final DownloadService downloads;
+
+  Future<void> _downloadPlan(BuildContext context, OfflinePlan plan) async {
+    final songs = appState.songsForOfflinePlan(plan);
+    var localOnly = 0;
+    var unavailable = 0;
+    final requests = <DownloadRequest>[];
+    for (final song in songs) {
+      if (song.isLocal) {
+        localOnly++;
+        continue;
+      }
+      final source = appState.downloadSourceFor(song);
+      if (source == null) {
+        unavailable++;
+      } else {
+        requests.add(DownloadRequest(song: song, streamUrl: source));
+      }
+    }
+    if (requests.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'There are no server tracks ready to download in this plan.')));
+      }
+      return;
+    }
+    final result = await downloads.enqueueAll(requests);
+    if (!context.mounted) return;
+    final notes = <String>[
+      '${result.queued} queued',
+      if (localOnly > 0)
+        '$localOnly local file${localOnly == 1 ? '' : 's'} left in place',
+      if (unavailable > 0) '$unavailable unavailable',
+      if (result.skipped > 0) '${result.skipped} skipped',
+    ];
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(notes.join(' · '))));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (plans.isEmpty) return const SizedBox.shrink();
+    return Column(children: [
+      SectionHeader(title: 'Offline Plans'),
+      for (final plan in plans)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Card(
+            color: kCardColor,
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: kBrandColor,
+                  child: Icon(Icons.download_for_offline_rounded,
+                      color: Colors.white)),
+              title:
+                  Text(plan.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                '${appState.songsForOfflinePlan(plan).length} currently playable · Original size not reported',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMutedTextColor, fontSize: 12),
+              ),
+              trailing: Wrap(spacing: 2, children: [
+                IconButton(
+                  tooltip: 'Download plan',
+                  onPressed: downloads.availableDownloadSlots == 0
+                      ? null
+                      : () => _downloadPlan(context, plan),
+                  icon: const Icon(Icons.download_rounded),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Plan options',
+                  onSelected: (value) {
+                    if (value == 'delete') appState.deleteOfflinePlan(plan.id);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'delete', child: Text('Delete plan')),
+                  ],
+                ),
+              ]),
+            ),
+          ),
+        ),
+    ]);
   }
 }
 

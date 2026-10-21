@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/personal_shelf.dart';
+import '../../models/song.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
@@ -46,6 +49,7 @@ class PersonalShelvesScreen extends StatelessWidget {
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final shelf = state.personalShelves[index];
+                final cover = _shelfCover(shelf);
                 return Card(
                   color: kCardColor,
                   margin: EdgeInsets.zero,
@@ -53,16 +57,7 @@ class PersonalShelvesScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16)),
                   child: ListTile(
                     minVerticalPadding: 12,
-                    leading: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(colors: kBrandGradient),
-                      ),
-                      child: const Icon(Icons.auto_awesome_rounded,
-                          color: Colors.white),
-                    ),
+                    leading: _ShelfCoverArt(cover: cover, size: 48),
                     title: Text(shelf.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -176,6 +171,55 @@ class PersonalShelfDetailScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _chooseCover(BuildContext context) async {
+    final message =
+        await context.read<AppState>().choosePersonalShelfCover(shelfId);
+    if (message != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _saveOfflinePlan(
+      BuildContext context, PersonalShelf shelf, List<Song> songs) async {
+    if (songs.isEmpty) return;
+    final controller = TextEditingController(text: '${shelf.name} offline');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: kCardColor,
+        title: const Text('Save offline plan'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(
+            labelText: 'Plan name',
+            helperText: 'Saves this shelf’s current playable tracks.',
+          ),
+          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save plan')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty || !context.mounted) return;
+    final plan = context.read<AppState>().createOfflinePlan(name, songs);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(plan == null
+          ? 'The plan could not be saved. A plan needs at least one track.'
+          : 'Saved “${plan.name}” for offline preparation.'),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -198,15 +242,51 @@ class PersonalShelfDetailScreen extends StatelessWidget {
               icon: const Icon(Icons.edit_outlined)),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'delete') _delete(context);
+              switch (value) {
+                case 'cover':
+                  _chooseCover(context);
+                case 'removeCover':
+                  context.read<AppState>().clearPersonalShelfCover(shelfId);
+                case 'delete':
+                  _delete(context);
+              }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'delete', child: Text('Delete shelf'))
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'cover', child: Text('Choose cover')),
+              if (shelf.coverBase64 != null)
+                const PopupMenuItem(
+                    value: 'removeCover', child: Text('Remove cover')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'delete', child: Text('Delete shelf')),
             ],
           ),
         ],
       ),
       body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _ShelfCoverArt(cover: _shelfCover(shelf), size: 84),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${shelf.items.length} saved items',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => _chooseCover(context),
+                      icon: const Icon(Icons.image_outlined, size: 18),
+                      label: Text(shelf.coverBase64 == null
+                          ? 'Choose cover'
+                          : 'Replace cover'),
+                    ),
+                  ]),
+            ),
+          ]),
+        ),
         if (shelf.description.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
@@ -218,26 +298,35 @@ class PersonalShelfDetailScreen extends StatelessWidget {
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Row(children: [
-            Text('${shelf.items.length} saved · ${songs.length} playable',
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${songs.length} playable now',
                 style: GoogleFonts.getFont(currentFontFamily,
                     color: kMutedTextColor, fontSize: 12)),
-            const Spacer(),
-            OutlinedButton.icon(
-              onPressed: shelf.items.length >= 500
-                  ? null
-                  : () => _addSongs(context, state),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add items'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: songs.isEmpty
-                  ? null
-                  : () => player.playSong(songs.first, queue: songs),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: const Text('Play'),
-            ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              OutlinedButton.icon(
+                onPressed: songs.isEmpty
+                    ? null
+                    : () => _saveOfflinePlan(context, shelf, songs),
+                icon: const Icon(Icons.download_for_offline_outlined, size: 18),
+                label: const Text('Offline plan'),
+              ),
+              OutlinedButton.icon(
+                onPressed: shelf.items.length >= 500
+                    ? null
+                    : () => _addSongs(context, state),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add items'),
+              ),
+              FilledButton.icon(
+                onPressed: songs.isEmpty
+                    ? null
+                    : () => player.playSong(songs.first, queue: songs),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Play'),
+              ),
+            ]),
           ]),
         ),
         Expanded(
@@ -293,6 +382,21 @@ class PersonalShelfDetailScreen extends StatelessWidget {
                                   player.playSong(song, queue: songs),
                               icon: const Icon(Icons.play_arrow_rounded)),
                         IconButton(
+                            tooltip: 'Move up',
+                            onPressed: index == 0
+                                ? null
+                                : () => state.movePersonalShelfItem(
+                                    shelf.id, index, index - 1),
+                            icon: const Icon(Icons.keyboard_arrow_up_rounded)),
+                        IconButton(
+                            tooltip: 'Move down',
+                            onPressed: index == shelf.items.length - 1
+                                ? null
+                                : () => state.movePersonalShelfItem(
+                                    shelf.id, index, index + 1),
+                            icon:
+                                const Icon(Icons.keyboard_arrow_down_rounded)),
+                        IconButton(
                             tooltip: 'Remove',
                             onPressed: () =>
                                 state.removePersonalShelfItem(shelf.id, index),
@@ -307,6 +411,38 @@ class PersonalShelfDetailScreen extends StatelessWidget {
       ]),
     );
   }
+}
+
+ImageProvider? _shelfCover(PersonalShelf shelf) {
+  final encoded = shelf.coverBase64;
+  if (encoded == null) return null;
+  try {
+    return MemoryImage(base64Decode(encoded));
+  } catch (_) {
+    return null;
+  }
+}
+
+class _ShelfCoverArt extends StatelessWidget {
+  const _ShelfCoverArt({required this.cover, required this.size});
+
+  final ImageProvider? cover;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size * .25),
+          gradient: const LinearGradient(colors: kBrandGradient),
+        ),
+        child: cover == null
+            ? Icon(Icons.auto_awesome_rounded,
+                color: Colors.white, size: size * .45)
+            : Image(image: cover!, fit: BoxFit.cover),
+      );
 }
 
 class _ShelfCandidate {

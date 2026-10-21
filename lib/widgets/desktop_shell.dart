@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
 import '../screens/downloads/downloads_screen.dart';
+import '../screens/library/personal_shelves_screen.dart';
 import '../screens/now_playing/lyrics_screen.dart';
 import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
@@ -56,6 +57,9 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _openDownloads() =>
       Navigator.of(context).push(drillDownRoute(const DownloadsScreen()));
+
+  void _openShelves() =>
+      Navigator.of(context).push(drillDownRoute(const PersonalShelvesScreen()));
 
   void _toggleLyrics() {
     // A side inspector only fits beside real content on a roomy desktop.
@@ -128,6 +132,7 @@ class _DesktopShellState extends State<DesktopShell> {
                               () => _sidebarCollapsed = !_sidebarCollapsed,
                             ),
                             onSelect: widget.onSelectTab,
+                            onShelves: _openShelves,
                             onDownloads: _openDownloads,
                             onSettings: _openSettings,
                           ),
@@ -188,6 +193,7 @@ class _DesktopSidebar extends StatelessWidget {
   final List<(IconData, String)> tabs;
   final VoidCallback onCollapse;
   final ValueChanged<int> onSelect;
+  final VoidCallback onShelves;
   final VoidCallback onDownloads;
   final VoidCallback onSettings;
 
@@ -197,6 +203,7 @@ class _DesktopSidebar extends StatelessWidget {
     required this.tabs,
     required this.onCollapse,
     required this.onSelect,
+    required this.onShelves,
     required this.onDownloads,
     required this.onSettings,
   });
@@ -267,6 +274,12 @@ class _DesktopSidebar extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(
                   collapsed ? 14 : 18, 18, collapsed ? 14 : 18, 12),
               child: const Divider(height: 1, color: kDividerColor),
+            ),
+            _RailItem(
+              icon: Icons.auto_awesome_rounded,
+              label: 'Personal shelves',
+              collapsed: collapsed,
+              onTap: onShelves,
             ),
             _RailItem(
               icon: Icons.download_rounded,
