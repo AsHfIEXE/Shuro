@@ -711,8 +711,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // shell by design.
     final isDesktop = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.linux ||
-            defaultTargetPlatform == TargetPlatform.macOS);
+            defaultTargetPlatform == TargetPlatform.linux);
     if (isDesktop) {
       return DesktopShell(
         currentIndex: _tabIndex,
