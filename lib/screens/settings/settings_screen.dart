@@ -21,6 +21,7 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/sheet_scroll.dart';
+import 'equalizer_sheet.dart';
 import '../../widgets/state_views.dart';
 import 'artwork_style_sheet.dart';
 import 'avatar_editor_screen.dart';
@@ -101,6 +102,11 @@ class SettingsScreen extends StatelessWidget {
             ),
 
             _SectionLabel('PLAYBACK'),
+            _NavRow(
+              icon: Icons.equalizer_rounded,
+              label: 'Equalizer',
+              onTap: () => showEqualizerSheet(context),
+            ),
             _NavRow(
               icon: Icons.wifi_rounded,
               label: 'Wi-Fi quality',

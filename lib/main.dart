@@ -10,6 +10,7 @@ import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
 import 'services/device_profile.dart';
+import 'services/equalizer_service.dart';
 import 'services/download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
@@ -31,6 +32,8 @@ Future<void> main() async {
   // limits before any artwork decodes. Non-fatal — a missing prefs store
   // must never block boot.
   unawaited(DeviceProfileService.applyStoredOnBoot());
+  // Persisted equalizer state (no-op on platforms without a system EQ).
+  unawaited(EqualizerService.instance.restore());
   debugPrint('[boot] binding ready');
 
   // Persistent image cache + DoH + loopback proxy are IO-platform machinery;
@@ -90,17 +93,20 @@ Future<void> main() async {
       androidNotificationChannelName: 'Shuro playback',
       // Shown in Android's notification settings under the channel, where the
       // per-app look of the media notification is also controlled.
-      androidNotificationChannelDescription: 'Now playing information and playback controls.',
+      androidNotificationChannelDescription:
+          'Now playing information and playback controls.',
       androidNotificationOngoing: true,
       androidNotificationIcon: 'mipmap/ic_launcher',
       androidShowNotificationBadge: true,
     ).timeout(const Duration(seconds: 8));
   } on TimeoutException {
-    debugPrint('JustAudioBackground.init timed out — starting without system media controls; is an old audio service still running?');
+    debugPrint(
+        'JustAudioBackground.init timed out — starting without system media controls; is an old audio service still running?');
   } catch (error, stack) {
     // Release builds get no logging that a user could act on, but the app still
     // runs: in-app playback, the queue, lyrics and diagnostics are unaffected.
-    debugPrint('JustAudioBackground.init failed — continuing without system media controls: $error');
+    debugPrint(
+        'JustAudioBackground.init failed — continuing without system media controls: $error');
     debugPrint('$stack');
   }
   debugPrint('[boot] audio init done');
@@ -123,7 +129,8 @@ class MusicStreamApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ServerSession()),
         // Artist pictures, resolved once (server metadata first, MusicBrainz
         // fallback) and cached permanently.
-        ChangeNotifierProvider(create: (_) => ArtistArtworkService()..restore()),
+        ChangeNotifierProvider(
+            create: (_) => ArtistArtworkService()..restore()),
         // Real offline downloads (files on disk, persistent across updates).
         ChangeNotifierProvider(create: (_) => DownloadService()..restore()),
         // Playback settings (fade, replay gain, speed, skip silence).

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import '../playback/event_log.dart';
+import '../services/equalizer_service.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
 import '../playback/audio_diagnostics.dart';
@@ -72,11 +74,27 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // The native playlist's index changes are how notification skip buttons
     // move the app forward: when the system notification (or a headset)
     // skips, the engine's index moves and the app follows it here.
-    _currentIndexSub = _audioPlayer.currentIndexStream.listen(_onNativeIndexChanged, onError: _onPlaybackStreamError);
-    _playerStateSub = _audioPlayer.playerStateStream.listen(_onPlayerStateChanged, onError: _onPlaybackStreamError);
+    _currentIndexSub = _audioPlayer.currentIndexStream
+        .listen(_onNativeIndexChanged, onError: _onPlaybackStreamError);
+    _playerStateSub = _audioPlayer.playerStateStream
+        .listen(_onPlayerStateChanged, onError: _onPlaybackStreamError);
   }
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  /// On Android the player is constructed with the system equalizer attached
+  /// to its audio pipeline, so EQ is real DSP before the mixer (not a volume
+  /// trick). On every other platform no effect is added and the setting says
+  /// plainly that the platform has no equalizer.
+  static AudioPlayer _createPlayer() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final eq = AndroidEqualizer();
+      EqualizerService.instance.attach(eq);
+      return AudioPlayer(
+          audioPipeline: AudioPipeline(androidAudioEffects: [eq]));
+    }
+    return AudioPlayer();
+  }
+
+  final AudioPlayer _audioPlayer = _createPlayer();
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlayerState>? _playerStateSub;
   StreamSubscription<int?>? _currentIndexSub;
@@ -127,13 +145,16 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// Loads exactly one song — the pre-native-queue path, kept as the fallback
   /// whenever the whole-queue load can't happen (single item, an unresolved
   /// queue entry, or any native-load failure).
-  Future<void> _loadSingle(String source, MediaItem tag, Duration? startAt) async {
+  Future<void> _loadSingle(
+      String source, MediaItem tag, Duration? startAt) async {
     if (source.startsWith('http://') || source.startsWith('https://')) {
       await _audioPlayer.setUrl(source, tag: tag, initialPosition: startAt);
     } else {
-      await _audioPlayer.setFilePath(source, tag: tag, initialPosition: startAt);
+      await _audioPlayer.setFilePath(source,
+          tag: tag, initialPosition: startAt);
     }
   }
+
   int _lastNotifiedSecond = -1;
 
   // --- server play reporting -------------------------------------------------
@@ -151,7 +172,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final song = _currentSong;
     if (song == null || _loadedSongId != song.id) return;
     final duration = _audioPlayer.duration;
-    final half = duration != null && duration > Duration.zero ? pos >= duration * 0.5 : false;
+    final half = duration != null && duration > Duration.zero
+        ? pos >= duration * 0.5
+        : false;
     final fourMinutes = pos >= const Duration(minutes: 4);
     if (half || fourMinutes) {
       _listenThresholdDone = true;
@@ -176,7 +199,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// own stopwatch between platform updates, so a consumer reading [position] at
   /// any moment gets an up-to-date figure — this only controls how often a
   /// listener is told about it.
-  late final Stream<Duration> _smoothPositions = _audioPlayer.createPositionStream(
+  late final Stream<Duration> _smoothPositions =
+      _audioPlayer.createPositionStream(
     steps: 20000,
     minPeriod: const Duration(milliseconds: 16),
     maxPeriod: const Duration(milliseconds: 120),
@@ -368,7 +392,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
     final playingChanged = _isPlaying != state.playing;
     _isPlaying = state.playing;
-    final processingChanged = _lastNotifiedProcessingState != state.processingState;
+    final processingChanged =
+        _lastNotifiedProcessingState != state.processingState;
     _lastNotifiedProcessingState = state.processingState;
 
     if (state.processingState == ProcessingState.completed) {
@@ -377,7 +402,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // superseded — `completed` belongs to the *outgoing* source, and
       // acting on it here is exactly what made picking a new song
       // sometimes jump straight past it.
-      final belongsToLoadedTrack = !_isLoading && _loadedSongId != null && _loadedSongId == _currentSong?.id;
+      final belongsToLoadedTrack = !_isLoading &&
+          _loadedSongId != null &&
+          _loadedSongId == _currentSong?.id;
       if (belongsToLoadedTrack) {
         _advance(fromTrackEnd: true);
         return;
@@ -444,9 +471,12 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final expected = _currentSong?.id;
     if (expected == null || tag.id == expected) return;
     _resyncing = true;
-    debugPrint('[playback] engine/app desync: engine="${tag.id}" ui="$expected" — resyncing');
-    PlaybackEventLog.instance.add('desync.heal', {'engine': tag.id, 'ui': expected});
-    unawaited(_jumpTo(_queueIndex, startPlaying: _isPlaying).whenComplete(() => _resyncing = false));
+    debugPrint(
+        '[playback] engine/app desync: engine="${tag.id}" ui="$expected" — resyncing');
+    PlaybackEventLog.instance
+        .add('desync.heal', {'engine': tag.id, 'ui': expected});
+    unawaited(_jumpTo(_queueIndex, startPlaying: _isPlaying)
+        .whenComplete(() => _resyncing = false));
   }
 
   // --- advanced playback settings (Settings → Playback) ----------------------
@@ -490,7 +520,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         final db = await replayGainResolver?.call(song);
         if (db != null) {
           // dB → linear gain, clamped: never silence a track, never blast one.
-          volume = pow(10.0, db.clamp(-24.0, 12.0) / 20.0).toDouble().clamp(0.0, 1.25);
+          volume = pow(10.0, db.clamp(-24.0, 12.0) / 20.0)
+              .toDouble()
+              .clamp(0.0, 1.25);
         }
       }
       _targetVolume = volume;
@@ -502,7 +534,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           await _audioPlayer.setVolume(0.0);
         } catch (_) {}
         for (var s = 1; s <= steps; s++) {
-          await Future<void>.delayed(Duration(milliseconds: crossfadeSeconds * 1000 ~/ steps));
+          await Future<void>.delayed(
+              Duration(milliseconds: crossfadeSeconds * 1000 ~/ steps));
           try {
             await _audioPlayer.setVolume(volume * (s / steps));
           } catch (_) {}
@@ -535,7 +568,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final total = _audioPlayer.duration;
     if (total == null || total <= Duration.zero) return;
     final remaining = total - pos;
-    if (remaining <= Duration.zero || remaining > Duration(seconds: crossfadeSeconds)) return;
+    if (remaining <= Duration.zero ||
+        remaining > Duration(seconds: crossfadeSeconds)) return;
     _fadingOut = true;
     unawaited(_fadeOutOver(remaining));
   }
@@ -561,7 +595,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
   }
 
-  void _onPlaybackStreamError(Object error) {    _isPlaying = false;
+  void _onPlaybackStreamError(Object error) {
+    _isPlaying = false;
     _needsReload = true;
     final song = _currentSong;
     _lastError = song != null
@@ -575,7 +610,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// immediately — even before the audio itself has loaded — so the UI
   /// (title, artwork, controls) switches right away instead of waiting on
   /// the network.
-  Future<void> _jumpTo(int index, {required bool startPlaying, Duration? initialPosition}) async {
+  Future<void> _jumpTo(int index,
+      {required bool startPlaying, Duration? initialPosition}) async {
     if (_queue.isEmpty) return;
     final clamped = index.clamp(0, _queue.length - 1);
     _queueIndex = clamped;
@@ -603,7 +639,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       _isPlaying = false;
       _needsReload = true;
       _loadedSongId = null;
-      _lastError = 'Can\'t play "${song.title}" — no audio source is available for it.';
+      _lastError =
+          'Can\'t play "${song.title}" — no audio source is available for it.';
       notifyListeners();
       return;
     }
@@ -625,7 +662,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       artUri: meta?.artUri,
     );
 
-    final startAt = (initialPosition != null && initialPosition > Duration.zero) ? initialPosition : null;
+    final startAt = (initialPosition != null && initialPosition > Duration.zero)
+        ? initialPosition
+        : null;
 
     // Wait for any in-flight load first — see [_loadChain].
     final previousLoad = _loadChain;
@@ -654,28 +693,39 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           final windowStart = whole
               ? 0
               : (clamped - _kNativeWindowBefore)
-                  .clamp(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter))
+                  .clamp(
+                      0,
+                      _queue.length -
+                          (_kNativeWindowBefore + 1 + _kNativeWindowAfter))
                   .toInt();
           final windowEnd = whole
               ? _queue.length
-              : min(_queue.length, windowStart + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
+              : min(_queue.length,
+                  windowStart + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
           final children = <AudioSource>[];
           final windowIds = <String>[];
           var playheadNative = -1;
           for (var i = windowStart; i < windowEnd; i++) {
             final qSong = _queue[i];
-            final qSource = identical(qSong, song) ? source : audioSourceResolver?.call(qSong);
-            if (qSource == null) continue; // unresolvable item — not in the native queue
-            final qMeta = identical(qSong, song) ? meta : metadataResolver?.call(qSong);
+            final qSource = identical(qSong, song)
+                ? source
+                : audioSourceResolver?.call(qSong);
+            if (qSource == null)
+              continue; // unresolvable item — not in the native queue
+            final qMeta =
+                identical(qSong, song) ? meta : metadataResolver?.call(qSong);
             children.add(
               (qSource.startsWith('http://') || qSource.startsWith('https://'))
-                  ? AudioSource.uri(Uri.parse(qSource), tag: _mediaItemFor(qSong, qMeta))
+                  ? AudioSource.uri(Uri.parse(qSource),
+                      tag: _mediaItemFor(qSong, qMeta))
                   : AudioSource.file(qSource, tag: _mediaItemFor(qSong, qMeta)),
             );
             if (i == clamped) playheadNative = children.length - 1;
             windowIds.add(qSong.id);
           }
-          if (children.length > 1 && children.length == windowEnd - windowStart && playheadNative >= 0) {
+          if (children.length > 1 &&
+              children.length == windowEnd - windowStart &&
+              playheadNative >= 0) {
             final native = ConcatenatingAudioSource(children: children);
             await _audioPlayer
                 .setAudioSource(
@@ -718,7 +768,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       }
 
       if (!loadedNatively) {
-        await _loadSingle(source, tag, startAt).timeout(const Duration(seconds: 20));
+        await _loadSingle(source, tag, startAt)
+            .timeout(const Duration(seconds: 20));
       }
     } on PlayerInterruptedException {
       // A newer load aborted this one on purpose (the user picked another
@@ -730,19 +781,23 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       }
       return;
     } catch (e) {
-      if (generation != _loadGeneration) return; // superseded — the newer load owns the UI now
-      if (_isAbortArtifact(e)) return; // the media element refused a load it was already replacing
+      if (generation != _loadGeneration)
+        return; // superseded — the newer load owns the UI now
+      if (_isAbortArtifact(e))
+        return; // the media element refused a load it was already replacing
       _isLoading = false;
       _isPlaying = false;
       _needsReload = true;
       _loadedSongId = null;
-      _lastError = 'Couldn\'t play "${song.title}". Check your connection and try again.';
+      _lastError =
+          'Couldn\'t play "${song.title}". Check your connection and try again.';
       notifyListeners();
       return;
     } finally {
       settle.complete();
     }
-    if (generation != _loadGeneration) return; // superseded while the audio was loading
+    if (generation != _loadGeneration)
+      return; // superseded while the audio was loading
 
     _isLoading = false;
     _loadedSongId = song.id;
@@ -783,7 +838,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       if (generation != _loadGeneration) return;
       _isPlaying = false;
       _needsReload = true;
-      _lastError = 'Couldn\'t play "${song.title}". Check your connection and try again.';
+      _lastError =
+          'Couldn\'t play "${song.title}". Check your connection and try again.';
     }
     notifyListeners();
   }
@@ -820,7 +876,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final current = _currentSong;
     if (provider == null || current == null) return false;
     final existing = _queue.map((s) => s.id).toSet();
-    final fresh = provider(current).where((s) => !existing.contains(s.id)).take(10).toList();
+    final fresh = provider(current)
+        .where((s) => !existing.contains(s.id))
+        .take(10)
+        .toList();
     if (fresh.isEmpty) return false;
     _queue = [..._queue, ...fresh];
     return true;
@@ -902,7 +961,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// Plays [song], optionally from [startAt] (used by "tap a lyric line to
   /// jump there"). With no [queue], an already-queued song just becomes the
   /// current one (keeping the queue intact); otherwise it plays on its own.
-  Future<void> playSong(Song song, {List<Song>? queue, Duration? startAt}) async {
+  Future<void> playSong(Song song,
+      {List<Song>? queue, Duration? startAt}) async {
     PlaybackEventLog.instance.add('cmd.play', {
       'song': song.id,
       'queue': queue?.length,
@@ -920,7 +980,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
     // Already the current, loaded track: a "play" that only wanted a
     // position applied must not restart it from zero.
-    if (index == _queueIndex && _currentSong?.id == song.id && startAt != null && !_needsReload) {
+    if (index == _queueIndex &&
+        _currentSong?.id == song.id &&
+        startAt != null &&
+        !_needsReload) {
       if (!_isPlaying) await togglePlayPause();
       await seekTo(startAt);
       return;
@@ -933,7 +996,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       if (native != null) {
         try {
           await _audioPlayer.seek(Duration.zero, index: native);
-          if (startAt != null && startAt > Duration.zero) await _audioPlayer.seek(startAt);
+          if (startAt != null && startAt > Duration.zero)
+            await _audioPlayer.seek(startAt);
           return;
         } catch (_) {
           // Fall through to the full reload.
@@ -1015,7 +1079,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   Future<void> seekToProgress(double value) {
     if (_currentSong == null) return Future.value();
-    return seekTo(Duration(milliseconds: (duration.inMilliseconds * value).round()));
+    return seekTo(
+        Duration(milliseconds: (duration.inMilliseconds * value).round()));
   }
 
   /// Queue order saved when shuffle turned ON, so switching it OFF restores
@@ -1092,14 +1157,19 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     try {
       final curNative = _audioPlayer.currentIndex;
       final tag = _audioPlayer.sequenceState?.currentSource?.tag;
-      if (curNative == null || curNative < 0 || curNative >= native.length || tag is! MediaItem || tag.id != song.id) {
+      if (curNative == null ||
+          curNative < 0 ||
+          curNative >= native.length ||
+          tag is! MediaItem ||
+          tag.id != song.id) {
         _invalidateNativeQueue();
         return;
       }
       // While the window is edited the index stream emits transient values;
       // with the ids cleared the handler ignores them.
       _nativeQueueIds = null;
-      if (curNative + 1 < native.length) await native.removeRange(curNative + 1, native.length);
+      if (curNative + 1 < native.length)
+        await native.removeRange(curNative + 1, native.length);
       if (curNative > 0) await native.removeRange(0, curNative);
       if (generation != _relayGeneration) {
         _invalidateNativeQueue();
@@ -1110,11 +1180,17 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       final start = whole
           ? 0
           : (_queueIndex - _kNativeWindowBefore)
-              .clamp(0, max(0, _queue.length - (_kNativeWindowBefore + 1 + _kNativeWindowAfter)))
+              .clamp(
+                  0,
+                  max(
+                      0,
+                      _queue.length -
+                          (_kNativeWindowBefore + 1 + _kNativeWindowAfter)))
               .toInt();
       final end = whole
           ? _queue.length
-          : min(_queue.length, start + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
+          : min(_queue.length,
+              start + _kNativeWindowBefore + 1 + _kNativeWindowAfter);
       AudioSource? childFor(Song q) {
         final src = audioSourceResolver?.call(q);
         if (src == null) return null;
@@ -1214,7 +1290,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     PlaybackEventLog.instance.add('cmd.prev');
     if (_queue.isEmpty) return;
     final song = _currentSong;
-    final loadedForCurrent = song != null && !_isLoading && _loadedSongId == song.id;
+    final loadedForCurrent =
+        song != null && !_isLoading && _loadedSongId == song.id;
     if (loadedForCurrent && position.inSeconds > 3) {
       await seekTo(Duration.zero);
       return;
@@ -1274,7 +1351,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       _queueIndex--;
       notifyListeners();
     } else if (index == _queueIndex) {
-      final newIndex = _queueIndex >= _queue.length ? _queue.length - 1 : _queueIndex;
+      final newIndex =
+          _queueIndex >= _queue.length ? _queue.length - 1 : _queueIndex;
       await _jumpTo(newIndex, startPlaying: _isPlaying);
     } else {
       notifyListeners();
@@ -1283,7 +1361,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   void reorderQueue(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex -= 1;
-    if (oldIndex == newIndex || oldIndex < 0 || oldIndex >= _queue.length || newIndex < 0 || newIndex >= _queue.length) return;
+    if (oldIndex == newIndex ||
+        oldIndex < 0 ||
+        oldIndex >= _queue.length ||
+        newIndex < 0 ||
+        newIndex >= _queue.length) return;
     final item = _queue.removeAt(oldIndex);
     _queue.insert(newIndex, item);
     _invalidateNativeQueue();
@@ -1327,14 +1409,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         displayDescription: meta?.albumTitle ?? song.artist,
       );
 
-
   /// Restores a queue and position saved from a previous session —
   /// Settings → Behavior → "Remember queue"/"Resume playback". Loads
   /// [index]'s song *paused* (never auto-starts playback on app open) and
   /// seeks to [position] as part of that same load, so the seek can't land
   /// on the wrong track. See AppState.takeSavedQueue, which is what
   /// actually reads the saved data back out of storage.
-  Future<void> restoreQueue(List<Song> queue, int index, Duration position) async {
+  Future<void> restoreQueue(
+      List<Song> queue, int index, Duration position) async {
     if (queue.isEmpty) return;
     // ADOPT a live session: after a process/engine restart (BlueStacks window
     // churn, service restart), the shared AudioPlayer may still be PLAYING
@@ -1458,7 +1540,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final remaining = _audioPlayer.duration != null
         ? _audioPlayer.duration! - position
         : Duration.zero;
-    startSleepTimer(remaining > Duration.zero ? remaining : Duration(seconds: 1), fadeOut: fadeOut);
+    startSleepTimer(
+        remaining > Duration.zero ? remaining : Duration(seconds: 1),
+        fadeOut: fadeOut);
   }
 
   /// "End of queue": let playback run to the end of the LAST queued track,
@@ -1518,7 +1602,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   // ([getOutputDiagnostics]).
 
   @override
-  Future<void> setQueue(List<Song> items, {required int startIndex, Duration? startAt}) async {
+  Future<void> setQueue(List<Song> items,
+      {required int startIndex, Duration? startAt}) async {
     if (items.isEmpty) return;
     final index = startIndex.clamp(0, items.length - 1);
     await playSong(items[index], queue: items, startAt: startAt);
@@ -1540,7 +1625,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   @override
   void setSourcePolicy(SourcePolicy policy) {
-    if (_sourcePolicy.quality == policy.quality && _sourcePolicy.allowServerFallback == policy.allowServerFallback) return;
+    if (_sourcePolicy.quality == policy.quality &&
+        _sourcePolicy.allowServerFallback == policy.allowServerFallback) return;
     _sourcePolicy = policy;
     notifyListeners();
   }
@@ -1584,7 +1670,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // A capped policy means the server was *asked* to transcode. Whether it
       // actually did can only be known from a response, so this stays unknown
       // until a probe has seen one.
-      streamMode: _sourcePolicy.isOriginal ? StreamMode.unknown : StreamMode.transcoded,
+      streamMode:
+          _sourcePolicy.isOriginal ? StreamMode.unknown : StreamMode.transcoded,
       policy: _sourcePolicy,
     );
   }
@@ -1594,11 +1681,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final song = _currentSong;
     if (song == null) return null;
     final resolver = diagnosticsResolver;
-    if (resolver != null) return resolver(song, _sourcePolicy, _processingOptions);
+    if (resolver != null)
+      return resolver(song, _sourcePolicy, _processingOptions);
     // No resolver wired (nothing playing from the app shell, or a unit test):
     // report the source facts and leave route/capability unknown rather than
     // inventing them.
-    return AudioDiagnostics.forSong(song: song, policy: _sourcePolicy, processing: _processingOptions);
+    return AudioDiagnostics.forSong(
+        song: song, policy: _sourcePolicy, processing: _processingOptions);
   }
 
   int? _channelCount(String label) {
