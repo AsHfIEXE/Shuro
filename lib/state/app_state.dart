@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -208,7 +207,7 @@ class AppState extends ChangeNotifier {
       }
 
       final enabledJson = persistence.getStringList(_kEnabledServersKey);
-      if (enabledJson != null && enabledJson.isNotEmpty) {
+      if (enabledJson.isNotEmpty) {
         enabledServerIds
           ..clear()
           ..addAll(enabledJson);

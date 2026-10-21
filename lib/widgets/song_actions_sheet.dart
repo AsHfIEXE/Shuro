@@ -248,7 +248,7 @@ class _ActionTile extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _ActionTile({this.icon, this.iconWidget, required this.label, required this.onTap, this.iconColor});
+  const _ActionTile({this.icon, this.iconWidget, required this.label, required this.onTap}) : iconColor = null;
 
   @override
   Widget build(BuildContext context) {

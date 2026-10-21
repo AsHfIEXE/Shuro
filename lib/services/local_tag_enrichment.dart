@@ -38,7 +38,6 @@ class LocalTagEnrichment {
         final fromName = _splitFileName(song.title);
         final title = _firstText([tags?.title, fromName?.title, song.title]) ?? song.title;
         final artist = _firstText([tags?.artist, fromName?.artist, 'Local file']) ?? 'Local file';
-        final album = _firstText([tags?.album]);
         final genre = _firstText([tags?.genre]);
 
         ImageProvider? artwork = tags?.artwork == null ? null : MemoryImage(tags!.artwork!);

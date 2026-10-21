@@ -145,7 +145,9 @@ class QueueScreen extends StatelessWidget {
                       : ReorderableListView.builder(
                           padding: const EdgeInsets.only(bottom: 24),
                           itemCount: upNext.length,
-                          onReorder: (oldIndex, newIndex) {
+                          // Tracked: migrate to onReorderItem (index semantics change).
+                      // ignore: deprecated_member_use
+                      onReorder: (oldIndex, newIndex) {
                             player.reorderQueue(
                                 player.queueIndex + 1 + oldIndex,
                                 player.queueIndex + 1 + newIndex);

@@ -1362,7 +1362,7 @@ class _AboutBlock extends StatelessWidget {
           const SizedBox(height: 10),
           Text(kAppTaglineAlt,
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: kTextColor.withOpacity(0.7),
+                  color: kTextColor.withValues(alpha: 0.7),
                   fontSize: 12,
                   fontStyle: FontStyle.italic)),
         ],

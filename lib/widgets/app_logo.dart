@@ -108,7 +108,7 @@ class _AppLogoPainter extends CustomPainter {
     canvas.save();
     canvas.translate(center.dx, center.dy);
     canvas.scale(scale);
-    canvas.saveLayer(rect.inflate(thickness), Paint()..color = Colors.white.withOpacity(opacity));
+    canvas.saveLayer(rect.inflate(thickness), Paint()..color = Colors.white.withValues(alpha: opacity));
     canvas.drawRRect(rrect, Paint()..shader = LinearGradient(colors: colors).createShader(rect));
     canvas.restore(); // saveLayer
     canvas.restore(); // translate/scale

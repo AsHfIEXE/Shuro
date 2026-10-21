@@ -59,11 +59,11 @@ ThemeData buildAppTheme({String fontFamily = 'Inter'}) {
     textTheme: GoogleFonts.getTextTheme(fontFamily, base.textTheme),
     colorScheme: base.colorScheme.copyWith(surface: kSurfaceColor, primary: kBrandColor, secondary: kSecondaryColor),
     switchTheme: SwitchThemeData(
-      thumbColor: MaterialStateProperty.resolveWith(
-        (states) => states.contains(MaterialState.selected) ? kBrandColor : Colors.white70,
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected) ? kBrandColor : Colors.white70,
       ),
-      trackColor: MaterialStateProperty.resolveWith(
-        (states) => states.contains(MaterialState.selected) ? kBrandColor.withOpacity(0.5) : Colors.white24,
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected) ? kBrandColor.withValues(alpha: 0.5) : Colors.white24,
       ),
     ),
     dividerColor: kDividerColor,

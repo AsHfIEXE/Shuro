@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import '../playback/event_log.dart';
@@ -107,6 +106,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   /// The live native playlist, when one is loaded — kept so the window can
   /// slide forward/backward via runtime insert/remove (gapless, no reload).
+  // Tracked: migrate the windowed queue to AudioPlayer.setAudioSources.
+  // ignore: deprecated_member_use
   ConcatenatingAudioSource? _nativeSource;
 
   /// The id sequence actually loaded into the native playlist — a WINDOW of
@@ -466,7 +467,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// check catches it.
   void _verifyNativeTrack() {
     if (_resyncing || _isLoading || !_nativeQueueActive) return;
-    final tag = _audioPlayer.sequenceState?.currentSource?.tag;
+    final tag = _audioPlayer.sequenceState.currentSource?.tag;
     if (tag is! MediaItem) return;
     final expected = _currentSong?.id;
     if (expected == null || tag.id == expected) return;
@@ -726,6 +727,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           if (children.length > 1 &&
               children.length == windowEnd - windowStart &&
               playheadNative >= 0) {
+            // Tracked: migrate the windowed queue to setAudioSources.
+            // ignore: deprecated_member_use
             final native = ConcatenatingAudioSource(children: children);
             await _audioPlayer
                 .setAudioSource(
@@ -1087,7 +1090,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// the album order instead of leaving a scrambled queue (the old behaviour —
   /// users read it as "shuffle is broken").
   List<Song>? _preShuffleQueue;
-  int _preShuffleIndex = 0;
 
   void toggleShuffle() {
     _shuffle = !_shuffle;
@@ -1095,7 +1097,6 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final current = _currentSong;
     if (_shuffle) {
       _preShuffleQueue = List<Song>.of(_queue);
-      _preShuffleIndex = _queueIndex;
       // Shuffle everything EXCEPT the playing track, then put the playing
       // track first. The invariant that must never break: the current song is
       // always in the queue (the chaos harness caught a version that dropped
@@ -1115,7 +1116,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           saved.length == _queue.length &&
           saved.any((s) => s.id == currentId);
       if (canRestore) {
-        _queue = List<Song>.of(saved!);
+        _queue = List<Song>.of(saved);
         _queueIndex = _queue.indexWhere((s) => s.id == currentId);
       } else if (currentId != null) {
         // Queue changed while shuffled: never lose the playing track.
@@ -1156,7 +1157,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final generation = ++_relayGeneration;
     try {
       final curNative = _audioPlayer.currentIndex;
-      final tag = _audioPlayer.sequenceState?.currentSource?.tag;
+      final tag = _audioPlayer.sequenceState.currentSource?.tag;
       if (curNative == null ||
           curNative < 0 ||
           curNative >= native.length ||

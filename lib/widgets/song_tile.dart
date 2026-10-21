@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/download_state.dart';
 import '../models/song.dart';
 import '../services/download_service.dart';
-import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'artwork_thumb.dart';
 import 'song_actions_sheet.dart';

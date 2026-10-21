@@ -237,7 +237,7 @@ class PlaylistDetailScreen extends StatelessWidget {
                         key: ValueKey('${live.id}_${song.id}'),
                         direction: DismissDirection.endToStart,
                         background: Container(
-                          color: Colors.redAccent.withOpacity(0.15),
+                          color: Colors.redAccent.withValues(alpha: 0.15),
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.only(right: 24),
                           child: const Icon(Icons.delete_outline_rounded,

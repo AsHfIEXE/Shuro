@@ -118,7 +118,7 @@ class _ManageServersScreenState extends State<ManageServersScreen> {
                 children: [
                   Switch(
                     value: appState.isServerEnabled(server.id),
-                    activeColor: kBrandColor,
+                    activeThumbColor: kBrandColor,
                     onChanged: appState.servers.length > 1 ? (value) => appState.setServerEnabled(server.id, value) : null,
                   ),
                   PopupMenuButton<String>(

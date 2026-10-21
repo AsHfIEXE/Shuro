@@ -108,7 +108,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kBrandColor,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: kBrandColor.withOpacity(0.5),
+                    disabledBackgroundColor: kBrandColor.withValues(alpha: 0.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
                   ),
                   child: isConnecting
@@ -195,7 +195,7 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: Colors.redAccent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -260,7 +260,7 @@ class _ConnectionSuccessScreenState extends State<ConnectionSuccessScreen> {
               child: Container(
                 width: 88,
                 height: 88,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: kBrandColor.withOpacity(0.15)),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: kBrandColor.withValues(alpha: 0.15)),
                 child: const Icon(Icons.check_rounded, color: kBrandColor, size: 44),
               ),
             ),

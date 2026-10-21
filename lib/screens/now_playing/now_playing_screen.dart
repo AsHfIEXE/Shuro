@@ -84,6 +84,8 @@ class NowPlayingScreen extends StatelessWidget {
     return '$minutes:$seconds';
   }
 
+  // Retained while the wide-layout ring gesture is reworked.
+  // ignore: unused_element
   void _handleSeekDrag(
       PlayerController player, Offset localPosition, double size) {
     final center = Offset(size / 2, size / 2);
@@ -1046,6 +1048,8 @@ class _TimesRow extends StatelessWidget {
 /// with the elapsed/total times split to its edges. The ring around the
 /// artwork remains the primary progress display — this is its large-screen
 /// companion, not a replacement.
+// Superseded by the ring/seek layout; removal is tracked separately.
+// ignore: unused_element
 class _ProgressLine extends StatelessWidget {
   final Duration position;
   final Duration total;
@@ -1062,8 +1066,7 @@ class _ProgressLine extends StatelessWidget {
     required this.progress,
     required this.accent,
     required this.format,
-    this.onSeek,
-  });
+  }) : onSeek = null;
 
   @override
   Widget build(BuildContext context) {

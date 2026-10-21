@@ -6,7 +6,6 @@ import '../models/song.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'artwork_thumb.dart';
-import 'section_header.dart';
 
 /// Real content for the wide Now-Playing pane when there are no lyrics: the
 /// next songs in the queue. Previously this half of the screen fell back to a

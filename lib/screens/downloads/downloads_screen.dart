@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/download_service.dart';
-import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/song_tile.dart';
 import '../../widgets/state_views.dart';
 
-import '../../widgets/page_transitions.dart';
 
 /// "12. Downloads / Offline" — downloaded songs & albums, active download
 /// progress (shown inline on each SongTile), and storage usage.
@@ -18,7 +16,6 @@ class DownloadsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.watch<AppState>();
     final player = context.read<PlayerController>();
     // Real downloads: songs that are files on disk, managed by the service.
     final downloads = context.watch<DownloadService>();

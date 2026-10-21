@@ -14,7 +14,6 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/album_card.dart';
 import '../../widgets/artist_card.dart';
-import '../../widgets/artwork_thumb.dart';
 import '../../widgets/loading_skeletons.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/playlist_card.dart';
@@ -388,7 +387,7 @@ class _GenresTab extends StatelessWidget {
                   bottom: -14,
                   child: Transform.rotate(
                     angle: -0.3,
-                    child: ShuroIcon(glyphForGenre(genre), size: 86, color: Colors.white.withOpacity(0.22)),
+                    child: ShuroIcon(glyphForGenre(genre), size: 86, color: Colors.white.withValues(alpha: 0.22)),
                   ),
                 ),
                 Align(
@@ -574,7 +573,7 @@ class _LocalTab extends StatelessWidget {
                       key: ValueKey(song.id),
                       direction: DismissDirection.endToStart,
                       background: Container(
-                        color: Colors.redAccent.withOpacity(0.15),
+                        color: Colors.redAccent.withValues(alpha: 0.15),
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 24),
                         child: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),

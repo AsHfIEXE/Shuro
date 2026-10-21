@@ -28,9 +28,7 @@ import 'screens/onboarding/consent_screen.dart'
     show ConsentScreen, kTermsAcceptedKey;
 import 'screens/onboarding/server_setup_screen.dart';
 import 'screens/search/search_screen.dart';
-import 'services/device_profile.dart';
 import 'state/app_state.dart';
-import 'state/appearance_settings.dart';
 import 'state/player_controller.dart';
 import 'theme/app_theme.dart';
 import 'services/server_link.dart';
@@ -77,7 +75,6 @@ class _AuthGateState extends State<AuthGate> {
   /// `connecting` — showing Welcome at that moment flashed first-run onboarding
   /// at returning users (the boot-sequence bug). Once any terminal status is
   /// seen, the gate trusts statuses as-is.
-  bool _sawTerminalStatus = false;
 
   /// Whether the app shell has ever been shown. Once it has, background
   /// reconnects (the quiet offline retry loop) must never replace the user's
@@ -127,11 +124,6 @@ class _AuthGateState extends State<AuthGate> {
 
     final appState = context.watch<AppState>();
     final status = appState.connectionStatus;
-    final terminal = status == ConnectionStatus.connected ||
-        status == ConnectionStatus.localOnly ||
-        status == ConnectionStatus.unreachable ||
-        status == ConnectionStatus.invalidCredentials;
-    if (terminal) _sawTerminalStatus = true;
 
     if (status == ConnectionStatus.connected ||
         status == ConnectionStatus.localOnly) {

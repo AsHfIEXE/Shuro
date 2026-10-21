@@ -29,13 +29,11 @@ class ArtistArtworkService extends ChangeNotifier {
   bool _restored = false;
 
   SubsonicApi? _api;
-  String? _username;
 
   /// Attaches the server session (called from ServerLink.bind's neighbourhood —
   /// actually read live from the provider by the caller of [warmUp]).
   void updateSession(SubsonicApi? api, String? username) {
     _api = api;
-    _username = username;
   }
 
   /// Stable cache key: server artists key on their server id, local artists

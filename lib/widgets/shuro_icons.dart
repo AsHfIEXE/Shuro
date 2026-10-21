@@ -360,7 +360,7 @@ class _ShuroIconPainter extends CustomPainter {
     final vein = Path()
       ..moveTo(17, 6)
       ..cubicTo(12, 9, 8, 13, 5.5, 17.5);
-    canvas.drawPath(vein, stroke..color = stroke.color.withOpacity(0.5));
+    canvas.drawPath(vein, stroke..color = stroke.color.withValues(alpha: 0.5));
   }
 
   @override

@@ -95,7 +95,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         height: 220,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: RadialGradient(colors: [kBrandColor.withOpacity(0.22), Colors.transparent]),
+                          gradient: RadialGradient(colors: [kBrandColor.withValues(alpha: 0.22), Colors.transparent]),
                         ),
                       ),
                     ),
