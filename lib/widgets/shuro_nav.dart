@@ -110,8 +110,15 @@ class ShuroRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    // Width scales with the window (phones 86, tablets 104, desktop/TV 116)
+    // and the rail gets denser when the height is tight — a 320 dp-tall
+    // landscape window must fit five destinations without clipping.
+    final railWidth =
+        size.width >= 1200 ? 116.0 : (size.width >= 900 ? 104.0 : 86.0);
+    final compact = size.height < 420;
     return Container(
-      width: 96,
+      width: railWidth,
       decoration: const BoxDecoration(
         color: kCardColor,
         border: Border(right: BorderSide(color: kDividerColor)),
@@ -135,11 +142,14 @@ class ShuroRail extends StatelessWidget {
                 const SizedBox(height: 8),
               for (var i = 0; i < ShuroNavBar.destinations.length; i++)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: EdgeInsets.symmetric(vertical: compact ? 0 : 2),
                   child: _ShuroNavItem(
                     destination: ShuroNavBar.destinations[i],
                     selected: currentIndex == i,
-                    showLabel: true,
+                    // Labels stay on phones/tablets; on a very wide rail they
+                    // are unmissable either way, and on a 320 dp-tall window
+                    // the icons alone keep every destination on screen.
+                    showLabel: !compact,
                     onTap: () => onTap(i),
                   ),
                 ),

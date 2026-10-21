@@ -24,7 +24,8 @@ import 'screens/favorites/favorites_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/library/library_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
-import 'screens/onboarding/consent_screen.dart' show ConsentScreen, kTermsAcceptedKey;
+import 'screens/onboarding/consent_screen.dart'
+    show ConsentScreen, kTermsAcceptedKey;
 import 'screens/onboarding/server_setup_screen.dart';
 import 'screens/search/search_screen.dart';
 import 'services/device_profile.dart';
@@ -106,7 +107,8 @@ class _AuthGateState extends State<AuthGate> {
     super.initState();
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
-      setState(() => _termsAccepted = prefs.getString(kTermsAcceptedKey) == 'true');
+      setState(
+          () => _termsAccepted = prefs.getString(kTermsAcceptedKey) == 'true');
     });
   }
 
@@ -131,7 +133,8 @@ class _AuthGateState extends State<AuthGate> {
         status == ConnectionStatus.invalidCredentials;
     if (terminal) _sawTerminalStatus = true;
 
-    if (status == ConnectionStatus.connected || status == ConnectionStatus.localOnly) {
+    if (status == ConnectionStatus.connected ||
+        status == ConnectionStatus.localOnly) {
       // A connected server is the one moment server features get bound: the
       // feature API joins the provider tree, play reporting is wired, and
       // favourites merge. Cheap and idempotent per server — see ServerLink.
@@ -145,7 +148,8 @@ class _AuthGateState extends State<AuthGate> {
     // Background reconnect in flight, or still offline, AFTER the shell has
     // been up once: keep the library visible (cached/offline mode).
     if (_hasShownShell &&
-        (status == ConnectionStatus.connecting || status == ConnectionStatus.unreachable)) {
+        (status == ConnectionStatus.connecting ||
+            status == ConnectionStatus.unreachable)) {
       _mark('shell(offline-retry)');
       return const AppShell();
     }
@@ -170,17 +174,20 @@ class _RestoringScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final failed = appState.connectionErrorMessage != null &&
-        (appState.connectionStatus == ConnectionStatus.unreachable || appState.connectionStatus == ConnectionStatus.invalidCredentials);
+        (appState.connectionStatus == ConnectionStatus.unreachable ||
+            appState.connectionStatus == ConnectionStatus.invalidCredentials);
     // The retry target: the ACTIVE server, falling back to the first SAVED
     // one. activeServerId is only assigned on a successful connect — after a
     // failed startup reconnect it is null, and the Try-again button used to
     // read it directly and silently do nothing (the "button doesn't work"
     // report). The saved list is the honest source of what to retry.
-    final retryServer = appState.activeServer ?? (appState.servers.isNotEmpty ? appState.servers.first : null);
+    final retryServer = appState.activeServer ??
+        (appState.servers.isNotEmpty ? appState.servers.first : null);
     final serverName = retryServer?.name ?? 'your server';
     // Raw socket text ("Failed host lookup … errno = 7") is meaningless to a
     // person — translated here into what it actually means and what to do.
-    final friendlyError = friendlyConnectionError(appState.connectionErrorMessage);
+    final friendlyError =
+        friendlyConnectionError(appState.connectionErrorMessage);
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
@@ -198,28 +205,44 @@ class _RestoringScreen extends StatelessWidget {
                   if (!failed) ...[
                     Text('Connecting to $serverName',
                         textAlign: TextAlign.center,
-                        style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600)),
+                        style: headingFont(
+                            color: kTextColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 18),
-                    const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2.4, color: kBrandColor)),
+                    const SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.4, color: kBrandColor)),
                     const SizedBox(height: 16),
                     Text('Reconnecting to your saved library',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 13)),
                   ] else ...[
                     Text("Couldn't reach $serverName",
                         textAlign: TextAlign.center,
-                        style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600)),
+                        style: headingFont(
+                            color: kTextColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 10),
                     Text(friendlyError,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13, height: 1.5)),
-                    if (appState.connectionErrorMessage != null && appState.connectionErrorMessage != friendlyError) ...[
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 13, height: 1.5)),
+                    if (appState.connectionErrorMessage != null &&
+                        appState.connectionErrorMessage != friendlyError) ...[
                       const SizedBox(height: 8),
                       Text(sanitizeAuthParams(appState.connectionErrorMessage!),
                           textAlign: TextAlign.center,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white24, fontSize: 10, height: 1.4)),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white24,
+                              fontSize: 10,
+                              height: 1.4)),
                     ],
                     const SizedBox(height: 22),
                     SizedBox(
@@ -233,21 +256,32 @@ class _RestoringScreen extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: kBrandColor,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24)),
                         ),
-                        child: Text('Try again', style: GoogleFonts.getFont(currentFontFamily, fontSize: 14, fontWeight: FontWeight.w600)),
+                        child: Text('Try again',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                fontSize: 14, fontWeight: FontWeight.w600)),
                       ),
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: () => Navigator.of(context).push(drillDownRoute(const ServerSetupScreen())),
+                      onPressed: () => Navigator.of(context)
+                          .push(drillDownRoute(const ServerSetupScreen())),
                       child: Text('Choose another server',
-                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                     ),
                     TextButton(
-                      onPressed: () => context.read<AppState>().continueWithoutServer(),
+                      onPressed: () =>
+                          context.read<AppState>().continueWithoutServer(),
                       child: Text('Continue with local files only',
-                          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ],
@@ -273,7 +307,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-
   /// Quiet background reconnect: while the session is offline (server was
   /// down at startup or dropped mid-session) the shell keeps retrying every
   /// 25 s. Without this, a user who started their server AFTER the app did
@@ -287,9 +320,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void _maybeReconnect() {
     final appState = _boundAppState;
     if (appState == null || _reconnecting) return;
-    final offline = appState.libraryOffline || appState.connectionStatus == ConnectionStatus.unreachable;
+    final offline = appState.libraryOffline ||
+        appState.connectionStatus == ConnectionStatus.unreachable;
     if (!offline) return;
-    final id = appState.activeServerId ?? (appState.servers.isNotEmpty ? appState.servers.first.id : null);
+    final id = appState.activeServerId ??
+        (appState.servers.isNotEmpty ? appState.servers.first.id : null);
     if (id == null) return;
     _reconnecting = true;
     appState.switchServer(id).whenComplete(() => _reconnecting = false);
@@ -337,7 +372,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _reconnectTimer = Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
+    _reconnectTimer =
+        Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
     WidgetsBinding.instance.addObserver(this);
     // Deliberately NOT re-applying the performance preset here: the preset is
     // applied when the user picks a profile, and re-applying it at boot
@@ -361,11 +397,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // flag, and never touch the setting again (later user choices stick).
       try {
         final persistence = await AppPersistence.load();
-        if (persistence.getBool('mobile_quality_original_migration_v1') != true) {
+        if (persistence.getBool('mobile_quality_original_migration_v1') !=
+            true) {
           if (appState.mobileQuality == StreamingQuality.high) {
             appState.updateMobileQuality(StreamingQuality.original);
           }
-          await persistence.setBool('mobile_quality_original_migration_v1', true);
+          await persistence.setBool(
+              'mobile_quality_original_migration_v1', true);
         }
       } catch (_) {
         // No persistence on this platform: defaults still apply in memory.
@@ -377,7 +415,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       try {
         await LocalTagEnrichment.enrich(appState);
       } catch (_) {/* enrichment is best-effort */}
-      player.suggestionProvider = (song) => appState.allSongs.where((s) => s.artistId == song.artistId && s.id != song.id).toList();
+      player.suggestionProvider = (song) => appState.allSongs
+          .where((s) => s.artistId == song.artistId && s.id != song.id)
+          .toList();
       // The one place PlayerController learns how to actually play a
       // song — a downloaded file, a local file path, or a connected backend's
       // stream URL — without ever knowing AppState or a repository exists.
@@ -416,7 +456,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         if (api == null) return null;
         try {
           final info = await api.getSong(song.id);
-          final db = ((info?['replayGain'] as Map<String, dynamic>?)?['trackGain'] as num?)?.toDouble();
+          final db = ((info?['replayGain']
+                  as Map<String, dynamic>?)?['trackGain'] as num?)
+              ?.toDouble();
           gainMemo[song.id] = db;
           return db;
         } catch (_) {
@@ -433,14 +475,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // diagnostics re-check the URL the app actually produced against it
       // (verifyStreamUrl), so a request that quietly carried a bitrate cap is
       // visible instead of silent.
-      player.setSourcePolicy(SourcePolicy(quality: appState.effectiveStreamingQuality));
-      player.diagnosticsResolver = (song, policy, processing) => AudioDiagnostics.forSong(
+      player.setSourcePolicy(
+          SourcePolicy(quality: appState.effectiveStreamingQuality));
+      player.diagnosticsResolver = (song, policy, processing) =>
+          AudioDiagnostics.forSong(
             song: song,
             policy: policy,
             processing: processing,
-            requestCheck: verifyStreamUrl(appState.audioSourceFor(song), policy),
-            capability: sharedAudioCapabilityMonitor.reportOrUnknown().toDiagnostics(),
-            route: sharedAudioCapabilityMonitor.reportOrUnknown().toRouteDiagnostics(),
+            requestCheck:
+                verifyStreamUrl(appState.audioSourceFor(song), policy),
+            capability:
+                sharedAudioCapabilityMonitor.reportOrUnknown().toDiagnostics(),
+            route: sharedAudioCapabilityMonitor
+                .reportOrUnknown()
+                .toRouteDiagnostics(),
           );
 
       // One capability read at startup, so the panel has an answer without ever
@@ -524,11 +572,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       unawaited(sharedAudioCapabilityMonitor.recheck());
       return;
     }
-    if (state != AppLifecycleState.paused && state != AppLifecycleState.detached) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.detached) return;
     final appState = _boundAppState;
     final player = _boundPlayer;
     if (appState == null || player == null) return;
-    appState.persistQueueState(player.queue, player.queueIndex, player.position);
+    appState.persistQueueState(
+        player.queue, player.queueIndex, player.position);
   }
 
   void _syncAutoplay() {
@@ -539,7 +589,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // Settings → Wi-Fi/Mobile data quality, resolved against the connection the
     // device is actually on — the same value the stream URL is built from, so
     // the diagnostics panel reports against the policy that really applied.
-    player.setSourcePolicy(SourcePolicy(quality: appState.effectiveStreamingQuality));
+    player.setSourcePolicy(
+        SourcePolicy(quality: appState.effectiveStreamingQuality));
   }
 
   void _recordListeningHistory() {
@@ -567,7 +618,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final player = _boundPlayer;
     final appState = _boundAppState;
     if (player == null || appState == null) return;
-    if (!sharedScrobbleService.isReady && !sharedScrobbleService.needsAuthorization) return;
+    if (!sharedScrobbleService.isReady &&
+        !sharedScrobbleService.needsAuthorization) return;
 
     final song = player.currentSong;
     if (song == null) return;
@@ -578,7 +630,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (previous != null && startedAt != null) {
         // A track that ran out because the user skipped early is simply not
         // scrobbled — the rule decides, not the skip.
-        if (ScrobbleService.shouldScrobble(trackDuration: previous.duration, played: _scrobblingLastPosition)) {
+        if (ScrobbleService.shouldScrobble(
+            trackDuration: previous.duration,
+            played: _scrobblingLastPosition)) {
           unawaited(sharedScrobbleService.submit(ScrobbleEntry(
             artist: previous.artist,
             track: previous.title,
@@ -648,15 +702,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final GlobalKey _tabStackKey = GlobalKey();
 
   /// A landscape phone is only ~360 dp tall; the bottom bar (74) plus the mini
-  /// player (~64) would take over a third of it. Use the rail there too.
-  static const double kLandscapeRailMaxHeight = 480;
-  static const double kLandscapeRailMinWidth = 560;
+  /// player (~64) would take over a third of it. Any landscape window uses the
+  /// rail, at every width — a 480 dp-wide folded phone included.
+  ///
+  /// Portrait tablets and foldables get the rail too from 720 dp up: the bar
+  /// wastes vertical space there without gaining anything.
+  static const double kTabletRailMinWidth = 720;
+  static const double kLandscapeRailMinWidth = 400;
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
     final useRail = size.width >= kWideShellBreakpoint ||
-        (size.height < kLandscapeRailMaxHeight && size.width >= kLandscapeRailMinWidth);
+        size.width >= kTabletRailMinWidth ||
+        (isLandscape && size.width >= kLandscapeRailMinWidth);
 
     // Wide layout: a rail down the side, content to the right, mini player at the
     // bottom of the content column. This is what makes a 1920×1080 window (or a
@@ -675,7 +735,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             Expanded(
               child: Column(
                 children: [
-                  Expanded(child: IndexedStack(key: _tabStackKey, index: _tabIndex, children: _tabChildren)),
+                  Expanded(
+                      child: IndexedStack(
+                          key: _tabStackKey,
+                          index: _tabIndex,
+                          children: _tabChildren)),
                   const MiniPlayer(),
                 ],
               ),
@@ -687,7 +751,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
-      body: IndexedStack(key: _tabStackKey, index: _tabIndex, children: _tabChildren),
+      body: IndexedStack(
+          key: _tabStackKey, index: _tabIndex, children: _tabChildren),
       bottomNavigationBar: ShuroNavBar(
         currentIndex: _tabIndex,
         onTap: _selectTab,
