@@ -5,6 +5,37 @@ Each item is a focused session's work, not a bullet to rush.
 
 ---
 
+## Status
+
+Last updated 13 Oct 2026. A tick means the behaviour exists in `main` and is
+covered by the analyzer plus at least one test; it does not mean it has been
+exercised on a physical device.
+
+| # | Item | State |
+|---|---|---|
+| 1 | Signed releases | CI ready, **blocked**: the four Android signing secrets are not in the repo |
+| 2 | Windows installer | Shipped (`CloseApplications=force`) |
+| 3 | Linux `.deb` | Shipped |
+| 4 | Android home-screen widget | Not started |
+| 5 | ListenBrainz polish | Shipped (Retry-After, 401 stop, queue cap, per-result outcomes) |
+| 6 | Playlist "Add songs" | Shipped — multi-select picker with search |
+| 7 / 26 | Context menus | Songs done; albums/artists/playlists pending |
+| 8 | Preamp / loudness | Not started (needs a device to prove the effect chain) |
+| 9 | Per-output-device profiles | Not started |
+| 10 | Signal-path summary | Shipped — Audio Info card, wording pinned by tests |
+| 11 | Crossfade | Not started |
+| 12 | Music disk cache | Not started |
+| 13–20 | Audiobookshelf domain | Foundation only (`audiobookshelf_api`, `spoken_media`, `spoken_library_state`) |
+| 21 | Lyric editing | Not started |
+| 22 | Playlist covers | Not started |
+| 23 | Library health | Shipped — missing artwork, blank artist/album, unknown length, exact duplicates |
+| 24 | Rediscovery | Not started |
+| 25 | Settings search | Shipped — section index, jump and highlight |
+| 27 | Immersive lyrics | Not started |
+| 28 | Command palette | Shipped — Ctrl+Shift+P |
+| 29 | Undo system | Not started |
+| 30 | Listening profiles | Not started |
+
 ## Tier 1 — Ship-blocking (do before 1.0)
 
 | # | Feature | Scope | Est. effort |
