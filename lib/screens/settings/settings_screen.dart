@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+
+import 'library_health_screen.dart';
 import '../../app_info.dart';
 import '../../models/download_state.dart';
 import '../../playback/event_log.dart';
@@ -394,6 +396,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _SectionLabel('CACHE', key: _sectionKey('cache'), highlighted: _highlighted == 'cache'),
               const _CacheSection(),
 
+              _NavRow(
+                icon: Icons.health_and_safety_outlined,
+                label: 'Library health',
+                value: 'Artwork, tags, duplicates',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const LibraryHealthScreen()),
+                ),
+              ),
               _SectionLabel('APPEARANCE', key: _sectionKey('appearance'), highlighted: _highlighted == 'appearance'),
               // No tap affordance: Shuro is deliberately dark-only (part of
               // its brand identity, not an oversight), so there's no picker
