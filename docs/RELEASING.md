@@ -13,7 +13,9 @@ The v tag uses the version name but excludes the +BUILD suffix. For version **2.
 
 ## 2. Confirm Android signing secrets
 
-Configure these repository Actions secrets before tagging a release:
+Android signing secrets are optional. Configure all four to create upload-key-signed Android artifacts. If none are configured, the workflow still builds and publishes the Android APK/AAB using the Android Gradle project's default debug signing key; those Android artifacts are for testing only. The Windows installer and Linux package still build and publish normally. Configure all four or none—partial configuration fails preflight.
+
+For upload-key-signed Android artifacts, configure these repository Actions secrets:
 
 - **ANDROID_KEYSTORE_BASE64** — the upload keystore encoded as one Base64 string.
 - **ANDROID_KEYSTORE_PASSWORD**
@@ -32,7 +34,7 @@ For macOS:
 base64 -i android/upload-keystore.jks | tr -d '\n'
 ~~~
 
-Copy the output directly into the secret value. Never commit the keystore, android/key.properties, or any password to the repository. Do not paste secrets into workflow logs or issues. The workflow decodes the keystore only on the Android runner and removes the temporary files after building.
+Copy the output directly into the secret value. Never commit the keystore, android/key.properties, or any password to the repository. Do not paste secrets into workflow logs or issues. The workflow decodes the keystore only on the Android runner and removes the temporary files after building. With no secrets, files are clearly named `*-debug-signed.apk` and `*-debug-signed.aab`, and the published release notes warn that the AAB is not suitable for Google Play. Do not upload debug-signed AABs to Google Play.
 
 ## 3. Tag the exact commit on main
 
