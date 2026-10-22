@@ -829,8 +829,9 @@ class AppState extends ChangeNotifier {
         connectionErrorMessage = null;
       } else {
         connectionStatus = ConnectionStatus.unreachable;
-        connectionErrorMessage =
-            "Couldn't reach that server. Check the URL and try again.";
+        // The cause is part of the report: "unreachable" with the real
+        // exception dropped once hid a URL-shape bug behind a network claim.
+        connectionErrorMessage = "Couldn't finish connecting: $e";
       }
     }
     notifyListeners();

@@ -68,7 +68,12 @@ class NavidromeApiClient {
 
   static String _normalizeBaseUrl(String url) {
     var trimmed = url.trim();
-    if (trimmed.endsWith('/')) trimmed = trimmed.substring(0, trimmed.length - 1);
+    // Strip every trailing slash, but never eat the `://` of the scheme
+    // itself. A leftover slash would build `//rest/...`, which Navidrome
+    // answers with a redirect to its web UI instead of the API.
+    while (trimmed.endsWith('/') && !trimmed.endsWith('://')) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
     return trimmed;
   }
 
@@ -233,7 +238,16 @@ class NavidromeApiClient {
     try {
       decoded = json.decode(response.body) as Map<String, dynamic>;
     } catch (e) {
-      throw MusicRepositoryException('Unexpected response from server.', MusicRepositoryFailure.unknown);
+      final looksLikeWebPage = response.body.trimLeft().startsWith('<');
+      throw MusicRepositoryException(
+        looksLikeWebPage
+            ? 'The server answered with a web page instead of the Subsonic '
+                'API. Check the server address — it should be the Navidrome '
+                'root (for example http://192.168.1.10:4533) with no extra '
+                'path after it.'
+            : 'Unexpected response from server.',
+        MusicRepositoryFailure.unknown,
+      );
     }
     final envelope = decoded['subsonic-response'] as Map<String, dynamic>?;
     if (envelope == null) {
