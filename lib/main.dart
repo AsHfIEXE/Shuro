@@ -19,6 +19,7 @@ import 'services/stream_proxy.dart';
 import 'state/app_state.dart';
 import 'state/appearance_settings.dart';
 import 'state/player_controller.dart';
+import 'state/spoken_library_state.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -147,6 +148,7 @@ class MusicStreamApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => PlayerController()),
+        ChangeNotifierProvider(create: (_) => SpokenLibraryState()..restore()),
         // The connected server's feature API (search3, star, scrobble,
         // ratings, playlists…) — attached when a connection goes live, null
         // while offline. See backend/subsonic_api.dart and ServerLink.

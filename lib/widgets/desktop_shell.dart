@@ -7,6 +7,7 @@ import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
 import '../screens/downloads/downloads_screen.dart';
 import '../screens/library/personal_shelves_screen.dart';
+import '../screens/library/spoken_library_screen.dart';
 import '../screens/now_playing/lyrics_screen.dart';
 import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
@@ -60,6 +61,9 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _openShelves() =>
       Navigator.of(context).push(drillDownRoute(const PersonalShelvesScreen()));
+
+  void _openSpoken() =>
+      Navigator.of(context).push(drillDownRoute(const SpokenLibraryScreen()));
 
   void _toggleLyrics() {
     // A side inspector only fits beside real content on a roomy desktop.
@@ -133,6 +137,7 @@ class _DesktopShellState extends State<DesktopShell> {
                             ),
                             onSelect: widget.onSelectTab,
                             onShelves: _openShelves,
+                            onSpoken: _openSpoken,
                             onDownloads: _openDownloads,
                             onSettings: _openSettings,
                           ),
@@ -194,6 +199,7 @@ class _DesktopSidebar extends StatelessWidget {
   final VoidCallback onCollapse;
   final ValueChanged<int> onSelect;
   final VoidCallback onShelves;
+  final VoidCallback onSpoken;
   final VoidCallback onDownloads;
   final VoidCallback onSettings;
 
@@ -204,6 +210,7 @@ class _DesktopSidebar extends StatelessWidget {
     required this.onCollapse,
     required this.onSelect,
     required this.onShelves,
+    required this.onSpoken,
     required this.onDownloads,
     required this.onSettings,
   });
@@ -280,6 +287,12 @@ class _DesktopSidebar extends StatelessWidget {
               label: 'Personal shelves',
               collapsed: collapsed,
               onTap: onShelves,
+            ),
+            _RailItem(
+              icon: Icons.menu_book_rounded,
+              label: 'Books & podcasts',
+              collapsed: collapsed,
+              onTap: onSpoken,
             ),
             _RailItem(
               icon: Icons.download_rounded,
