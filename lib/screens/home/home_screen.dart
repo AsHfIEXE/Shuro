@@ -9,6 +9,7 @@ import '../../models/album.dart';
 import '../../models/server_config.dart';
 import '../../models/song.dart';
 import '../../services/shuro_pulse.dart';
+import '../../services/rediscovery.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
@@ -121,6 +122,13 @@ class HomeScreen extends StatelessWidget {
         ? appState.recentlyAddedSongs()
         : appState.localSongs.reversed.take(10).toList();
     final favorites = appState.songsByIds(appState.favoriteSongIds.toList());
+    // Favourites that have not been played inside the recent window. Local
+    // rule only — see Rediscovery for what counts as "recent".
+    final rediscover = Rediscovery.forgottenFavourites(
+      library: appState.allSongs,
+      favouriteIds: appState.favoriteSongIds,
+      history: appState.listeningHistory,
+    );
     // "Recommended" is Shuro Pulse's real heuristic ranking (affinity +
     // discovery, see ShuroPulse.forYou), not a hardcoded list.
     final recommended =
@@ -310,6 +318,17 @@ class HomeScreen extends StatelessWidget {
                             showHeader: false,
                             onSeeAll: null,
                           ),
+                        _SongRail(
+                          title: 'Rediscover',
+                          songs: rediscover,
+                          currentSongId: player.currentSong?.id,
+                          onTapSong: (song) =>
+                              player.playOrToggle(song, queue: rediscover),
+                          onSeeAll: rediscover.isEmpty
+                              ? null
+                              : () => openSongList(
+                                  context, 'Rediscover', rediscover),
+                        ),
                         if (hasServer) ...[
                           _SongRail(
                             title: 'Recommended for you',
