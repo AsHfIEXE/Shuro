@@ -6,7 +6,6 @@ import '../models/song.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
-import '../widgets/desktop_now_playing.dart';
 
 /// Desktop right-click context menu for a song.
 ///

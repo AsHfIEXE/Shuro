@@ -377,7 +377,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // Tray menu playback controls: the tray icon is a native singleton, so
     // this callback bridges it to the PlayerController without a direct
     // dependency.
-    DesktopLifecycle.instance.playbackCallback = (action) {
+    DesktopLifecycle.playbackCallback = (action) {
       final player = _boundPlayer;
       if (player == null) return;
       switch (action) {
