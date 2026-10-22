@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/playlist.dart';
+import '../../models/song.dart';
 import '../../services/shuro_pulse.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/artwork_thumb.dart';
 import '../../widgets/playlist_collage_art.dart';
 import '../../widgets/sheet_scroll.dart';
 import '../../widgets/song_tile.dart';
@@ -102,6 +104,27 @@ class PlaylistDetailScreen extends StatelessWidget {
     }
   }
 
+  void _showAddSongs(BuildContext context, Playlist live) {
+    final appState = context.read<AppState>();
+    final existing = {for (final id in live.songIds) id};
+    final available = appState.allSongs.where((s) => !existing.contains(s.id)).toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => _AddSongsSheet(
+        available: available,
+        onAdd: (selected) {
+          for (final song in selected) {
+            appState.addSongToPlaylist(live.id, song.id);
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Re-read the live playlist from AppState so renames/edits reflect immediately.
@@ -122,6 +145,12 @@ class PlaylistDetailScreen extends StatelessWidget {
             style: GoogleFonts.getFont(currentFontFamily,
                 color: Colors.white, fontSize: 16)),
         actions: [
+          if (!live.isSmart)
+            IconButton(
+              tooltip: 'Add songs',
+              onPressed: () => _showAddSongs(context, live),
+              icon: const Icon(Icons.add_rounded, color: Colors.white70),
+            ),
           PopupMenuButton<String>(
             color: kCardColor,
             icon: const Icon(Icons.more_vert_rounded, color: Colors.white70),
@@ -250,6 +279,110 @@ class PlaylistDetailScreen extends StatelessWidget {
                       );
                     },
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Multi-select song picker for adding tracks to a playlist.
+class _AddSongsSheet extends StatefulWidget {
+  final List<Song> available;
+  final void Function(List<Song>) onAdd;
+
+  const _AddSongsSheet({required this.available, required this.onAdd});
+
+  @override
+  State<_AddSongsSheet> createState() => _AddSongsSheetState();
+}
+
+class _AddSongsSheetState extends State<_AddSongsSheet> {
+  String _query = '';
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _query.isEmpty
+        ? widget.available
+        : widget.available
+            .where((s) =>
+                s.title.toLowerCase().contains(_query) ||
+                s.artist.toLowerCase().contains(_query))
+            .toList();
+
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: TextField(
+              autofocus: true,
+              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search songs…',
+                hintStyle: GoogleFonts.getFont(currentFontFamily, color: Colors.white24, fontSize: 14),
+                prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38),
+                filled: true,
+                fillColor: kCardColor,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              onChanged: (v) => setState(() => _query = v.toLowerCase()),
+            ),
+          ),
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(child: Text('No matches', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38)))
+                : ListView.builder(
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) {
+                      final song = filtered[i];
+                      final checked = _selected.contains(song.id);
+                      return CheckboxListTile(
+                        value: checked,
+                        onChanged: (v) => setState(() {
+                          if (v == true) {
+                            _selected.add(song.id);
+                          } else {
+                            _selected.remove(song.id);
+                          }
+                        }),
+                        title: Text(song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13.5)),
+                        subtitle: Text(song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 12)),
+                        secondary: ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 40, radius: 6),
+                        activeColor: kBrandColor,
+                      );
+                    },
+                  ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text('Add ${_selected.length} song${_selected.length == 1 ? '' : 's'}'),
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () {
+                          final picked = widget.available
+                              .where((s) => _selected.contains(s.id))
+                              .toList();
+                          Navigator.of(context).pop();
+                          widget.onAdd(picked);
+                        },
+                ),
+              ),
+            ),
           ),
         ],
       ),
