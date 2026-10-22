@@ -146,6 +146,41 @@ chaos harness.
   requested/accepted.
 - Never claims "bit-perfect": Shuro reports what the platform answers.
 
+### 🖥️ Desktop edition — Windows & Linux
+
+Shuro has native Flutter desktop targets for **Windows and Linux**. The desktop shell is
+built for keyboard-and-pointer use while reusing the same library, queue, and player
+state as the mobile experience. **macOS is not a supported build target yet**: this
+repository does not currently include a `macos/` runner or macOS CI job.
+
+- **Desktop workspace** — navigation sidebar, main content pane, persistent
+  now-playing bar, and an optional lyrics inspector on wide windows.
+- **Desktop playback** — `libmpv` through `just_audio_media_kit`; the desktop
+  frontend continues to use Shuro's shared player controller and queue logic.
+- **Keyboard controls** — `Space` toggles play/pause, `Ctrl+←/→` changes tracks,
+  `Ctrl+1…5` switches Home/Library/Search/Discover/Favorites, `Ctrl+K` opens
+  Search, and `Ctrl+L` toggles the lyrics view. Typing in text fields takes priority.
+- **Tray-aware close behavior** — when a system-tray host is available, closing the
+  window hides Shuro so playback can continue; the tray menu offers Show, Hide, and
+  Quit. On Linux desktops without a tray host, closing behaves normally.
+- **Build locally** — run `flutter build windows --release` on a Windows build
+  machine or `flutter build linux --release` on a Linux machine. CI also validates
+  both desktop builds; tagged releases package a Windows installer and Linux
+  `.deb` when the release workflow succeeds.
+
+**Desktop implementation references:** [Desktop layout and interaction design](docs/desktop-design.md) ·
+[Desktop shell](lib/widgets/desktop_shell.dart) ·
+[Desktop lifecycle and tray behavior](lib/services/desktop_lifecycle.dart) ·
+[Playback audit](docs/playback-audit.md) ·
+[Performance report](docs/perf-report.md).
+
+> **Screenshots:** This repository does not yet include captures of the running
+> Windows/Linux desktop UI. The links above are design and implementation references,
+> not claims of a screenshot-verified visual review. Add real screenshots once
+> captured on each supported desktop platform.
+
+---
+
 ### 📐 Adaptive to every window
 
 - **Navigation rail in every landscape window** (from 400 dp wide) and on
