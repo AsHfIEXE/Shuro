@@ -1,298 +1,892 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-
-import '../state/player_controller.dart';
-import '../state/app_state.dart';
-import '../models/download_state.dart' show PlayerRepeatMode;
-import '../models/song.dart';
-import 'artwork_thumb.dart';
-import '../screens/now_playing/lyrics_screen.dart';
-import '../theme/app_theme.dart';
-
-
-
-
-/// Desktop Now Playing: three-column layout embedded in the shell.
-/// Left: large artwork + metadata. Centre: transport + seek.
-/// Right: lyrics (karaoke). Falls back to two-column below 900 dp.
-///
-/// This is NOT a pushed route — it replaces the content pane when toggled,
-/// so the sidebar and bar stay visible and tab state is preserved.
-class DesktopNowPlaying extends StatelessWidget {
-  final PlayerController player;
-  final AppState appState;
-  final Song song;
-  final VoidCallback onClose;
-
-  const DesktopNowPlaying({
-    super.key,
-    required this.player,
-    required this.appState,
-    required this.song,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final wide = size.width >= 1240;
-
-    if (wide) return _threePane(context, size);
-    return _twoPane(context, size);
-  }
-
-  Widget _threePane(BuildContext context, Size size) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Left: artwork + metadata.
-        Expanded(flex: 4, child: _artworkPane(context)),
-        const SizedBox(width: 24),
-        // Centre: transport + seek.
-        Expanded(flex: 5, child: _transportPane(context)),
-        const SizedBox(width: 24),
-        // Right: lyrics.
-        Expanded(flex: 4, child: _lyricsPane(context)),
-      ],
-    );
-  }
-
-  Widget _twoPane(BuildContext context, Size size) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 5, child: _artworkPane(context)),
-        const SizedBox(width: 20),
-        Expanded(flex: 6, child: Column(children: [
-          Expanded(child: _transportPane(context)),
-          Expanded(child: _lyricsPane(context)),
-        ])),
-      ],
-    );
-  }
-
-  Widget _artworkPane(BuildContext context) {
-    final colors = song.gradientColors;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          // Large artwork.
-          Container(
-            width: 320,
-            height: 320,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.last.withValues(alpha: 0.3),
-                  blurRadius: 48,
-                  spreadRadius: 4,
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: song.artwork != null
-                  ? Image(image: song.artwork!, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeholder(colors))
-                  : _placeholder(colors),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Title + artist.
-          Text(song.title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text(song.artist,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 15)),
-          const SizedBox(height: 4),
-          Text(appState.albumById(song.albumId)?.title ?? '',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _placeholder(List<Color> colors) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-      ),
-      child: Center(child: Icon(Icons.music_note_rounded, color: Colors.white38, size: 64)),
-    );
-  }
-
-  Widget _transportPane(BuildContext context) {
-    final isPlaying = player.isPlaying;
-    final accent = song.gradientColors.last;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Shuffle + repeat row.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                tooltip: player.shuffle ? 'Shuffle on' : 'Shuffle off',
-                onPressed: player.toggleShuffle,
-                icon: Icon(Icons.shuffle_rounded, size: 20,
-                    color: player.shuffle ? kBrandColor : Colors.white38),
-              ),
-              const SizedBox(width: 16),
-              IconButton(
-                tooltip: player.repeatMode.name,
-                onPressed: player.cycleRepeatMode,
-                icon: Icon(Icons.repeat_rounded, size: 20,
-                    color: player.repeatMode != PlayerRepeatMode.off ? kBrandColor : Colors.white38),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Seek bar.
-          _DesktopSeek(player: player, song: song, accent: accent),
-          const SizedBox(height: 20),
-          // Transport row.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                tooltip: 'Previous',
-                onPressed: player.previous,
-                icon: const Icon(Icons.skip_previous_rounded, size: 32, color: Colors.white70),
-              ),
-              const SizedBox(width: 20),
-              GestureDetector(
-                onTap: player.togglePlayPause,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(colors: [accent, accent.withValues(alpha: 0.7)]),
-                    boxShadow: [BoxShadow(color: accent.withValues(alpha: isPlaying ? 0.5 : 0.3), blurRadius: 24)],
-                  ),
-                  child: Icon(
-                    player.isBuffering
-                        ? Icons.hourglass_top_rounded
-                        : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                    size: 34, color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-              IconButton(
-                tooltip: 'Next',
-                onPressed: player.next,
-                icon: const Icon(Icons.skip_next_rounded, size: 32, color: Colors.white70),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Favourite.
-          Center(
-            child: IconButton(
-              tooltip: appState.isFavoriteSong(song.id) ? 'Remove from favourites' : 'Add to favourites',
-              onPressed: () => appState.toggleFavoriteSong(song.id),
-              icon: Icon(
-                appState.isFavoriteSong(song.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                size: 24,
-                color: appState.isFavoriteSong(song.id) ? accent : Colors.white38,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _lyricsPane(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D1117),
-        border: Border(left: BorderSide(color: kDividerColor)),
-      ),
-      child: LyricsScreen(initialSong: song, embedded: true),
-    );
-  }
-}
-
-class _DesktopSeek extends StatefulWidget {
-  final PlayerController player;
-  final Song song;
-  final Color accent;
-
-  const _DesktopSeek({required this.player, required this.song, required this.accent});
-
-  @override
-  State<_DesktopSeek> createState() => _DesktopSeekState();
-}
-
-class _DesktopSeekState extends State<_DesktopSeek> {
-  double? _preview;
-
-  @override
-  Widget build(BuildContext context) {
-    final player = widget.player;
-    final song = widget.song;
-    final isActive = player.currentSong?.id == song.id;
-    final live = isActive && player.loadedSongId == song.id;
-    final total = live ? player.duration : song.duration;
-    final totalMs = total.inMilliseconds == 0 ? 1 : total.inMilliseconds;
-    final position = _preview != null
-        ? Duration(milliseconds: (totalMs * _preview!).round())
-        : player.position;
-    final fraction = _preview ?? (totalMs > 0 ? position.inMilliseconds / totalMs : 0.0);
-
-    return Column(
-      children: [
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 4,
-            activeTrackColor: widget.accent,
-            inactiveTrackColor: Colors.white12,
-            thumbColor: Colors.white,
-            overlayColor: widget.accent.withValues(alpha: 0.15),
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-          ),
-          child: Slider(
-            value: fraction.clamp(0.0, 1.0),
-            onChanged: isActive ? (v) => setState(() => _preview = v) : null,
-            onChangeEnd: (v) {
-              player.seekTo(Duration(milliseconds: (totalMs * v).round()));
-              setState(() => _preview = null);
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(_fmt(position),
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white54, fontSize: 11)),
-              Text(_fmt(total),
-                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  static String _fmt(Duration d) {
-    final m = d.inMinutes.remainder(60).toString();
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-}
+import 'package:flutter/material.dart';
+
+
+import 'package:google_fonts/google_fonts.dart';
+
+
+import 'package:provider/provider.dart';
+
+
+
+
+
+import '../state/player_controller.dart';
+
+
+import '../state/app_state.dart';
+
+
+import '../models/download_state.dart' show PlayerRepeatMode;
+
+
+import '../models/song.dart';
+
+
+
+
+import '../screens/now_playing/lyrics_screen.dart';
+
+
+import '../theme/app_theme.dart';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/// Desktop Now Playing: three-column layout embedded in the shell.
+
+
+/// Left: large artwork + metadata. Centre: transport + seek.
+
+
+/// Right: lyrics (karaoke). Falls back to two-column below 900 dp.
+
+
+///
+
+
+/// This is NOT a pushed route — it replaces the content pane when toggled,
+
+
+/// so the sidebar and bar stay visible and tab state is preserved.
+
+
+class DesktopNowPlaying extends StatelessWidget {
+
+
+  final PlayerController player;
+
+
+  final AppState appState;
+
+
+  final Song song;
+
+
+  final VoidCallback onClose;
+
+
+
+
+
+  const DesktopNowPlaying({
+
+
+    super.key,
+
+
+    required this.player,
+
+
+    required this.appState,
+
+
+    required this.song,
+
+
+    required this.onClose,
+
+
+  });
+
+
+
+
+
+  @override
+
+
+  Widget build(BuildContext context) {
+
+
+    final size = MediaQuery.sizeOf(context);
+
+
+    final wide = size.width >= 1240;
+
+
+
+
+
+    if (wide) return _threePane(context, size);
+
+
+    return _twoPane(context, size);
+
+
+  }
+
+
+
+
+
+  Widget _threePane(BuildContext context, Size size) {
+
+
+    return Row(
+
+
+      crossAxisAlignment: CrossAxisAlignment.start,
+
+
+      children: [
+
+
+        // Left: artwork + metadata.
+
+
+        Expanded(flex: 4, child: _artworkPane(context)),
+
+
+        const SizedBox(width: 24),
+
+
+        // Centre: transport + seek.
+
+
+        Expanded(flex: 5, child: _transportPane(context)),
+
+
+        const SizedBox(width: 24),
+
+
+        // Right: lyrics.
+
+
+        Expanded(flex: 4, child: _lyricsPane(context)),
+
+
+      ],
+
+
+    );
+
+
+  }
+
+
+
+
+
+  Widget _twoPane(BuildContext context, Size size) {
+
+
+    return Row(
+
+
+      crossAxisAlignment: CrossAxisAlignment.start,
+
+
+      children: [
+
+
+        Expanded(flex: 5, child: _artworkPane(context)),
+
+
+        const SizedBox(width: 20),
+
+
+        Expanded(flex: 6, child: Column(children: [
+
+
+          Expanded(child: _transportPane(context)),
+
+
+          Expanded(child: _lyricsPane(context)),
+
+
+        ])),
+
+
+      ],
+
+
+    );
+
+
+  }
+
+
+
+
+
+  Widget _artworkPane(BuildContext context) {
+
+
+    final colors = song.gradientColors;
+
+
+    return SingleChildScrollView(
+
+
+      padding: const EdgeInsets.all(24),
+
+
+      child: Column(
+
+
+        children: [
+
+
+          // Large artwork.
+
+
+          Container(
+
+
+            width: 320,
+
+
+            height: 320,
+
+
+            decoration: BoxDecoration(
+
+
+              borderRadius: BorderRadius.circular(16),
+
+
+              boxShadow: [
+
+
+                BoxShadow(
+
+
+                  color: colors.last.withValues(alpha: 0.3),
+
+
+                  blurRadius: 48,
+
+
+                  spreadRadius: 4,
+
+
+                ),
+
+
+              ],
+
+
+            ),
+
+
+            child: ClipRRect(
+
+
+              borderRadius: BorderRadius.circular(16),
+
+
+              child: song.artwork != null
+
+
+                  ? Image(image: song.artwork!, fit: BoxFit.cover,
+
+
+                      errorBuilder: (_, __, ___) => _placeholder(colors))
+
+
+                  : _placeholder(colors),
+
+
+            ),
+
+
+          ),
+
+
+          const SizedBox(height: 24),
+
+
+          // Title + artist.
+
+
+          Text(song.title,
+
+
+              textAlign: TextAlign.center,
+
+
+              style: GoogleFonts.getFont(currentFontFamily,
+
+
+                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+
+
+          const SizedBox(height: 6),
+
+
+          Text(song.artist,
+
+
+              textAlign: TextAlign.center,
+
+
+              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white60, fontSize: 15)),
+
+
+          const SizedBox(height: 4),
+
+
+          Text(appState.albumById(song.albumId)?.title ?? '',
+
+
+              textAlign: TextAlign.center,
+
+
+              style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 12)),
+
+
+        ],
+
+
+      ),
+
+
+    );
+
+
+  }
+
+
+
+
+
+  Widget _placeholder(List<Color> colors) {
+
+
+    return DecoratedBox(
+
+
+      decoration: BoxDecoration(
+
+
+        gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+
+
+      ),
+
+
+      child: Center(child: Icon(Icons.music_note_rounded, color: Colors.white38, size: 64)),
+
+
+    );
+
+
+  }
+
+
+
+
+
+  Widget _transportPane(BuildContext context) {
+
+
+    final isPlaying = player.isPlaying;
+
+
+    final accent = song.gradientColors.last;
+
+
+
+
+
+    return Padding(
+
+
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+
+
+      child: Column(
+
+
+        mainAxisAlignment: MainAxisAlignment.center,
+
+
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+
+
+        children: [
+
+
+          // Shuffle + repeat row.
+
+
+          Row(
+
+
+            mainAxisAlignment: MainAxisAlignment.center,
+
+
+            children: [
+
+
+              IconButton(
+
+
+                tooltip: player.shuffle ? 'Shuffle on' : 'Shuffle off',
+
+
+                onPressed: player.toggleShuffle,
+
+
+                icon: Icon(Icons.shuffle_rounded, size: 20,
+
+
+                    color: player.shuffle ? kBrandColor : Colors.white38),
+
+
+              ),
+
+
+              const SizedBox(width: 16),
+
+
+              IconButton(
+
+
+                tooltip: player.repeatMode.name,
+
+
+                onPressed: player.cycleRepeatMode,
+
+
+                icon: Icon(Icons.repeat_rounded, size: 20,
+
+
+                    color: player.repeatMode != PlayerRepeatMode.off ? kBrandColor : Colors.white38),
+
+
+              ),
+
+
+            ],
+
+
+          ),
+
+
+          const SizedBox(height: 16),
+
+
+          // Seek bar.
+
+
+          _DesktopSeek(player: player, song: song, accent: accent),
+
+
+          const SizedBox(height: 20),
+
+
+          // Transport row.
+
+
+          Row(
+
+
+            mainAxisAlignment: MainAxisAlignment.center,
+
+
+            children: [
+
+
+              IconButton(
+
+
+                tooltip: 'Previous',
+
+
+                onPressed: player.previous,
+
+
+                icon: const Icon(Icons.skip_previous_rounded, size: 32, color: Colors.white70),
+
+
+              ),
+
+
+              const SizedBox(width: 20),
+
+
+              GestureDetector(
+
+
+                onTap: player.togglePlayPause,
+
+
+                child: AnimatedContainer(
+
+
+                  duration: const Duration(milliseconds: 180),
+
+
+                  width: 64,
+
+
+                  height: 64,
+
+
+                  decoration: BoxDecoration(
+
+
+                    shape: BoxShape.circle,
+
+
+                    gradient: LinearGradient(colors: [accent, accent.withValues(alpha: 0.7)]),
+
+
+                    boxShadow: [BoxShadow(color: accent.withValues(alpha: isPlaying ? 0.5 : 0.3), blurRadius: 24)],
+
+
+                  ),
+
+
+                  child: Icon(
+
+
+                    player.isBuffering
+
+
+                        ? Icons.hourglass_top_rounded
+
+
+                        : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+
+
+                    size: 34, color: Colors.white,
+
+
+                  ),
+
+
+                ),
+
+
+              ),
+
+
+              const SizedBox(width: 20),
+
+
+              IconButton(
+
+
+                tooltip: 'Next',
+
+
+                onPressed: player.next,
+
+
+                icon: const Icon(Icons.skip_next_rounded, size: 32, color: Colors.white70),
+
+
+              ),
+
+
+            ],
+
+
+          ),
+
+
+          const SizedBox(height: 24),
+
+
+          // Favourite.
+
+
+          Center(
+
+
+            child: IconButton(
+
+
+              tooltip: appState.isFavoriteSong(song.id) ? 'Remove from favourites' : 'Add to favourites',
+
+
+              onPressed: () => appState.toggleFavoriteSong(song.id),
+
+
+              icon: Icon(
+
+
+                appState.isFavoriteSong(song.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+
+
+                size: 24,
+
+
+                color: appState.isFavoriteSong(song.id) ? accent : Colors.white38,
+
+
+              ),
+
+
+            ),
+
+
+          ),
+
+
+        ],
+
+
+      ),
+
+
+    );
+
+
+  }
+
+
+
+
+
+  Widget _lyricsPane(BuildContext context) {
+
+
+    return Container(
+
+
+      decoration: const BoxDecoration(
+
+
+        color: Color(0xFF0D1117),
+
+
+        border: Border(left: BorderSide(color: kDividerColor)),
+
+
+      ),
+
+
+      child: LyricsScreen(initialSong: song, embedded: true),
+
+
+    );
+
+
+  }
+
+
+}
+
+
+
+
+
+class _DesktopSeek extends StatefulWidget {
+
+
+  final PlayerController player;
+
+
+  final Song song;
+
+
+  final Color accent;
+
+
+
+
+
+  const _DesktopSeek({required this.player, required this.song, required this.accent});
+
+
+
+
+
+  @override
+
+
+  State<_DesktopSeek> createState() => _DesktopSeekState();
+
+
+}
+
+
+
+
+
+class _DesktopSeekState extends State<_DesktopSeek> {
+
+
+  double? _preview;
+
+
+
+
+
+  @override
+
+
+  Widget build(BuildContext context) {
+
+
+    final player = widget.player;
+
+
+    final song = widget.song;
+
+
+    final isActive = player.currentSong?.id == song.id;
+
+
+    final live = isActive && player.loadedSongId == song.id;
+
+
+    final total = live ? player.duration : song.duration;
+
+
+    final totalMs = total.inMilliseconds == 0 ? 1 : total.inMilliseconds;
+
+
+    final position = _preview != null
+
+
+        ? Duration(milliseconds: (totalMs * _preview!).round())
+
+
+        : player.position;
+
+
+    final fraction = _preview ?? (totalMs > 0 ? position.inMilliseconds / totalMs : 0.0);
+
+
+
+
+
+    return Column(
+
+
+      children: [
+
+
+        SliderTheme(
+
+
+          data: SliderTheme.of(context).copyWith(
+
+
+            trackHeight: 4,
+
+
+            activeTrackColor: widget.accent,
+
+
+            inactiveTrackColor: Colors.white12,
+
+
+            thumbColor: Colors.white,
+
+
+            overlayColor: widget.accent.withValues(alpha: 0.15),
+
+
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+
+
+          ),
+
+
+          child: Slider(
+
+
+            value: fraction.clamp(0.0, 1.0),
+
+
+            onChanged: isActive ? (v) => setState(() => _preview = v) : null,
+
+
+            onChangeEnd: (v) {
+
+
+              player.seekTo(Duration(milliseconds: (totalMs * v).round()));
+
+
+              setState(() => _preview = null);
+
+
+            },
+
+
+          ),
+
+
+        ),
+
+
+        Padding(
+
+
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+
+
+          child: Row(
+
+
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+
+            children: [
+
+
+              Text(_fmt(position),
+
+
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white54, fontSize: 11)),
+
+
+              Text(_fmt(total),
+
+
+                  style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11)),
+
+
+            ],
+
+
+          ),
+
+
+        ),
+
+
+      ],
+
+
+    );
+
+
+  }
+
+
+
+
+
+  static String _fmt(Duration d) {
+
+
+    final m = d.inMinutes.remainder(60).toString();
+
+
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+
+
+    return '$m:$s';
+
+
+  }
+
+
+}
+
