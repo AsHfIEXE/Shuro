@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'command_palette.dart';
 
 import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
@@ -65,6 +66,63 @@ class _DesktopShellState extends State<DesktopShell> {
   void _openSpoken() =>
       Navigator.of(context).push(drillDownRoute(const SpokenLibraryScreen()));
 
+  /// Ctrl+Shift+P launcher. Every entry closes over an action that already
+  /// exists elsewhere in the shell, so there is exactly one implementation of
+  /// each command.
+  Future<void> _openCommandPalette() async {
+    final player = context.read<PlayerController>();
+    final commands = <CommandPaletteEntry>[
+      for (final (index, tab) in _tabs.indexed)
+        CommandPaletteEntry(
+          label: 'Go to ${tab.$2}',
+          section: 'Go to',
+          hint: 'Ctrl+${index + 1}',
+          run: () => widget.onSelectTab(index),
+        ),
+      CommandPaletteEntry(
+        label: player.isPlaying ? 'Pause' : 'Play',
+        section: 'Playback',
+        hint: 'Space',
+        run: player.togglePlayPause,
+      ),
+      CommandPaletteEntry(
+        label: 'Next track',
+        section: 'Playback',
+        hint: 'Ctrl+\u2192',
+        run: player.next,
+      ),
+      CommandPaletteEntry(
+        label: 'Previous track',
+        section: 'Playback',
+        hint: 'Ctrl+\u2190',
+        run: player.previous,
+      ),
+      CommandPaletteEntry(
+        label: player.shuffle ? 'Turn shuffle off' : 'Turn shuffle on',
+        section: 'Playback',
+        run: player.toggleShuffle,
+      ),
+      CommandPaletteEntry(
+        label: 'Cycle repeat mode (off \u2192 all \u2192 one)',
+        section: 'Playback',
+        run: player.cycleRepeatMode,
+      ),
+      CommandPaletteEntry(
+        label: _lyricsOpen ? 'Hide lyrics' : 'Show lyrics',
+        section: 'View',
+        hint: 'Ctrl+L',
+        run: _toggleLyrics,
+      ),
+      CommandPaletteEntry(
+        label: _sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
+        section: 'View',
+        run: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+      ),
+    ];
+
+    await showCommandPalette(context, commands: commands);
+  }
+
   void _toggleLyrics() {
     // A side inspector only fits beside real content on a roomy desktop.
     // Smaller windows still get the full lyrics screen, never an invisible
@@ -122,6 +180,8 @@ class _DesktopShellState extends State<DesktopShell> {
             () => context.read<PlayerController>().previous(),
         const SingleActivator(LogicalKeyboardKey.keyL, control: true):
             _toggleLyrics,
+        const SingleActivator(LogicalKeyboardKey.keyP,
+            control: true, shift: true): _openCommandPalette,
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
             widget.onSelectTab(2),
         const SingleActivator(LogicalKeyboardKey.digit1, control: true): () =>
