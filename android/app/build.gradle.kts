@@ -56,6 +56,19 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // Shrinking stays OFF on release. shared_preferences_android talks
+            // to its Kotlin through package:jni reflective lookups that R8
+            // cannot see, and a shrunk build dropped the legacy getAll —
+            // every release install then failed at connect with
+            // NoSuchMethodError while debug builds worked. If shrinking is
+            // ever re-enabled, proguard-rules.pro must keep the whole
+            // sharedpreferences package first.
+            isMinifyEnabled = false
+            shrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

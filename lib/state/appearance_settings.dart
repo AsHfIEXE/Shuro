@@ -66,6 +66,9 @@ class AppearanceSettings extends ChangeNotifier {
   static const String _kBlurScale = 'appearance_blur_scale_v1';
   static const String _kMotion = 'appearance_motion_v1';
   static const String _kLyricsHighlight = 'appearance_lyrics_highlight_v1';
+  static const String _kLyricsFontScale = 'appearance_lyrics_font_scale_v1';
+  static const String _kLyricsAlignCenter = 'appearance_lyrics_align_center_v1';
+  static const String _kLyricsGlow = 'appearance_lyrics_glow_v1';
 
   /// Blurred by default: it is the look the app is designed around, and the
   /// static option exists as a deliberate choice rather than a fallback.
@@ -93,6 +96,20 @@ class AppearanceSettings extends ChangeNotifier {
   /// Idle-motion level for the backdrop.
   BackdropMotion backdropMotion = BackdropMotion.normal;
 
+  // --- Lyrics appearance (roadmap #27) ------------------------------------
+  // Owned here so Now Playing, Lyrics and the desktop lyrics pane all read
+  // one source of truth; every field persists.
+
+  /// Text size multiplier for lyric lines. 1.0 is the designed size; the
+  /// slider range is clamped so the largest step still fits a narrow phone.
+  double lyricsFontScale = 1.0;
+
+  /// Centre lyric lines (the designed look). Off reads as left-aligned.
+  bool lyricsAlignCenter = true;
+
+  /// Accent glow behind the line being sung. Off is a flatter, quieter read.
+  bool lyricsGlow = true;
+
   AppPersistence? _persistence;
 
   Future<void> restore() async {
@@ -118,6 +135,10 @@ class AppearanceSettings extends ChangeNotifier {
       if (highlight != null) {
         lyricsHighlight = LyricsHighlight.values.firstWhere((h) => h.name == highlight, orElse: () => lyricsHighlight);
       }
+      final fontScale = double.tryParse(persistence.getString(_kLyricsFontScale) ?? '');
+      if (fontScale != null) lyricsFontScale = fontScale.clamp(0.85, 1.5).toDouble();
+      lyricsAlignCenter = persistence.getBool(_kLyricsAlignCenter) ?? lyricsAlignCenter;
+      lyricsGlow = persistence.getBool(_kLyricsGlow) ?? lyricsGlow;
       notifyListeners();
     } catch (_) {
       // No storage on this platform: keep the defaults rather than failing
@@ -144,6 +165,28 @@ class AppearanceSettings extends ChangeNotifier {
     karaokeSweep = value;
     notifyListeners();
     await _persistence?.setBool(_kKaraokeSweep, value);
+  }
+
+  Future<void> setLyricsFontScale(double value) async {
+    final clamped = value.clamp(0.85, 1.5).toDouble();
+    if (lyricsFontScale == clamped) return;
+    lyricsFontScale = clamped;
+    notifyListeners();
+    await _persistence?.setString(_kLyricsFontScale, clamped.toString());
+  }
+
+  Future<void> setLyricsAlignCenter(bool value) async {
+    if (lyricsAlignCenter == value) return;
+    lyricsAlignCenter = value;
+    notifyListeners();
+    await _persistence?.setBool(_kLyricsAlignCenter, value);
+  }
+
+  Future<void> setLyricsGlow(bool value) async {
+    if (lyricsGlow == value) return;
+    lyricsGlow = value;
+    notifyListeners();
+    await _persistence?.setBool(_kLyricsGlow, value);
   }
 
   Future<void> setBackdropBlurScale(double value) async {

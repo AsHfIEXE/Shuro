@@ -21,6 +21,7 @@ import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/shuro_icons.dart';
 import 'lyrics_edit_sheet.dart';
+import 'lyrics_appearance_sheet.dart';
 import '../../services/lrc_tools.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
@@ -92,7 +93,7 @@ class LyricsScreen extends StatefulWidget {
   /// preview; the landscape side pane passes [TextAlign.left] so the lyrics
   /// read as a proper column next to the player instead of hugging the right
   /// edge of the screen.
-  final TextAlign textAlign;
+  final TextAlign? textAlign;
 
   const LyricsScreen({
     super.key,
@@ -100,7 +101,7 @@ class LyricsScreen extends StatefulWidget {
     this.embedded = false,
     this.compact = false,
     this.embeddedFallback,
-    this.textAlign = TextAlign.center,
+    this.textAlign,
   });
 
   @override
@@ -580,6 +581,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
                       builder: (context, currentIndex, _) {
                         final isCurrent = currentIndex == i;
                         _lineKeys.putIfAbsent(i, () => GlobalKey());
+                        final appearance =
+                            context.watch<AppearanceSettings>();
                         return _LyricsLineView(
                           key: _lineKeys[i],
                           line: track.lines[i],
@@ -588,7 +591,14 @@ class _LyricsScreenState extends State<LyricsScreen> {
                           position: _position,
                           accent: accent,
                           dimmed: !isSynced,
-                          textAlign: widget.textAlign,
+                          // A side pane keeps its own alignment; the full
+                          // screen follows the user's centre/left choice.
+                          textAlign: widget.textAlign ??
+                              (appearance.lyricsAlignCenter
+                                  ? TextAlign.center
+                                  : TextAlign.left),
+                          fontScale: appearance.lyricsFontScale,
+                          glow: appearance.lyricsGlow,
                           onTap: () => _seekToLine(track.lines[i], isCurrent),
                         );
                       },
@@ -639,7 +649,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
     final content = Column(
       children: [
         if (!widget.embedded)
-          _Header(song: song, accent: accent, onEditLyrics: _openLyricsEditor),
+          _Header(
+              song: song,
+              accent: accent,
+              onEditLyrics: _openLyricsEditor,
+              onAppearance: () => showLyricsAppearanceSheet(context)),
         Expanded(child: child),
         if (!widget.compact && !widget.embedded && _loadedView?.track != null)
           _AttributionFooter(
@@ -691,6 +705,12 @@ class _LyricsLineView extends StatelessWidget {
   final TextAlign textAlign;
   final VoidCallback onTap;
 
+  /// Appearance from Settings (roadmap #27): the same three knobs on every
+  /// platform — text size, whether the glow renders, and (via [textAlign],
+  /// resolved by the owner) centre vs left.
+  final double fontScale;
+  final bool glow;
+
   const _LyricsLineView({
     super.key,
     required this.line,
@@ -701,13 +721,15 @@ class _LyricsLineView extends StatelessWidget {
     required this.dimmed,
     required this.textAlign,
     required this.onTap,
+    this.fontScale = 1.0,
+    this.glow = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final baseStyle = GoogleFonts.getFont(
       currentFontFamily,
-      fontSize: 21,
+      fontSize: 21 * fontScale,
       height: 1.5,
       // Constant size and weight for every line: emphasis comes from colour and a
       // paint-time scale, so switching lines never re-measures the list. Changing
@@ -740,7 +762,7 @@ class _LyricsLineView extends StatelessWidget {
                   : (dimmed
                       ? const Color(0x9CFFFFFF)
                       : const Color(0xC8FFFFFF)),
-              shadows: isCurrent
+              shadows: (isCurrent && glow)
                   ? [
                       Shadow(
                           color: accent.withValues(alpha: 0.35), blurRadius: 24)
@@ -942,7 +964,8 @@ class _Header extends StatelessWidget {
   final Song? song;
   final Color accent;
   final VoidCallback? onEditLyrics;
-  const _Header({required this.song, required this.accent, this.onEditLyrics});
+  final VoidCallback? onAppearance;
+  const _Header({required this.song, required this.accent, this.onEditLyrics, this.onAppearance});
 
   @override
   Widget build(BuildContext context) {
@@ -979,6 +1002,16 @@ class _Header extends StatelessWidget {
                       fontWeight: FontWeight.w600),
                 ),
               ],
+            ),
+          ),
+          Semantics(
+            button: true,
+            label: 'Lyrics appearance',
+            child: IconButton(
+              icon: const Icon(Icons.tune_rounded,
+                  size: 20, color: Colors.white70),
+              tooltip: 'Lyrics appearance',
+              onPressed: onAppearance,
             ),
           ),
           Semantics(

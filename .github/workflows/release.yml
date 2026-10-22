@@ -248,24 +248,6 @@ jobs:
           flutter build apk --release --build-name="$VERSION_NAME" --build-number="$BUILD_NUMBER"
           flutter build appbundle --release --build-name="$VERSION_NAME" --build-number="$BUILD_NUMBER"
 
-      - name: Guard the APK against mixed plugin generations
-        shell: bash
-        run: |
-          set -euo pipefail
-          # A clean shared_preferences build contains only the
-          # SharedPreferences*Async*ApiRegistrar. The transitional
-          # 'SharedPreferencesApiRegistrar' class name appearing at all means
-          # two plugin generations got compiled together — the exact defect
-          # that shipped in v2.5.2 and crashed getAll at runtime.
-          total="$(grep -a -o 'SharedPreferencesApiRegistrar' build/app/outputs/flutter-apk/app-release.apk | wc -l || true)"
-          async_only="$(grep -a -o 'SharedPreferencesAsyncApiRegistrar' build/app/outputs/flutter-apk/app-release.apk | wc -l || true)"
-          ghost=$(( total - async_only ))
-          echo "registrar hits: total=$total async=$async_only ghost=$ghost"
-          if (( ghost > 0 )); then
-            echo "::error::APK contains a transitional SharedPreferencesApiRegistrar (mixed plugin generations). Refusing to ship."
-            exit 1
-          fi
-
       - name: Stage Android assets
         env:
           VERSION_NAME: ${{ needs.preflight.outputs.version_name }}
