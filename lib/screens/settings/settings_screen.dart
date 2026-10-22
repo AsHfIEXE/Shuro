@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -132,6 +134,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
   String? _highlighted;
 
+  /// Clears the highlight after a jump. Held so it can be cancelled on dispose
+  /// instead of firing setState against a dead element.
+  Timer? _highlightTimer;
+
   GlobalKey _sectionKey(String id) =>
       _sectionKeys.putIfAbsent(id, () => GlobalKey(debugLabel: 'settings-$id'));
 
@@ -162,8 +168,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         alignment: 0.06,
       );
     }
-    await Future<void>.delayed(const Duration(milliseconds: 1400));
-    if (mounted) setState(() => _highlighted = null);
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _highlighted = null);
+    });
   }
 
   Future<void> _openSettingsSearch(BuildContext context) async {
@@ -173,6 +181,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => _SettingsSearchDialog(index: _index),
     );
     if (picked != null && mounted) await _jumpToSection(picked);
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -197,8 +211,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: kSurfaceColor,
         body: SafeArea(
           bottom: false,
-          child: ListView(
-            children: [
+          child: SingleChildScrollView(
+            // A Column, not a lazily-built ListView: "find a setting" scrolls
+            // to a section by its GlobalKey, and a key inside an off-screen
+            // lazy child has no context to scroll to.
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(
@@ -586,7 +605,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _showServiceAttributions(context),
               ),
               const SizedBox(height: 32),
-            ],
+              ],
+            ),
           ),
         ),
       ),
