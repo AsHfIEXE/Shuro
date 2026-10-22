@@ -118,6 +118,13 @@ class _DesktopShellState extends State<DesktopShell> {
         section: 'View',
         run: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
       ),
+      if (context.read<AppState>().undoStack.canUndo)
+        CommandPaletteEntry(
+          label:
+              'Undo: ${context.read<AppState>().undoStack.lastLabel}',
+          section: 'Edit',
+          run: () => context.read<AppState>().undoStack.undo(),
+        ),
     ];
 
     await showCommandPalette(context, commands: commands);

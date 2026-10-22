@@ -11,6 +11,7 @@ import '../backend/music_repository.dart';
 import '../backend/navidrome_music_repository.dart';
 import '../services/library_cache.dart';
 import '../services/playlist_cover_store.dart';
+import '../services/undo_stack.dart';
 import '../services/multi_server.dart';
 import '../services/multi_server_session.dart';
 import '../services/server_secret_store.dart';
@@ -1163,7 +1164,19 @@ class AppState extends ChangeNotifier {
   bool isFavoriteAlbum(String id) => favoriteAlbumIds.contains(id);
   bool isFavoriteArtist(String id) => favoriteArtistIds.contains(id);
 
-  void toggleFavoriteSong(String id) => _toggle(favoriteSongIds, id);
+  void toggleFavoriteSong(String id) {
+    final wasFav = favoriteSongIds.contains(id);
+    _toggle(favoriteSongIds, id);
+    undoStack.push(UndoAction(
+      label: wasFav ? 'Removed a favourite' : 'Added a favourite',
+      revert: () async {
+        if (favoriteSongIds.contains(id) == wasFav) return;
+        _toggle(favoriteSongIds, id);
+        notifyListeners();
+        await _persistFavorites();
+      },
+    ));
+  }
   void toggleFavoriteAlbum(String id) => _toggle(favoriteAlbumIds, id);
   void toggleFavoriteArtist(String id) => _toggle(favoriteArtistIds, id);
 
@@ -1812,6 +1825,10 @@ class AppState extends ChangeNotifier {
         smartPreset: preset, songIds: previewIds);
   }
 
+  /// Reversible edits (roadmap #29). Owned here so every AppState mutation
+  /// and the PlayerController's queue edits push to the same stack.
+  final UndoStack undoStack = UndoStack();
+
   /// playlistId -> on-disk cover file. Kept beside [playlists] because the
   /// ImageProvider itself is not serialisable.
   final Map<String, String> _playlistCoverPaths = {};
@@ -1884,25 +1901,60 @@ class AppState extends ChangeNotifier {
 
   void deletePlaylist(String playlistId) {
     HapticFeedback.mediumImpact();
+    final index = playlists.indexWhere((p) => p.id == playlistId);
+    final removed = index >= 0 ? playlists[index] : null;
     playlists = playlists.where((p) => p.id != playlistId).toList();
+    if (removed != null) {
+      undoStack.push(UndoAction(
+        label: 'Deleted playlist "${removed.name}"',
+        revert: () async {
+          // Re-insert at the old spot so the shelf order survives the round
+          // trip; a restored playlist keeps its id, songs and cover.
+          final exists = playlists.any((p) => p.id == removed.id);
+          if (exists) return;
+          final at = index.clamp(0, playlists.length);
+          playlists = [...playlists.sublist(0, at), removed, ...playlists.sublist(at)];
+          notifyListeners();
+          await _persistPlaylists();
+        },
+      ));
+    }
     notifyListeners();
     unawaited(_persistPlaylists());
   }
 
   void addSongToPlaylist(String playlistId, String songId) {
     HapticFeedback.lightImpact();
+    var added = false;
     playlists = [
       for (final p in playlists)
         if (p.id == playlistId && !p.songIds.contains(songId))
-          p.copyWith(songIds: [...p.songIds, songId])
+          () {
+            added = true;
+            return p.copyWith(songIds: [...p.songIds, songId]);
+          }()
         else
           p,
     ];
+    if (added) {
+      final name = playlists
+          .firstWhere((p) => p.id == playlistId,
+              orElse: () => playlists.first)
+          .name;
+      undoStack.push(UndoAction(
+        label: 'Added a song to "$name"',
+        revert: () async => removeSongFromPlaylist(playlistId, songId),
+      ));
+    }
     notifyListeners();
     unawaited(_persistPlaylists());
   }
 
   void removeSongFromPlaylist(String playlistId, String songId) {
+    final index = playlists
+        .firstWhere((p) => p.id == playlistId)
+        .songIds
+        .indexOf(songId);
     playlists = [
       for (final p in playlists)
         if (p.id == playlistId)
@@ -1910,6 +1962,24 @@ class AppState extends ChangeNotifier {
         else
           p,
     ];
+    if (index >= 0) {
+      undoStack.push(UndoAction(
+        label: 'Removed a song from a playlist',
+        revert: () async {
+          final current = playlists.indexWhere((p) => p.id == playlistId);
+          if (current < 0) return;
+          final ids = [...playlists[current].songIds];
+          if (ids.contains(songId)) return;
+          ids.insert(index.clamp(0, ids.length), songId);
+          playlists = [
+            for (final p in playlists)
+              if (p.id == playlistId) p.copyWith(songIds: ids) else p,
+          ];
+          notifyListeners();
+          await _persistPlaylists();
+        },
+      ));
+    }
     notifyListeners();
     unawaited(_persistPlaylists());
   }

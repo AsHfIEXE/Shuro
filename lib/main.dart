@@ -149,8 +149,13 @@ class MusicStreamApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // AppState owns the app's single undo stack (roadmap #29); the player
+        // controller attaches to the same instance for queue edits.
         ChangeNotifierProvider(create: (_) => AppState()),
-        ChangeNotifierProvider(create: (_) => PlayerController()),
+        ChangeNotifierProvider(
+          create: (context) =>
+              PlayerController(undoStack: context.read<AppState>().undoStack),
+        ),
         ChangeNotifierProvider(create: (_) => SpokenLibraryState()..restore()),
         // The connected server's feature API (search3, star, scrobble,
         // ratings, playlists…) — attached when a connection goes live, null

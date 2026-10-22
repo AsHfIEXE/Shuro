@@ -9,6 +9,7 @@ import '../models/download_state.dart';
 import '../models/song.dart';
 import '../playback/audio_diagnostics.dart';
 import '../playback/playback_engine.dart';
+import '../services/undo_stack.dart';
 
 /// Resolves the real album title / artwork URL for a song's lock-screen
 /// notification entry — see [NowPlayingMetadata]. Wired from app.dart to
@@ -53,7 +54,12 @@ typedef AudioSourceResolver = String? Function(Song song);
 ///    ([_loadedSongId]) — a stale source completing mid-switch no longer
 ///    auto-advances the song the user just picked.
 class PlayerController extends ChangeNotifier implements PlaybackEngine {
-  PlayerController() {
+  /// Queue edits (clear/remove) push reverts onto this stack so a misclick in
+  /// the queue screen is recoverable. Optional for tests.
+  UndoStack? undoStack;
+
+  PlayerController({UndoStack? undoStack}) {
+    this.undoStack = undoStack;
     // Both streams need an onError handler, not just a data callback: a
     // stream that drops mid-playback (LAN connection lost, server
     // restarted, phone roamed off Wi-Fi) surfaces as an error on these
@@ -1346,6 +1352,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   Future<void> removeFromQueue(int index) async {
     if (index < 0 || index >= _queue.length) return;
+    final removed = _queue[index];
+    final wasPlaying = _isPlaying;
     _queue.removeAt(index);
     _invalidateNativeQueue();
     if (_queue.isEmpty) {
@@ -1366,6 +1374,16 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       await _jumpTo(newIndex, startPlaying: _isPlaying);
     } else {
       notifyListeners();
+    }
+    if (wasPlaying || _queue.isNotEmpty) {
+      undoStack?.push(UndoAction(
+        label: 'Removed "${removed.title}" from the queue',
+        revert: () async {
+          _queue.insert(index.clamp(0, _queue.length), removed);
+          _invalidateNativeQueue();
+          notifyListeners();
+        },
+      ));
     }
   }
 
@@ -1390,9 +1408,22 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   }
 
   void clearQueue() {
+    final previousQueue = List<Song>.of(_queue);
+    final previousIndex = _queueIndex;
     _queue = _currentSong == null ? [] : [_currentSong!];
     _queueIndex = 0;
     _invalidateNativeQueue();
+    if (previousQueue.length > _queue.length) {
+      undoStack?.push(UndoAction(
+        label: 'Cleared the queue',
+        revert: () async {
+          _queue = previousQueue;
+          _queueIndex = previousIndex.clamp(0, previousQueue.length - 1);
+          _invalidateNativeQueue();
+          notifyListeners();
+        },
+      ));
+    }
     notifyListeners();
   }
 

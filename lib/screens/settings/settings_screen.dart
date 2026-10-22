@@ -497,6 +497,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               _SectionLabel('BEHAVIOR', key: _sectionKey('behavior'), highlighted: _highlighted == 'behavior'),
+              _NavRow(
+                icon: Icons.undo_rounded,
+                label: 'Undo last edit',
+                value: appState.undoStack.canUndo
+                    ? appState.undoStack.lastLabel
+                    : 'Nothing to undo',
+                onTap: appState.undoStack.canUndo
+                    ? () async {
+                        final label = await appState.undoStack.undo();
+                        if (label != null && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Undone: $label')),
+                          );
+                        }
+                      }
+                    : null,
+              ),
               _ToggleRow(
                 label: 'Private listening',
                 value: appState.privateListening,
