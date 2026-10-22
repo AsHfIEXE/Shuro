@@ -15,6 +15,7 @@ import 'playback/audio_diagnostics.dart';
 import 'playback/event_log.dart';
 import 'playback/playback_engine.dart';
 import 'services/app_persistence.dart';
+import 'services/desktop_lifecycle.dart';
 import 'services/download_service.dart';
 import 'services/local_tag_enrichment.dart';
 import 'services/metadata/lastfm_client.dart';
@@ -373,6 +374,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _reconnectTimer =
         Timer.periodic(const Duration(seconds: 25), (_) => _maybeReconnect());
     WidgetsBinding.instance.addObserver(this);
+    // Tray menu playback controls: the tray icon is a native singleton, so
+    // this callback bridges it to the PlayerController without a direct
+    // dependency.
+    DesktopLifecycle.instance.playbackCallback = (action) {
+      final player = _boundPlayer;
+      if (player == null) return;
+      switch (action) {
+        case 'play_pause':
+          player.togglePlayPause();
+        case 'previous':
+          player.previous();
+        case 'next':
+          player.next();
+      }
+    };
     // Deliberately NOT re-applying the performance preset here: the preset is
     // applied when the user picks a profile, and re-applying it at boot
     // overwrote hand-tuned Appearance settings — and could switch

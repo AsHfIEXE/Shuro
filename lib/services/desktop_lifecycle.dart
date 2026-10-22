@@ -20,6 +20,10 @@ class DesktopLifecycle with WindowListener, TrayListener {
   bool _quitting = false;
   bool _trayAvailable = false;
 
+  /// Set by the app shell to let the tray control playback without
+  /// depending on Provider or the player directly.
+  static void Function(String action)? playbackCallback;
+
   static bool get supported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
