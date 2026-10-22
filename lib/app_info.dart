@@ -6,7 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 /// 2.4.1 was installed). [resolveAppVersion] overwrites it at boot with the
 /// version actually installed, and the literal below is only the fallback for
 /// environments without plugin support (tests, web without the plugin).
-String kAppVersion = '2.5.0';
+String kAppVersion = '2.5.1';
 
 /// Reads the running build's version from the platform. Call once at boot
 /// (non-fatal: a failure keeps the fallback).
