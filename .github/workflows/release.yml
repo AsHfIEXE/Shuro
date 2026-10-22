@@ -26,6 +26,7 @@ jobs:
       version_name: ${{ steps.release.outputs.version_name }}
       build_number: ${{ steps.release.outputs.build_number }}
       prerelease: ${{ steps.release.outputs.prerelease }}
+      android_signing_mode: ${{ steps.release.outputs.android_signing_mode }}
     steps:
       - name: Checkout full history and tags
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,7 +34,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate tag, source commit, Android signing and build number
+      - name: Validate tag, source commit, Android signing mode and build number
         id: release
         shell: bash
         env:
@@ -104,12 +105,23 @@ jobs:
             "$ANDROID_KEY_ALIAS"
             "$ANDROID_KEY_PASSWORD"
           )
+          present=0
           for value in "${signing_values[@]}"; do
-            if [[ -z "$value" ]]; then
-              echo "::error::A release requires all four Android signing secrets: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD."
-              exit 1
+            if [[ -n "$value" ]]; then
+              ((present += 1))
             fi
           done
+
+          if [[ "$present" -eq 0 ]]; then
+            ANDROID_SIGNING_MODE=debug
+            echo "::warning::No Android signing secrets found. The Android release APK/AAB will be signed with the default debug key and are for testing only."
+          elif [[ "$present" -eq "${#signing_values[@]}" ]]; then
+            ANDROID_SIGNING_MODE=release
+            echo "::notice::All Android signing secrets are configured. The APK/AAB will use the upload keystore."
+          else
+            echo "::error::Configure all four Android signing secrets or none. Partial signing configuration is not supported."
+            exit 1
+          fi
 
           PRERELEASE=false
           [[ "$VERSION_NAME" == *-* ]] && PRERELEASE=true
@@ -119,6 +131,7 @@ jobs:
             echo "version_name=$VERSION_NAME"
             echo "build_number=$BUILD_NUMBER"
             echo "prerelease=$PRERELEASE"
+            echo "android_signing_mode=$ANDROID_SIGNING_MODE"
           } >> "$GITHUB_OUTPUT"
 
           echo "::notice::Validated $TAG at $GITHUB_SHA (Android versionCode $BUILD_NUMBER)."
@@ -151,7 +164,7 @@ jobs:
         run: flutter test --no-pub
 
   android:
-    name: Build signed Android artifacts
+    name: Build Android artifacts (${{ needs.preflight.outputs.android_signing_mode }} signed)
     needs: [preflight, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -178,6 +191,7 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Configure and validate upload signing
+        if: needs.preflight.outputs.android_signing_mode == 'release'
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -201,7 +215,7 @@ jobs:
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -alias "$ANDROID_KEY_ALIAS" >/dev/null
 
-      - name: Build APK and Play Store App Bundle
+      - name: Build Android APK and App Bundle
         env:
           VERSION_NAME: ${{ needs.preflight.outputs.version_name }}
           BUILD_NUMBER: ${{ needs.preflight.outputs.build_number }}
@@ -213,13 +227,22 @@ jobs:
       - name: Stage Android assets
         env:
           VERSION_NAME: ${{ needs.preflight.outputs.version_name }}
+          ANDROID_SIGNING_MODE: ${{ needs.preflight.outputs.android_signing_mode }}
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/Shuro-v${VERSION_NAME}-android.apk"
-          cp build/app/outputs/bundle/release/app-release.aab "dist/Shuro-v${VERSION_NAME}-android-play.aab"
-          test -s "dist/Shuro-v${VERSION_NAME}-android.apk"
-          test -s "dist/Shuro-v${VERSION_NAME}-android-play.aab"
+          if [[ "$ANDROID_SIGNING_MODE" == "release" ]]; then
+            APK_NAME="Shuro-v${VERSION_NAME}-android.apk"
+            AAB_NAME="Shuro-v${VERSION_NAME}-android-play.aab"
+          else
+            APK_NAME="Shuro-v${VERSION_NAME}-android-debug-signed.apk"
+            AAB_NAME="Shuro-v${VERSION_NAME}-android-play-debug-signed.aab"
+          fi
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/$APK_NAME"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/$AAB_NAME"
+          test -s "dist/$APK_NAME"
+          test -s "dist/$AAB_NAME"
+          echo "::notice::Staged $APK_NAME and $AAB_NAME (Android signing mode: $ANDROID_SIGNING_MODE)."
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -435,12 +458,19 @@ jobs:
           VERSION_NAME: ${{ needs.preflight.outputs.version_name }}
           BUILD_NUMBER: ${{ needs.preflight.outputs.build_number }}
           TAG: ${{ needs.preflight.outputs.tag }}
+          ANDROID_SIGNING_MODE: ${{ needs.preflight.outputs.android_signing_mode }}
         run: |
           set -euo pipefail
-
+          if [[ "$ANDROID_SIGNING_MODE" == "release" ]]; then
+            ANDROID_APK="Shuro-v${VERSION_NAME}-android.apk"
+            ANDROID_AAB="Shuro-v${VERSION_NAME}-android-play.aab"
+          else
+            ANDROID_APK="Shuro-v${VERSION_NAME}-android-debug-signed.apk"
+            ANDROID_AAB="Shuro-v${VERSION_NAME}-android-play-debug-signed.aab"
+          fi
           required=(
-            "Shuro-v${VERSION_NAME}-android.apk"
-            "Shuro-v${VERSION_NAME}-android-play.aab"
+            "$ANDROID_APK"
+            "$ANDROID_AAB"
             "Shuro-v${VERSION_NAME}-windows-x64-setup.exe"
             "Shuro-v${VERSION_NAME}-linux-amd64.deb"
           )
@@ -463,6 +493,8 @@ jobs:
           Version: $VERSION_NAME
           Tag: $TAG
           Android versionCode: $BUILD_NUMBER
+          Android signing mode: $ANDROID_SIGNING_MODE
+          Android signing note: $([[ "$ANDROID_SIGNING_MODE" == "debug" ]] && echo "debug-signed; testing only" || echo "upload-key signed")
           Commit: $GITHUB_SHA
           Workflow run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
           Built at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
@@ -482,6 +514,7 @@ jobs:
           TAG: ${{ needs.preflight.outputs.tag }}
           VERSION_NAME: ${{ needs.preflight.outputs.version_name }}
           PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+          ANDROID_SIGNING_MODE: ${{ needs.preflight.outputs.android_signing_mode }}
         run: |
           set -euo pipefail
 
@@ -502,11 +535,33 @@ jobs:
           fi
           gh release create "$TAG" "${create_args[@]}" dist/*
 
+          # Preserve GitHub-generated notes and explain how Android artifacts were signed.
+          gh release view "$TAG" --json body --jq '.body' > "$RUNNER_TEMP/shuro-release-notes.md"
+          if [[ "$ANDROID_SIGNING_MODE" == "debug" ]]; then
+            cat >> "$RUNNER_TEMP/shuro-release-notes.md" <<'EOF'
+
+          > **Android testing build:** The APK and AAB are signed with Android's default debug key because upload-signing secrets were not configured. The APK is for testing only. The AAB is not suitable for Google Play. Windows and Linux installers are unaffected.
+          EOF
+          else
+            cat >> "$RUNNER_TEMP/shuro-release-notes.md" <<'EOF'
+
+          > **Android signing:** The APK and AAB were signed with the configured upload keystore. Google Play may still require its normal Play App Signing setup.
+          EOF
+          fi
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/shuro-release-notes.md"
+
+          if [[ "$ANDROID_SIGNING_MODE" == "release" ]]; then
+            ANDROID_APK="Shuro-v${VERSION_NAME}-android.apk"
+            ANDROID_AAB="Shuro-v${VERSION_NAME}-android-play.aab"
+          else
+            ANDROID_APK="Shuro-v${VERSION_NAME}-android-debug-signed.apk"
+            ANDROID_AAB="Shuro-v${VERSION_NAME}-android-play-debug-signed.aab"
+          fi
           expected_assets=(
             "BUILD-INFO.txt"
             "SHA256SUMS.txt"
-            "Shuro-v${VERSION_NAME}-android.apk"
-            "Shuro-v${VERSION_NAME}-android-play.aab"
+            "$ANDROID_APK"
+            "$ANDROID_AAB"
             "Shuro-v${VERSION_NAME}-linux-amd64.deb"
             "Shuro-v${VERSION_NAME}-windows-x64-setup.exe"
           )
