@@ -1,0 +1,18 @@
+diff a/lib/services/server_link.dart b/lib/services/server_link.dart	(rejected hunks)
+@@ -62,11 +62,16 @@ class ServerLink {
+     // listen threshold. Routed to the song's OWN server — the remote id goes
+     // out in that server's namespace (a qualified id would 404).
+     final player = context.read<PlayerController>();
++    // Private listening must not leave a trace on the server either: its play
++    // count, "recently played" list and any server-side scrobbling all come
++    // from these two reports.
+     player.onTrackStarted = (song) {
++      if (appState.privateListening) return;
+       final owner = session.apiForId(song.id);
+       owner?.scrobble(MultiServerLibrary.remoteIdOf(song.id), submission: false).catchError((_) {});
+     };
+     player.onListenThresholdReached = (song) {
++      if (appState.privateListening) return;
+       final owner = session.apiForId(song.id);
+       owner?.scrobble(MultiServerLibrary.remoteIdOf(song.id), submission: true).catchError((_) {});
+     };

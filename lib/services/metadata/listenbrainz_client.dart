@@ -7,6 +7,31 @@ import 'package:http/http.dart' as http;
 /// Token-based auth (no session keys, no API-signature), JSON body, one
 /// endpoint for both now-playing and finished listens. Documented at
 /// https://listenbrainz.readthedocs.io/en/latest/users/api/
+
+/// Status-aware result for a ListenBrainz submission.
+class ListenBrainzResult {
+  const ListenBrainzResult({
+    this.accepted = false,
+    this.rejected = false,
+    this.unauthorized = false,
+    this.retryable = false,
+    this.retryAfterSeconds,
+    this.statusCode,
+  });
+
+  final bool accepted;
+  final bool rejected;
+  final bool unauthorized;
+  final bool retryable;
+  final int? retryAfterSeconds;
+  final int? statusCode;
+
+  static const ListenBrainzResult ok = ListenBrainzResult(accepted: true);
+  static const ListenBrainzResult rejectedResult = ListenBrainzResult(rejected: true);
+  static const ListenBrainzResult unauthorizedResult = ListenBrainzResult(unauthorized: true);
+  static const ListenBrainzResult retryableResult = ListenBrainzResult(retryable: true);
+}
+
 class ListenBrainzClient {
   ListenBrainzClient({http.Client? client}) : _client = client ?? http.Client();
 
@@ -83,4 +108,63 @@ class ListenBrainzClient {
       return false;
     }
   }
+  /// Submits a listen and returns a status-aware result, so the service can
+  /// drop rejected entries, stop on revoked tokens, and retry transient errors.
+  Future<ListenBrainzResult> submitListenResult({
+    required String token,
+    required bool playingNow,
+    required String trackName,
+    required String artistName,
+    String? albumName,
+    int? durationSeconds,
+    int? listenedAt,
+  }) async {
+    try {
+      final metadata = <String, dynamic>{
+        'track_name': trackName,
+        'artist_name': artistName,
+        if (albumName != null && albumName.isNotEmpty) 'album_name': albumName,
+        if (durationSeconds != null) 'duration': durationSeconds,
+        'additional_info': {
+          'media_player': 'Shuro',
+          'submission_client': 'Shuro',
+          'music_service': 'listenbrainz',
+        },
+      };
+
+      final body = jsonEncode({
+        'listen_type': playingNow ? 'playing_now' : 'single',
+        'payload': [
+          {
+            'track_metadata': metadata,
+            if (!playingNow && listenedAt != null) 'listened_at': listenedAt,
+          }
+        ],
+      });
+
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/submit-listens'),
+            headers: {
+              'Authorization': 'Token $token',
+              'Content-Type': 'application/json',
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final retryAfter = int.tryParse(response.headers['retry-after'] ?? '');
+      if (response.statusCode == 200) return ListenBrainzResult.ok;
+      if (response.statusCode == 400) return ListenBrainzResult.rejectedResult;
+      if (response.statusCode == 401) return ListenBrainzResult.unauthorizedResult;
+      return ListenBrainzResult(
+        retryable: true,
+        retryAfterSeconds: retryAfter,
+        statusCode: response.statusCode,
+      );
+    } catch (_) {
+      return ListenBrainzResult.retryableResult;
+    }
+  }
+
 }
