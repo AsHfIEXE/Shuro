@@ -20,6 +20,8 @@ import '../../widgets/blurred_artwork_backdrop.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/shuro_icons.dart';
+import 'lyrics_edit_sheet.dart';
+import '../../services/lrc_tools.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
 /// point: the screen follows [PlayerController.currentSong] from then on, so
@@ -157,6 +159,46 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// Starts (or restarts) the fetch for [song]. The result is stored only if
   /// the song is still the one on screen when it lands, so a slow lookup can
   /// never overwrite a newer track's lyrics.
+  /// Roadmap #21: open the editor seeded with the stored edit when one exists,
+  /// otherwise with the currently shown lyrics, so fixing one wrong line never
+  /// means retyping the song.
+  Future<void> _openLyricsEditor() async {
+    final song = _song;
+    if (song == null) return;
+    final store = await _appState.lyricsEditStore();
+    final stored = await store.load(song.id);
+    final seed = stored ?? _seedFromTrack(_loadedView?.track);
+    if (!mounted) return;
+    await showLyricsEditSheet(
+      context,
+      song: song,
+      store: store,
+      currentText: seed,
+      onSaved: () {
+        if (mounted && _song?.id == song.id) _startLoad(song);
+      },
+    );
+  }
+
+  /// Serializes a track back to plain/LRC text for the editor. Only real
+  /// line timing is written out; estimated or absent timing stays text-only.
+  String _seedFromTrack(LyricsTrack? track) {
+    if (track == null) return '';
+    final buffer = StringBuffer();
+    for (final line in track.lines) {
+      if (track.hasTiming && line.start > Duration.zero) {
+        final m = line.start.inMinutes.toString().padLeft(2, '0');
+        final s = (line.start.inSeconds % 60).toString().padLeft(2, '0');
+        final cs =
+            ((line.start.inMilliseconds % 1000) ~/ 10).toString().padLeft(2, '0');
+        buffer.writeln('[$m:$s.$cs] ${line.plainText}');
+      } else {
+        buffer.writeln(line.plainText);
+      }
+    }
+    return buffer.toString();
+  }
+
   void _startLoad(Song song) {
     final future = _load(song);
     _future = future;
@@ -188,6 +230,18 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// metadata, so a tagged import gets LRCLIB too, and an untagged one simply
   /// ends at the not-found state.
   Future<_LyricsView> _load(Song song) async {
+    // A saved on-device edit always wins (roadmap #21): the user chose these
+    // words, so neither the server's tags nor LRCLIB may override them.
+    try {
+      final store = await _appState.lyricsEditStore();
+      final edited = await store.load(song.id);
+      if (edited != null && edited.trim().isNotEmpty) {
+        return _LyricsView.found(LrcTools.parse(edited));
+      }
+    } catch (_) {
+      // Storage problems degrade to the normal lookup, never to an error.
+    }
+
     try {
       final embedded = await _appState.fetchEmbeddedLyrics(song);
       if (embedded != null && embedded.lines.isNotEmpty) {
@@ -584,7 +638,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
       List<Color>? colors}) {
     final content = Column(
       children: [
-        if (!widget.embedded) _Header(song: song, accent: accent),
+        if (!widget.embedded)
+          _Header(song: song, accent: accent, onEditLyrics: _openLyricsEditor),
         Expanded(child: child),
         if (!widget.compact && !widget.embedded && _loadedView?.track != null)
           _AttributionFooter(
@@ -886,7 +941,8 @@ class _KaraokeFill extends StatelessWidget {
 class _Header extends StatelessWidget {
   final Song? song;
   final Color accent;
-  const _Header({required this.song, required this.accent});
+  final VoidCallback? onEditLyrics;
+  const _Header({required this.song, required this.accent, this.onEditLyrics});
 
   @override
   Widget build(BuildContext context) {
@@ -925,7 +981,16 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 48),
+          Semantics(
+            button: true,
+            label: 'Edit lyrics',
+            child: IconButton(
+              icon: const Icon(Icons.edit_rounded,
+                  size: 20, color: Colors.white70),
+              tooltip: 'Edit lyrics',
+              onPressed: song == null ? null : onEditLyrics,
+            ),
+          ),
         ],
       ),
     );

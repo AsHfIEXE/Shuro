@@ -12,6 +12,7 @@ import '../backend/navidrome_music_repository.dart';
 import '../services/library_cache.dart';
 import '../services/playlist_cover_store.dart';
 import '../services/undo_stack.dart';
+import '../services/lyrics_edit_store.dart';
 import '../services/multi_server.dart';
 import '../services/multi_server_session.dart';
 import '../services/server_secret_store.dart';
@@ -1828,6 +1829,18 @@ class AppState extends ChangeNotifier {
   /// Reversible edits (roadmap #29). Owned here so every AppState mutation
   /// and the PlayerController's queue edits push to the same stack.
   final UndoStack undoStack = UndoStack();
+
+  LyricsEditStore? _lyricsEditStore;
+
+  /// The per-song edited-lyrics store (roadmap #21), created once against the
+  /// platform support directory.
+  Future<LyricsEditStore> lyricsEditStore() async {
+    final existing = _lyricsEditStore;
+    if (existing != null) return existing;
+    final store = await LyricsEditStore.open();
+    _lyricsEditStore = store;
+    return store;
+  }
 
   /// playlistId -> on-disk cover file. Kept beside [playlists] because the
   /// ImageProvider itself is not serialisable.

@@ -49,6 +49,10 @@ enum LyricsSource {
   /// tags (`getLyricsBySongId`).
   embedded,
 
+  /// Lyrics the user typed or imported on this device and chose to keep
+  /// (roadmap #21). Stored per song id, consulted before every other source.
+  edited,
+
   /// Nothing found.
   none,
 }
@@ -111,6 +115,8 @@ extension LyricsSourceLabel on LyricsSource {
         return 'LRCLIB';
       case LyricsSource.embedded:
         return 'the file\'s own tags';
+      case LyricsSource.edited:
+        return 'your edit';
       case LyricsSource.none:
         return 'Unavailable';
     }
