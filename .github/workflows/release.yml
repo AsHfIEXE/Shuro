@@ -421,7 +421,7 @@ jobs:
       contents: write
     steps:
       - name: Download all platform artifacts
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*-release"
           path: dist
@@ -469,6 +469,7 @@ jobs:
           (
             cd dist
             sha256sum * > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
           )
 
       - name: Create draft, verify every asset, then publish
@@ -497,7 +498,7 @@ jobs:
           if [[ "$PRERELEASE" == "true" ]]; then
             create_args+=(--prerelease)
           fi
-          gh release create "$TAG" dist/* "${create_args[@]}"
+          gh release create "$TAG" "${create_args[@]}" dist/*
 
           expected_assets=(
             "BUILD-INFO.txt"
@@ -516,5 +517,11 @@ jobs:
             exit 1
           fi
 
-          # All files are attached and verified; make the release visible only now.
-          gh release edit "$TAG" --draft=false
+          # All files are attached and verified; publish the draft through the Releases API.
+          # gh release edit has a --draft flag for making drafts, not a reliable publish toggle.
+          release_id="$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq '.id')"
+          published_draft="$(gh api "repos/$GH_REPO/releases/$release_id" --method PATCH -F draft=false --jq '.draft')"
+          if [[ "$published_draft" != "false" ]]; then
+            echo "::error::GitHub did not confirm that release $TAG was published."
+            exit 1
+          fi
