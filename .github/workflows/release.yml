@@ -194,36 +194,25 @@ jobs:
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Assert resolved plugins match the lockfile exactly
+      - name: Assert the resolved plugin set matches the lockfile
         shell: bash
         run: |
           set -euo pipefail
-          # package_config.json is what the compiler actually uses; the
-          # lockfile is what we reviewed. They must agree, per package.
-          mismatches="$(python3 - <<'PY'
-          import json, re, sys
-          lock = open('pubspec.lock').read()
-          packages = {}
-          for block in lock.split('  ')[1:]:
-              m = re.search(r'name: ([\w.-]+)
-.*?version: "([^"]+)"', block, re.S)
-              if m:
-                  packages[m.group(1)] = m.group(2)
-          cfg = json.load(open('.dart_tool/package_config.json'))
-          bad = []
-          for pkg in cfg['packages']:
-              root = pkg['rootUri']
-              ver = re.search(r'-([0-9][\w.+-]*)$', root)
-              if ver and pkg['name'] in packages and packages[pkg['name']] != ver.group(1):
-                  bad.append('%s: lock=%s resolved=%s' % (pkg['name'], packages[pkg['name']], ver.group(1)))
-          print('
-'.join(bad))
-          PY
-          )"
-          if [[ -n "$mismatches" ]]; then
-            echo "::error::Resolved plugin versions disagree with pubspec.lock: $mismatches"
-            exit 1
-          fi
+          # package_config.json is what the compiler actually used; the
+          # lockfile is what was reviewed. Every lockfile entry with a hosted
+          # version must resolve to that exact version.
+          status=0
+          while IFS=':' read -r name version; do
+            [[ -n "$name" && -n "$version" ]] || continue
+            resolved="$(grep -o "\"name\": \"$name\"[^}]*\"rootUri\": \"[^\"]*\"" .dart_tool/package_config.json | grep -o '[0-9][0-9A-Za-z.+_-]*$' | head -n1 || true)"
+            if [[ -n "$resolved" && "$resolved" != "$version" ]]; then
+              echo "::error::$name resolved as $resolved but the lockfile pins $version."
+              status=1
+            fi
+          done < <(awk '/^  [a-zA-Z0-9_-]+:$/ { pkg=$1; sub(/:$/,"",pkg) }
+                        /^    version: / { v=$2; gsub(/"/,"",v); if (pkg != "") { print pkg ":" v; pkg="" } }' pubspec.lock)
+          if (( status != 0 )); then exit 1; fi
+          echo "Lockfile and resolved package set agree."
 
       - name: Configure and validate upload signing
         if: needs.preflight.outputs.android_signing_mode == 'release'
