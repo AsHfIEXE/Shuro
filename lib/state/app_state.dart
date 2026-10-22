@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../backend/music_repository.dart';
 import '../backend/navidrome_music_repository.dart';
 import '../services/library_cache.dart';
+import '../services/playlist_cover_store.dart';
 import '../services/multi_server.dart';
 import '../services/multi_server_session.dart';
 import '../services/server_secret_store.dart';
@@ -72,6 +73,7 @@ class AppState extends ChangeNotifier {
   static const _kHistoryKey = 'listening_history_v1';
   static const _kAffinityKey = 'artist_affinity_v1';
   static const _kPlaylistsKey = 'playlists_v1';
+  static const _kPlaylistCoversKey = 'playlist_covers_v1';
   static const _kPersonalShelvesKey = 'personal_shelves_v1';
   static const _kOfflinePlansKey = 'offline_plans_v1';
   static const _kLocalFoldersKey = 'local_folders_v1';
@@ -149,9 +151,9 @@ class AppState extends ChangeNotifier {
       if (playlistsJson != null) {
         try {
           final list = jsonDecode(playlistsJson) as List<dynamic>;
-          // Artwork is an ImageProvider and was never persisted — a
-          // restored playlist falls back to its auto-collage/icon until
-          // the user picks a cover again, same as a brand-new playlist.
+          // Artwork itself is an ImageProvider and cannot be encoded, so the
+          // cover is stored as a file path in [_playlistCoverPaths] and
+          // re-attached below. A missing file is treated as "no cover".
           playlists = list.map((e) {
             final m = e as Map<String, dynamic>;
             return Playlist(
@@ -167,6 +169,9 @@ class AppState extends ChangeNotifier {
           }).toList();
         } catch (_) {}
       }
+      // Covers are stored as file paths, so they are re-attached once the
+      // playlist objects exist rather than inside the JSON decode above.
+      _restorePlaylistCovers();
 
       final shelvesJson = persistence.getString(_kPersonalShelvesKey);
       if (shelvesJson != null) {
@@ -1804,6 +1809,55 @@ class AppState extends ChangeNotifier {
         .toList();
     return createPlaylist(preset.label,
         smartPreset: preset, songIds: previewIds);
+  }
+
+  /// playlistId -> on-disk cover file. Kept beside [playlists] because the
+  /// ImageProvider itself is not serialisable.
+  final Map<String, String> _playlistCoverPaths = {};
+
+  Future<void> _persistPlaylistCovers() async {
+    final p = _persistence;
+    if (p == null) return;
+    await p.setString(_kPlaylistCoversKey, jsonEncode(_playlistCoverPaths));
+  }
+
+  /// Re-attaches persisted covers once the playlist list exists.
+  void _restorePlaylistCovers() {
+    final p = _persistence;
+    if (p == null) return;
+    final raw = p.getString(_kPlaylistCoversKey);
+    if (raw == null) return;
+    try {
+      final map = (jsonDecode(raw) as Map).cast<String, dynamic>();
+      for (final entry in map.entries) {
+        final path = entry.value;
+        if (path is! String || !PlaylistCoverStore.exists(path)) continue;
+        _playlistCoverPaths[entry.key] = path;
+        updatePlaylistArtwork(entry.key, FileImage(File(path)));
+      }
+    } catch (_) {
+      // A corrupt map must not stop startup; the playlist just has no cover.
+    }
+  }
+
+  /// Stores [bytes] as the playlist cover and shows it immediately.
+  /// Returns false when the file could not be written, so the caller can say
+  /// so instead of pretending the cover was saved.
+  Future<bool> setPlaylistCover(String playlistId, Uint8List bytes) async {
+    final path = await PlaylistCoverStore.save(playlistId, bytes);
+    if (path == null) return false;
+    _playlistCoverPaths[playlistId] = path;
+    updatePlaylistArtwork(playlistId, FileImage(File(path)));
+    await _persistPlaylistCovers();
+    return true;
+  }
+
+  /// Drops the custom cover, returning the playlist to its auto-collage.
+  Future<void> clearPlaylistCover(String playlistId) async {
+    _playlistCoverPaths.remove(playlistId);
+    updatePlaylistArtwork(playlistId, null, clear: true);
+    await PlaylistCoverStore.delete(playlistId);
+    await _persistPlaylistCovers();
   }
 
   void updatePlaylistArtwork(String playlistId, ImageProvider? artwork,

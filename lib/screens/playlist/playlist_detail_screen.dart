@@ -58,11 +58,16 @@ class PlaylistDetailScreen extends StatelessWidget {
       ),
     );
     if (choice == 'collage') {
-      appState.updatePlaylistArtwork(playlistId, null, clear: true);
+      await appState.clearPlaylistCover(playlistId);
     } else if (choice == 'choose') {
       final bytes = await appState.pickImageBytes();
-      if (bytes != null)
-        appState.updatePlaylistArtwork(playlistId, MemoryImage(bytes));
+      if (bytes != null) {
+        final saved = await appState.setPlaylistCover(playlistId, bytes);
+        if (!saved && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Could not save the cover on this device')));
+        }
+      }
     }
   }
 
