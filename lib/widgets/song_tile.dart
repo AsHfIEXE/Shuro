@@ -6,6 +6,7 @@ import '../models/song.dart';
 import '../services/download_service.dart';
 import '../theme/app_theme.dart';
 import 'artwork_thumb.dart';
+import 'desktop_context_menu.dart';
 import 'song_actions_sheet.dart';
 
 /// A single row in any song list (Home rails use cards instead — see
@@ -34,54 +35,73 @@ class SongTile extends StatelessWidget {
     final download = context.select<DownloadService, DownloadStatus>((s) => s.statusFor(song.id));
     final accent = song.gradientColors.last;
 
-    return ListTile(
-      onTap: onTap,
-      onLongPress: () => showSongActionsSheet(context, song),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
-      leading: index != null
-          ? SizedBox(
-              width: 44,
-              child: Center(
-                child: Text('$index', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+    return ContextMenuRegion(
+      items: songContextMenuItems(context, song),
+      child: ListTile(
+        onTap: onTap,
+        onLongPress: () => showSongActionsSheet(context, song),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+        leading: index != null
+            ? SizedBox(
+                width: 44,
+                child: Center(
+                  child: Text('$index',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMutedTextColor, fontSize: 13)),
+                ),
+              )
+            : ArtworkThumb(
+                gradientColors: song.gradientColors,
+                artwork: song.artwork,
+                size: 46,
+                radius: 8,
               ),
-            )
-          : ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 46, radius: 8),
-      title: Text(
-        song.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.getFont(currentFontFamily, 
-          color: highlighted ? accent : Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      subtitle: showArtist
-          ? Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12))
-          : null,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (download.stage == DownloadStage.downloading)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, value: download.progress, color: accent),
-              ),
-            )
-          else if (download.stage == DownloadStage.downloaded)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.download_done_rounded, color: accent, size: 18),
-            ),
-          IconButton(
-            icon: const Icon(Icons.more_vert_rounded, color: kMutedTextColor, size: 20),
-            onPressed: () => showSongActionsSheet(context, song),
+        title: Text(
+          song.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.getFont(
+            currentFontFamily,
+            color: highlighted ? accent : Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
           ),
-        ],
+        ),
+        subtitle: showArtist
+            ? Text(song.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMutedTextColor, fontSize: 12))
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (download.stage == DownloadStage.downloading)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      value: download.progress,
+                      color: accent),
+                ),
+              )
+            else if (download.stage == DownloadStage.downloaded)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(Icons.download_done_rounded,
+                    color: accent, size: 18),
+              ),
+            IconButton(
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: kMutedTextColor, size: 20),
+              onPressed: () => showSongActionsSheet(context, song),
+            ),
+          ],
+        ),
       ),
     );
   }
