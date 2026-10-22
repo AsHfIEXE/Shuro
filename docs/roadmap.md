@@ -29,7 +29,7 @@ exercised on a physical device.
 | 21 | Lyric editing | Not started |
 | 22 | Playlist covers | Not started |
 | 23 | Library health | Shipped — missing artwork, blank artist/album, unknown length, exact duplicates |
-| 24 | Rediscovery | Not started |
+| 24 | Rediscovery | Shipped — "Rediscover" shelf for favourites outside the recent-play window |
 | 25 | Settings search | Shipped — section index, jump and highlight |
 | 27 | Immersive lyrics | Not started |
 | 28 | Command palette | Shipped — Ctrl+Shift+P |

@@ -5,7 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux-8A5CF6" alt="platform" />
   <img src="https://img.shields.io/badge/Flutter-3.47-02569B" alt="Flutter" />
-  <img src="https://img.shields.io/badge/tests-153%20cases%20%C2%B7%2015%20suites-2EA043" alt="tests" />
+  <img src="https://img.shields.io/badge/tests-168%20cases%20%C2%B7%2016%20suites-2EA043" alt="tests" />
   <img src="https://img.shields.io/badge/telemetry-none-2EA043" alt="no telemetry" />
   <img src="https://img.shields.io/badge/streams-format%3Draw%20%26%23x2014%3B%20no%20hidden%20transcode-F5A623" alt="original quality" />
 </p>
@@ -239,7 +239,7 @@ honoured everywhere. Personalization: font family picker, artwork styles
 
 ## ⚡ Built the hard way
 
-- 🧪 **153 test cases across 15 suites**, including a **seeded chaos
+- 🧪 **168 test cases across 16 suites**, including a **seeded chaos
   harness** (20 seeds × 2,000 random actions = **40,000 actions** with
   invariants asserted after every one — any failure reproduces from its
   seed), lyrics parser suite (39 tests: formats, offsets, word sync,
@@ -271,7 +271,7 @@ desktop builds are produced by CI.
 
 ```bash
 flutter pub get
-flutter test --no-pub          # 153 cases + 20-seed chaos suite
+flutter test --no-pub          # 168 cases + 20-seed chaos suite
 flutter build apk --release            # Android
 flutter build appbundle --release      # Play upload
 flutter build windows --release        # Windows (needs VS C++ + Developer Mode)
