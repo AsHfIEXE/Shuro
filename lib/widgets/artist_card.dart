@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_theme.dart';
 import 'artist_actions_sheet.dart';
+import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
 
 /// Circular artist card for Library > Artists and Search. Same sizing
@@ -17,7 +18,9 @@ class ArtistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ContextMenuRegion(
+      items: artistContextMenuItems(context, artist),
+      child: GestureDetector(
       onTap: onTap,
       onLongPress: () {
         HapticFeedback.mediumImpact();
@@ -45,6 +48,7 @@ class ArtistCard extends StatelessWidget {
               style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
         ],
       ),
+    ),
     );
   }
 }

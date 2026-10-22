@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/album.dart';
 import '../theme/app_theme.dart';
 import 'album_actions_sheet.dart';
+import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
 
 /// Grid/rail card used on Home, Library > Albums, Artist detail, and
@@ -18,7 +19,9 @@ class AlbumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return ContextMenuRegion(
+      items: albumContextMenuItems(context, album),
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -61,6 +64,7 @@ class AlbumCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

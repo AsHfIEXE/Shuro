@@ -8,6 +8,7 @@ import '../services/shuro_pulse.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'playlist_actions_sheet.dart';
+import 'desktop_context_menu.dart';
 import 'playlist_collage_art.dart';
 
 /// Used in Library > Playlists and the "Add to playlist" picker sheet.
@@ -26,7 +27,9 @@ class PlaylistCard extends StatelessWidget {
     final count = playlist.smartPreset != null
         ? ShuroPulse.smartPlaylistSongs(playlist.smartPreset!, appState).length
         : playlist.songIds.length;
-    return ListTile(
+    return ContextMenuRegion(
+      items: playlistContextMenuItems(context, playlist),
+      child: ListTile(
       onTap: onTap,
       onLongPress: () {
         HapticFeedback.mediumImpact();
@@ -38,6 +41,7 @@ class PlaylistCard extends StatelessWidget {
           style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
       subtitle: Text(playlist.smartPreset != null ? '$count songs · updates itself' : '$count songs',
           style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+    ),
     );
   }
 }
