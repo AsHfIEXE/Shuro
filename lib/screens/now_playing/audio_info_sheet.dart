@@ -145,7 +145,9 @@ class _AudioInfoSheetState extends State<_AudioInfoSheet> {
               Text('${widget.song.title} · ${widget.song.artist}',
                   style: GoogleFonts.getFont(currentFontFamily,
                       color: Colors.white60, fontSize: 12)),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
+              _SignalPathCard(summary: diagnostics.signalPathSummary),
+              const SizedBox(height: 18),
               const _SectionLabel('SOURCE'),
               Text(
                 source.sourceKind == SourceKind.local
@@ -572,6 +574,58 @@ class _InfoRow extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w500),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Full-width summary of the path from source tags to the reported output.
+/// Deliberately worded so it can only repeat what the app actually knows.
+class _SignalPathCard extends StatelessWidget {
+  final String summary;
+
+  const _SignalPathCard({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: kCardColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timeline_rounded, size: 14, color: kBrandColor),
+              const SizedBox(width: 6),
+              Text('Signal path',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.4)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            summary,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 12.5, height: 1.45),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Source tags \u00b7 requested quality \u00b7 reported route. '
+            'Direct-path support is only ever shown when the platform answers.',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white38, fontSize: 10.5, height: 1.4),
           ),
         ],
       ),

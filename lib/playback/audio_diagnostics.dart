@@ -193,6 +193,69 @@ class AudioDiagnostics {
     );
   }
 
+  /// One-line, evidence-bounded summary of the path from file to output.
+  ///
+  /// Only states what the app actually knows: source tags, the requested
+  /// policy, the reported route, and whether this engine is processing the
+  /// audio. It never says "bit-perfect": acceptance of a direct path is a claim
+  /// only the platform can make, and it stays in [capability] where it belongs.
+  String get signalPathSummary =>
+      '${_sourcePathLabel()}  \u2192  ${_outputPathLabel()}  \u00b7  ${_pathStatusLabel()}';
+
+  /// e.g. `FLAC 24-bit / 96 kHz`, `MP3 (server transcoded)`, `Format not reported`.
+  String _sourcePathLabel() {
+    final parts = <String>[];
+    final codec = source.codec;
+    if (codec != null && codec.trim().isNotEmpty) {
+      parts.add(codec.trim().toUpperCase());
+    }
+    final depth = source.bitDepth;
+    if (depth != null) parts.add('$depth-bit');
+    final rate = source.sampleRateHz;
+    if (rate != null) {
+      parts.add(rate % 1000 == 0 ? '${rate ~/ 1000} kHz' : '${rate / 1000} kHz');
+    }
+    if (parts.isEmpty) {
+      parts.add('Format not reported');
+    }
+    if (source.streamMode == StreamMode.transcoded) {
+      parts.add('(server transcoded)');
+    }
+    return parts.join(' ');
+  }
+
+  /// e.g. `USB DAC (reports up to 384 kHz)`, `Built-in output`, `Route not reported`.
+  String _outputPathLabel() {
+    final device = switch (route.kind) {
+      RouteKind.builtIn => 'Built-in output',
+      RouteKind.wired => 'Wired output',
+      RouteKind.bluetooth => 'Bluetooth',
+      RouteKind.usb => route.deviceLabel ?? 'USB audio device',
+      RouteKind.other => route.deviceLabel ?? 'Other route',
+      RouteKind.unknown => 'Route not reported',
+    };
+    final rates = capability.sampleRatesLabel;
+    if (rates == null || rates.trim().isEmpty) return device;
+    return '$device (reports up to $rates)';
+  }
+
+  /// Never claims more than the engine can see.
+  String _pathStatusLabel() {
+    if (processing.anyEnabled) {
+      final names = <String>[
+        if (processing.equalizerEnabled) 'EQ',
+        if (processing.replayGainEnabled) 'ReplayGain',
+        if (processing.crossfadeEnabled) 'crossfade',
+      ];
+      return 'processed here (${names.join(', ')})';
+    }
+    return switch (capability.directPlayback) {
+      CapabilityState.supported => 'no app processing; direct path reported',
+      CapabilityState.unsupported => 'no app processing; device cannot take it direct',
+      CapabilityState.unknown => 'no app processing; direct path not reported',
+    };
+  }
+
   /// `AudioInfo.channels` is a display label ("Stereo", "Mono", "6 ch"); this
   /// turns the ones we can be sure about back into a count, and leaves the rest
   /// null rather than guessing.
