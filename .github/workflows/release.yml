@@ -307,7 +307,7 @@ jobs:
           OutputDir=dist
           OutputBaseFilename=Shuro-v$env:VERSION_NAME-windows-x64-setup
           WizardStyle=modern
-          CloseApplications=yes
+          CloseApplications=force
           RestartApplications=no
           Compression=lzma2
           SolidCompression=yes
