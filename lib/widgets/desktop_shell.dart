@@ -79,6 +79,28 @@ class _DesktopShellState extends State<DesktopShell> {
     setState(() => _lyricsOpen = !_lyricsOpen);
   }
 
+  /// CallbackShortcuts reports a matched key as handled even when its callback
+  /// does nothing, so the old "skip when typing" check still swallowed the key:
+  /// a space typed in the search box never arrived, and Ctrl+Left/Right skipped
+  /// tracks instead of moving by word. This runs first (it is nearer the text
+  /// field in the focus tree) and tells the framework to stop propagating the
+  /// event WITHOUT marking it handled, so the text field gets it.
+  KeyEventResult _letTextFieldKeepKeys(FocusNode node, KeyEvent event) {
+    final primary = FocusManager.instance.primaryFocus;
+    final typing =
+        primary?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+    if (!typing) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final ctrl = HardwareKeyboard.instance.isControlPressed;
+    if (key == LogicalKeyboardKey.space ||
+        (ctrl &&
+            (key == LogicalKeyboardKey.arrowLeft ||
+                key == LogicalKeyboardKey.arrowRight))) {
+      return KeyEventResult.skipRemainingHandlers;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final song = context.watch<PlayerController>().currentSong;
@@ -111,6 +133,7 @@ class _DesktopShellState extends State<DesktopShell> {
       },
       child: Focus(
         autofocus: true,
+        onKeyEvent: _letTextFieldKeepKeys,
         child: Scaffold(
           backgroundColor: kSurfaceColor,
           body: SafeArea(

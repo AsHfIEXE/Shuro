@@ -48,7 +48,10 @@ Future<void> main() async {
     JustAudioMediaKit.ensureInitialized(linux: true, windows: true);
     // Native lifecycle is intentionally independent from the player: failure
     // to get a tray on a particular Linux shell must never prevent playback.
-    await DesktopLifecycle.instance.initialize();
+    // Bounded: a tray/DBus call that never answers must not hold up runApp.
+    await DesktopLifecycle.instance
+        .initialize()
+        .timeout(const Duration(seconds: 3), onTimeout: () {});
   }
   debugPrint('[boot] binding ready');
 

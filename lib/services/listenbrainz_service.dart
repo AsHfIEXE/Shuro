@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/metadata/listenbrainz_client.dart';
@@ -22,6 +23,17 @@ class ListenBrainzService extends ChangeNotifier {
 
   final ListenBrainzClient _client = ListenBrainzClient();
 
+  /// The token can submit (and delete) listens for the account, so it lives in
+  /// OS-backed secure storage like the server passwords — not in
+  /// SharedPreferences, which Android backups and file reads expose in clear.
+  static const FlutterSecureStorage _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  /// Earliest time the next submit may be attempted (rate limit / outage
+  /// backoff), so a failing endpoint is not hammered on every scrobble.
+  DateTime _nextAttempt = DateTime.fromMillisecondsSinceEpoch(0);
+
   String? _token;
   String? _username;
   bool _enabled = false;
@@ -41,13 +53,31 @@ class ListenBrainzService extends ChangeNotifier {
     _loaded = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _token = prefs.getString(_kToken);
+      try {
+        _token = await _secure.read(key: _kToken);
+      } catch (_) {
+        _token = null; // secure storage unavailable: ask for the token again
+      }
+      // One-time migration of tokens saved by earlier builds in plain prefs.
+      final legacy = prefs.getString(_kToken);
+      if (legacy != null) {
+        if (_token == null || _token!.isEmpty) {
+          _token = legacy;
+          try {
+            await _secure.write(key: _kToken, value: legacy);
+          } catch (_) {}
+        }
+        await prefs.remove(_kToken);
+      }
       _username = prefs.getString(_kUsername);
       _enabled = prefs.getBool('shuro_lb_enabled_v1') ?? (_token != null);
       final raw = prefs.getString(_kQueue);
       if (raw != null) {
-        final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-        _pending = list;
+        // Per-entry: one malformed entry must not discard the whole queue.
+        _pending = [
+          for (final e in (jsonDecode(raw) as List))
+            if (e is Map<String, dynamic>) e,
+        ];
       }
     } catch (_) {}
     notifyListeners();
@@ -56,26 +86,37 @@ class ListenBrainzService extends ChangeNotifier {
   /// Saves the user's token and validates it against the API.
   /// Returns the MusicBrainz username on success, null on failure.
   Future<String?> setToken(String token) async {
-    _token = token.trim();
-    _username = await _client.validateToken(_token!);
-    if (_username == null) {
-      _token = null;
-      notifyListeners();
+    final candidate = token.trim();
+    if (candidate.isEmpty) return null;
+    // Validate with a LOCAL value and commit only on success: assigning first
+    // meant a failed re-check (typo, network blip) wiped the working token and
+    // let scrobbles go out with an unvalidated one while the await was pending.
+    final name = await _client.validateToken(candidate);
+    if (name == null) return null;
+    // A different account must not inherit the previous account's listens.
+    if (_username != null && _username != name) {
+      _pending = [];
       await _persistQueue();
-      return null;
     }
+    _token = candidate;
+    _username = name;
     _enabled = true;
+    _nextAttempt = DateTime.fromMillisecondsSinceEpoch(0);
     notifyListeners();
     await _persistToken();
-    return _username;
+    return name;
   }
 
   Future<void> disconnect() async {
     _token = null;
     _username = null;
     _enabled = false;
+    // Listens queued for the old account must never reach whichever account
+    // connects next.
+    _pending = [];
     notifyListeners();
     await _persistToken();
+    await _persistQueue();
   }
 
   /// Feeds a now-playing ping (fire-and-forget, never queued).
@@ -105,6 +146,9 @@ class ListenBrainzService extends ChangeNotifier {
     required int listenedAtUnix,
   }) async {
     if (!isReady) return;
+    // ListenBrainz rejects a listen without track and artist names (400);
+    // queueing one would only block the queue behind it.
+    if (track.trim().isEmpty || artist.trim().isEmpty) return;
     _pending.add({
       'track': track,
       'artist': artist,
@@ -122,11 +166,12 @@ class ListenBrainzService extends ChangeNotifier {
   /// Sends queued listens oldest-first, stopping on failure (queue intact).
   Future<void> flush() async {
     if (_flushing || !isReady || _pending.isEmpty) return;
+    if (DateTime.now().isBefore(_nextAttempt)) return;
     _flushing = true;
     try {
       while (_pending.isNotEmpty) {
         final entry = _pending.first;
-        final ok = await _client.submitListen(
+        final result = await _client.submitListenResult(
           token: _token!,
           playingNow: false,
           trackName: entry['track'] as String? ?? '',
@@ -135,12 +180,32 @@ class ListenBrainzService extends ChangeNotifier {
           durationSeconds: entry['duration'] as int?,
           listenedAt: entry['listened_at'] as int?,
         );
-        if (!ok) return; // keep queue intact, retry on next opportunity
-        _pending.removeAt(0);
+        if (result.accepted || result.rejected) {
+          // Accepted, or permanently rejected (400): either way this entry is
+          // done — a rejected one must not block everything behind it.
+          if (result.rejected) {
+            debugPrint('[listenbrainz] dropping a rejected listen (400)');
+          }
+          _pending.removeAt(0);
+          continue;
+        }
+        if (result.unauthorized) {
+          // Revoked / wrong token: stop, keep the queue, and make the UI show
+          // "not connected" instead of failing silently forever.
+          _enabled = false;
+          notifyListeners();
+          return;
+        }
+        // Rate limit, server error or offline: back off, keep the queue.
+        final wait = result.retryAfterSeconds ??
+            (result.status == 429 ? 60 : (result.status == 0 ? 30 : 120));
+        _nextAttempt = DateTime.now().add(Duration(seconds: wait.clamp(10, 900)));
+        return;
       }
-      await _persistQueue();
     } finally {
       _flushing = false;
+      // Persist whatever was removed, including on a partial flush.
+      await _persistQueue();
     }
   }
 
@@ -148,12 +213,13 @@ class ListenBrainzService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_token != null) {
-        await prefs.setString(_kToken, _token!);
+        await _secure.write(key: _kToken, value: _token!);
         if (_username != null) await prefs.setString(_kUsername, _username!);
       } else {
-        await prefs.remove(_kToken);
+        await _secure.delete(key: _kToken);
         await prefs.remove(_kUsername);
       }
+      await prefs.remove(_kToken); // never leave a clear-text copy behind
     } catch (_) {}
   }
 
