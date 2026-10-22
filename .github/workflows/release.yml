@@ -185,10 +185,45 @@ jobs:
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+          # No pub-cache restore on the Android build: v2.5.2 shipped an APK
+          # whose dex held two generations of the shared_preferences plugin
+          # (NoSuchMethodError on getAll at runtime). Every release build
+          # resolves its plugins from a cold cache instead.
+          cache: false
 
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile
+
+      - name: Assert resolved plugins match the lockfile exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          # package_config.json is what the compiler actually uses; the
+          # lockfile is what we reviewed. They must agree, per package.
+          mismatches="$(python3 - <<'PY'
+          import json, re, sys
+          lock = open('pubspec.lock').read()
+          packages = {}
+          for block in lock.split('  ')[1:]:
+              m = re.search(r'name: ([\w.-]+)
+.*?version: "([^"]+)"', block, re.S)
+              if m:
+                  packages[m.group(1)] = m.group(2)
+          cfg = json.load(open('.dart_tool/package_config.json'))
+          bad = []
+          for pkg in cfg['packages']:
+              root = pkg['rootUri']
+              ver = re.search(r'-([0-9][\w.+-]*)$', root)
+              if ver and pkg['name'] in packages and packages[pkg['name']] != ver.group(1):
+                  bad.append('%s: lock=%s resolved=%s' % (pkg['name'], packages[pkg['name']], ver.group(1)))
+          print('
+'.join(bad))
+          PY
+          )"
+          if [[ -n "$mismatches" ]]; then
+            echo "::error::Resolved plugin versions disagree with pubspec.lock: $mismatches"
+            exit 1
+          fi
 
       - name: Configure and validate upload signing
         if: needs.preflight.outputs.android_signing_mode == 'release'
@@ -223,6 +258,24 @@ jobs:
           set -euo pipefail
           flutter build apk --release --build-name="$VERSION_NAME" --build-number="$BUILD_NUMBER"
           flutter build appbundle --release --build-name="$VERSION_NAME" --build-number="$BUILD_NUMBER"
+
+      - name: Guard the APK against mixed plugin generations
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A clean shared_preferences build contains only the
+          # SharedPreferences*Async*ApiRegistrar. The transitional
+          # 'SharedPreferencesApiRegistrar' class name appearing at all means
+          # two plugin generations got compiled together — the exact defect
+          # that shipped in v2.5.2 and crashed getAll at runtime.
+          total="$(grep -a -o 'SharedPreferencesApiRegistrar' build/app/outputs/flutter-apk/app-release.apk | wc -l || true)"
+          async_only="$(grep -a -o 'SharedPreferencesAsyncApiRegistrar' build/app/outputs/flutter-apk/app-release.apk | wc -l || true)"
+          ghost=$(( total - async_only ))
+          echo "registrar hits: total=$total async=$async_only ghost=$ghost"
+          if (( ghost > 0 )); then
+            echo "::error::APK contains a transitional SharedPreferencesApiRegistrar (mixed plugin generations). Refusing to ship."
+            exit 1
+          fi
 
       - name: Stage Android assets
         env:

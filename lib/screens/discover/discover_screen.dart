@@ -75,7 +75,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text('Discover', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
+                              child: Text('Shuro Pulse', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
                             ),
                             const Icon(Icons.auto_awesome_rounded, color: kBrandColor, size: 18),
                           ],

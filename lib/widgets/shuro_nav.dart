@@ -47,7 +47,7 @@ class ShuroNavBar extends StatelessWidget {
     _ShuroNavDestination(
         icon: Icons.auto_awesome_outlined,
         activeIcon: Icons.auto_awesome_rounded,
-        label: 'Discover'),
+        label: 'Shuro Pulse'),
     _ShuroNavDestination(
         icon: Icons.favorite_outlined,
         activeIcon: Icons.favorite_rounded,

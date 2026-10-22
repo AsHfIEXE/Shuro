@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'command_palette.dart';
+import 'desktop_menu_bar.dart';
+import '../services/desktop_lifecycle.dart';
 
 import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
@@ -47,7 +51,7 @@ class _DesktopShellState extends State<DesktopShell> {
     (Icons.home_rounded, 'Home'),
     (Icons.library_music_rounded, 'Library'),
     (Icons.search_rounded, 'Search'),
-    (Icons.auto_awesome_rounded, 'Discover'),
+    (Icons.auto_awesome_rounded, 'Shuro Pulse'),
     (Icons.favorite_rounded, 'Favorites'),
   ];
 
@@ -211,6 +215,13 @@ class _DesktopShellState extends State<DesktopShell> {
             bottom: false,
             child: Column(
               children: [
+                DesktopMenuBar(
+                  currentIndex: widget.currentIndex,
+                  onSelectTab: widget.onSelectTab,
+                  onToggleLyrics: _toggleLyrics,
+                  onOpenPalette: _openCommandPalette,
+                  onQuit: () => unawaited(DesktopLifecycle.instance.quitApplication()),
+                ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {

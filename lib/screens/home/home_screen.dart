@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -160,10 +162,8 @@ class HomeScreen extends StatelessWidget {
           duration: const Duration(milliseconds: 320),
           child: awaitingLibrary
               ? const _HomeSkeleton(key: ValueKey('skeleton'))
-              : RefreshIndicator(
+              : _HomeScroll(
                   key: const ValueKey('content'),
-                  color: kBrandColor,
-                  backgroundColor: kCardColor,
                   onRefresh: () => _refresh(context),
                   child: CustomScrollView(
                     slivers: [
@@ -185,6 +185,14 @@ class HomeScreen extends StatelessWidget {
                                   ],
                                 ),
                               ),
+                              if (!kIsWeb &&
+                                  (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+                                IconButton(
+                                  icon: const Icon(Icons.refresh_rounded,
+                                      color: Colors.white70),
+                                  tooltip: 'Refresh library',
+                                  onPressed: () => _refresh(context),
+                                ),
                               IconButton(
                                 icon: const Icon(Icons.download_rounded,
                                     color: Colors.white70),
@@ -603,6 +611,32 @@ class _SongRail extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+
+/// Pull-to-refresh belongs to touch. On desktop the same scroll view is
+/// wrapped in nothing — refresh lives in an explicit, visible button (and the
+/// command palette), because a mouse drag from the top of a window is not a
+/// gesture anyone looks for.
+class _HomeScroll extends StatelessWidget {
+  final Widget child;
+  final Future<void> Function() onRefresh;
+
+  const _HomeScroll({super.key, required this.child, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      return child;
+    }
+    return RefreshIndicator(
+      color: kBrandColor,
+      backgroundColor: kCardColor,
+      onRefresh: onRefresh,
+      child: child,
     );
   }
 }

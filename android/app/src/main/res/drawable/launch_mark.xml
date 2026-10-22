@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Shuro mark as a plain vector for the pre-Flutter launch window —
+     the same two gradient capsules as ic_launcher_foreground.xml, scaled to
+     read at launch size and centered by the layer-list. A vector here means
+     one asset is pixel-correct on every density, unlike the old bitmap. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:rotation="-48.7"
+        android:pivotX="54"
+        android:pivotY="54">
+
+        <path
+            android:pathData="M37.8,33.4 L72.7,33.4"
+            android:strokeWidth="23.4"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="37.8"
+                    android:startY="33.4"
+                    android:endX="72.7"
+                    android:endY="33.4">
+                    <item android:offset="0" android:color="#FFA78BFA" />
+                    <item android:offset="1" android:color="#FF7C3AED" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <path
+            android:pathData="M35.3,74.6 L70.2,74.6"
+            android:strokeWidth="23.4"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="35.3"
+                    android:startY="74.6"
+                    android:endX="70.2"
+                    android:endY="74.6">
+                    <item android:offset="0" android:color="#FF7C3AED" />
+                    <item android:offset="1" android:color="#FF00D4FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>
