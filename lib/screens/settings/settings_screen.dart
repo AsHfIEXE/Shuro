@@ -117,8 +117,61 @@ Future<void> showListenBrainzSheet(BuildContext context) async {
 }
 
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  /// Jump-to targets. One key per section, created on first use so the index
+  /// and the widgets can never disagree about ids.
+  final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
+  String? _highlighted;
+
+  GlobalKey _sectionKey(String id) =>
+      _sectionKeys.putIfAbsent(id, () => GlobalKey(debugLabel: 'settings-$id'));
+
+  /// Every section, with the words a user would actually type to find it.
+  static const List<({String id, String title, String keywords})> _index = [
+    (id: 'account', title: 'Account', keywords: 'sign in server user logout connect disconnect'),
+    (id: 'playback', title: 'Playback', keywords: 'quality stream streaming gapless fade replaygain speed silence crossfade'),
+    (id: 'lyrics', title: 'Lyrics', keywords: 'lyrics offset sync font auto follow'),
+    (id: 'downloads', title: 'Downloads', keywords: 'download offline storage save'),
+    (id: 'cache', title: 'Cache', keywords: 'cache clear size storage free'),
+    (id: 'appearance', title: 'Appearance', keywords: 'theme dark light font accent colour color background immersive'),
+    (id: 'behavior', title: 'Behaviour', keywords: 'behaviour behavior notifications headset resume pause'),
+    (id: 'server', title: 'Server', keywords: 'server url address navidrome connect'),
+    (id: 'reset', title: 'Reset', keywords: 'reset delete wipe data clear everything'),
+    (id: 'performance', title: 'Performance', keywords: 'performance overlay diagnostics fps jank'),
+    (id: 'listenbrainz', title: 'ListenBrainz', keywords: 'listenbrainz scrobble token submit queue'),
+    (id: 'about', title: 'About', keywords: 'about version licences licenses sources report'),
+  ];
+
+  Future<void> _jumpToSection(String id) async {
+    setState(() => _highlighted = id);
+    final target = _sectionKeys[id]?.currentContext;
+    if (target != null) {
+      await Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+        alignment: 0.06,
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1400));
+    if (mounted) setState(() => _highlighted = null);
+  }
+
+  Future<void> _openSettingsSearch(BuildContext context) async {
+    final picked = await showDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (dialogContext) => _SettingsSearchDialog(index: _index),
+    );
+    if (picked != null && mounted) await _jumpToSection(picked);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,11 +217,17 @@ class SettingsScreen extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Find a setting',
+                      onPressed: () => _openSettingsSearch(context),
+                      icon: const Icon(Icons.search_rounded),
+                    ),
                   ],
                 ),
               ),
 
-              _SectionLabel('ACCOUNT'),
+              _SectionLabel('ACCOUNT', key: _sectionKey('account'), highlighted: _highlighted == 'account'),
               _NavRow(
                 icon: Icons.dns_rounded,
                 label: 'Server',
@@ -206,7 +265,7 @@ class SettingsScreen extends StatelessWidget {
                     _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
               ),
 
-              _SectionLabel('PLAYBACK'),
+              _SectionLabel('PLAYBACK', key: _sectionKey('playback'), highlighted: _highlighted == 'playback'),
               // This is Android's system DSP. Do not present a dead desktop
               // control as though libmpv had received an equalizer setting.
               if (defaultTargetPlatform == TargetPlatform.android)
@@ -270,7 +329,7 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (v) => playbackPrefs.setSkipSilence(v),
               ),
 
-              _SectionLabel('LYRICS'),
+              _SectionLabel('LYRICS', key: _sectionKey('lyrics'), highlighted: _highlighted == 'lyrics'),
               _ToggleRow(
                   label: 'Auto-scroll',
                   value: appState.lyricsAutoScroll,
@@ -284,7 +343,7 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => _adjustLyricsSync(context, appState),
               ),
 
-              _SectionLabel('DOWNLOADS'),
+              _SectionLabel('DOWNLOADS', key: _sectionKey('downloads'), highlighted: _highlighted == 'downloads'),
               _NavRow(
                 icon: Icons.download_rounded,
                 label: 'Download quality',
@@ -332,10 +391,10 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
 
-              _SectionLabel('CACHE'),
+              _SectionLabel('CACHE', key: _sectionKey('cache'), highlighted: _highlighted == 'cache'),
               const _CacheSection(),
 
-              _SectionLabel('APPEARANCE'),
+              _SectionLabel('APPEARANCE', key: _sectionKey('appearance'), highlighted: _highlighted == 'appearance'),
               // No tap affordance: Shuro is deliberately dark-only (part of
               // its brand identity, not an oversight), so there's no picker
               // to open — this states that rather than pretending to offer one.
@@ -407,7 +466,7 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
 
-              _SectionLabel('BEHAVIOR'),
+              _SectionLabel('BEHAVIOR', key: _sectionKey('behavior'), highlighted: _highlighted == 'behavior'),
               _ToggleRow(
                 label: 'Private listening',
                 value: appState.privateListening,
@@ -441,7 +500,7 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: (v) => appState
                       .toggleSetting(() => appState.resumePlayback = v)),
 
-              const _SectionLabel('SERVER'),
+              _SectionLabel('SERVER', key: _sectionKey('server'), highlighted: _highlighted == 'server'),
               _NavRow(
                 icon: Icons.sync_rounded,
                 label: 'Rescan server library',
@@ -449,7 +508,7 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => _rescanServer(context),
               ),
 
-              const _SectionLabel('RESET'),
+              _SectionLabel('RESET', key: _sectionKey('reset'), highlighted: _highlighted == 'reset'),
               _NavRow(
                 icon: Icons.restart_alt_rounded,
                 label: 'Reset app data',
@@ -462,16 +521,16 @@ class SettingsScreen extends StatelessWidget {
                 'then closes the app. Nothing on your Navidrome server is touched.',
               ),
 
-              const _SectionLabel('PERFORMANCE'),
+              _SectionLabel('PERFORMANCE', key: _sectionKey('performance'), highlighted: _highlighted == 'performance'),
               const _PerformanceTile(),
 
-              const _SectionLabel('LISTENBRAINZ'),
+              _SectionLabel('LISTENBRAINZ', key: _sectionKey('listenbrainz'), highlighted: _highlighted == 'listenbrainz'),
             _NavRow(
               icon: Icons.graphic_eq_rounded,
               label: 'ListenBrainz',
               onTap: () => showListenBrainzSheet(context),
             ),
-            const _SectionLabel('ABOUT'),
+            _SectionLabel('ABOUT', key: _sectionKey('about'), highlighted: _highlighted == 'about'),
               const _AboutBlock(),
               _NavRow(
                   icon: Icons.info_outline_rounded,
@@ -1506,10 +1565,16 @@ class _AboutBlock extends StatelessWidget {
 
 class _SectionLabel extends StatelessWidget {
   final String label;
-  const _SectionLabel(this.label);
+  final bool highlighted;
+  const _SectionLabel(this.label, {super.key, this.highlighted = false});
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+        color: highlighted
+            ? kBrandColor.withValues(alpha: 0.10)
+            : Colors.transparent,
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
         child: Row(
           children: [
@@ -1823,4 +1888,104 @@ class _Note extends StatelessWidget {
               color: kMutedTextColor, fontSize: 11.5, height: 1.5),
         ),
       );
+}
+
+
+/// Filter-as-you-type index over the settings sections. Returns the section id
+/// the user picked, or null. Deliberately does not search individual rows: a
+/// section jump is honest about where it lands, whereas a row-level index
+/// would break the moment a row is reworded.
+class _SettingsSearchDialog extends StatefulWidget {
+  final List<({String id, String title, String keywords})> index;
+
+  const _SettingsSearchDialog({required this.index});
+
+  @override
+  State<_SettingsSearchDialog> createState() => _SettingsSearchDialogState();
+}
+
+class _SettingsSearchDialogState extends State<_SettingsSearchDialog> {
+  String _query = '';
+
+  List<({String id, String title, String keywords})> get _matches {
+    if (_query.isEmpty) return widget.index;
+    final q = _query.toLowerCase();
+    return widget.index
+        .where((e) =>
+            e.title.toLowerCase().contains(q) ||
+            e.keywords.contains(q))
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = _matches;
+    return Dialog(
+      backgroundColor: kCardColor,
+      alignment: Alignment.topCenter,
+      insetPadding: const EdgeInsets.only(top: 110, left: 28, right: 28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                autofocus: true,
+                cursorColor: kBrandColor,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kTextColor, fontSize: 14),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  prefixIcon:
+                      const Icon(Icons.search_rounded, size: 18, color: Colors.white38),
+                  hintText: 'Find a setting…',
+                  hintStyle: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white30, fontSize: 14),
+                ),
+                onChanged: (v) => setState(() => _query = v.trim()),
+              ),
+            ),
+            const Divider(height: 1, color: Color(0x14FFFFFF)),
+            if (matches.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 26),
+                child: Text('Nothing matches “$_query”',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white38, fontSize: 13)),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: matches.length,
+                  itemBuilder: (context, i) {
+                    final entry = matches[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(entry.title,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kTextColor, fontSize: 13.5)),
+                      subtitle: _query.isEmpty
+                          ? null
+                          : Text(entry.keywords,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: Colors.white30, fontSize: 10.5)),
+                      trailing: const Icon(Icons.arrow_forward_rounded,
+                          size: 15, color: Colors.white24),
+                      onTap: () => Navigator.of(context).pop(entry.id),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
