@@ -7,7 +7,7 @@ Each item is a focused session's work, not a bullet to rush.
 
 ## Status
 
-Last updated 13 Oct 2026. A tick means the behaviour exists in `main` and is
+Last updated 13 Oct 2026. 190 widget/unit cases across 23 suites, plus a 20-seed chaos run. A tick means the behaviour exists in `main` and is
 covered by the analyzer plus at least one test; it does not mean it has been
 exercised on a physical device.
 
@@ -19,7 +19,7 @@ exercised on a physical device.
 | 4 | Android home-screen widget | Not started |
 | 5 | ListenBrainz polish | Shipped (Retry-After, 401 stop, queue cap, per-result outcomes) |
 | 6 | Playlist "Add songs" | Shipped — multi-select picker with search |
-| 7 / 26 | Context menus | Songs done; albums/artists/playlists pending |
+| 7 / 26 | Context menus | Shipped — songs, albums, artists, playlists; entries are real menu types so no action is filtered out |
 | 8 | Preamp / loudness | Not started (needs a device to prove the effect chain) |
 | 9 | Per-output-device profiles | Not started |
 | 10 | Signal-path summary | Shipped — Audio Info card, wording pinned by tests |
@@ -27,7 +27,7 @@ exercised on a physical device.
 | 12 | Music disk cache | Not started |
 | 13–20 | Audiobookshelf domain | Foundation only (`audiobookshelf_api`, `spoken_media`, `spoken_library_state`) |
 | 21 | Lyric editing | Not started |
-| 22 | Playlist covers | Not started |
+| 22 | Playlist covers | Shipped — picker, downscale to 512 px, persists across restarts |
 | 23 | Library health | Shipped — missing artwork, blank artist/album, unknown length, exact duplicates |
 | 24 | Rediscovery | Shipped — "Rediscover" shelf for favourites outside the recent-play window |
 | 25 | Settings search | Shipped — section index, jump and highlight |

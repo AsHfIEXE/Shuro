@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:path_provider/path_provider.dart';
 
@@ -42,8 +43,54 @@ class PlaylistCoverStore {
     try {
       final name = safeName(playlistId);
       final file = File('${dir.path}${Platform.pathSeparator}$name.img');
-      await file.writeAsBytes(bytes, flush: true);
+      final stored = await shrink(bytes) ?? bytes;
+      await file.writeAsBytes(stored, flush: true);
       return file.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Largest edge kept for a stored cover. The cover is drawn between about 72
+  /// and 240 logical pixels, so anything bigger is wasted disk and decode
+  /// memory: a camera photo is normally 4000 px wide.
+  static const int maxEdge = 512;
+
+  /// Decodes [bytes] and re-encodes them as a PNG no larger than [maxEdge].
+  ///
+  /// Returns null when the bytes are not a decodable image or the engine
+  /// refuses; the caller then stores the original bytes rather than failing the
+  /// save, so a cover the user picked is never silently dropped.
+  static Future<Uint8List?> shrink(Uint8List bytes, {int edge = maxEdge}) async {
+    try {
+      final probe = await ui.instantiateImageCodec(bytes);
+      final frame = await probe.getNextFrame();
+      final width = frame.image.width;
+      final height = frame.image.height;
+      frame.image.dispose();
+      probe.dispose();
+
+      if (width <= edge && height <= edge) {
+        // Already small: keep the exact bytes the user chose.
+        return null;
+      }
+
+      final longest = width > height ? width : height;
+      final scale = edge / longest;
+      final targetWidth = (width * scale).round().clamp(1, edge);
+      final targetHeight = (height * scale).round().clamp(1, edge);
+
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
+      );
+      final resized = await codec.getNextFrame();
+      final data =
+          await resized.image.toByteData(format: ui.ImageByteFormat.png);
+      resized.image.dispose();
+      codec.dispose();
+      return data?.buffer.asUint8List();
     } catch (_) {
       return null;
     }
