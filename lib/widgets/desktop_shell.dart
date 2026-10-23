@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'command_palette.dart';
-import 'desktop_menu_bar.dart';
 import '../services/desktop_lifecycle.dart';
 
 import '../models/download_state.dart' show PlayerRepeatMode;
@@ -21,6 +20,7 @@ import '../services/playback_prefs.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'app_logo.dart';
 import 'artwork_thumb.dart';
 import 'page_transitions.dart';
@@ -56,19 +56,27 @@ class _DesktopShellState extends State<DesktopShell> {
   ];
 
   bool _sidebarCollapsed = false;
+
+  /// Every page pushed from inside the shell lands on this navigator, so the
+  /// sidebar and the player bar stay on screen. Pushing on the root navigator
+  /// (the old behaviour) covered the whole window and made the app feel like a
+  /// phone app with a desktop skin.
+  final GlobalKey<NavigatorState> _contentNavKey = GlobalKey<NavigatorState>();
+
+  NavigatorState? get _contentNav => _contentNavKey.currentState;
   bool _lyricsOpen = false;
 
   void _openSettings() =>
-      Navigator.of(context).push(drillDownRoute(const SettingsScreen()));
+      _contentNav?.push(drillDownRoute(const SettingsScreen()));
 
   void _openDownloads() =>
-      Navigator.of(context).push(drillDownRoute(const DownloadsScreen()));
+      _contentNav?.push(drillDownRoute(const DownloadsScreen()));
 
   void _openShelves() =>
-      Navigator.of(context).push(drillDownRoute(const PersonalShelvesScreen()));
+      _contentNav?.push(drillDownRoute(const PersonalShelvesScreen()));
 
   void _openSpoken() =>
-      Navigator.of(context).push(drillDownRoute(const SpokenLibraryScreen()));
+      _contentNav?.push(drillDownRoute(const SpokenLibraryScreen()));
 
   /// Ctrl+Shift+P launcher. Every entry closes over an action that already
   /// exists elsewhere in the shell, so there is exactly one implementation of
@@ -155,8 +163,24 @@ class _DesktopShellState extends State<DesktopShell> {
   /// One shared implementation for every "collapse the sidebar" entry
   /// point — the sidebar's own button, the header quick menu, and the
   /// command palette all call this, so there is a single toggle to change.
-  void _toggleSidebar() =>
-      setState(() => _sidebarCollapsed = !_sidebarCollapsed);
+  /// True once the user has pressed the collapse control themselves. After
+  /// that the window width stops deciding for them.
+  bool _sidebarChosenByUser = false;
+
+  void _toggleSidebar() => setState(() {
+        _sidebarCollapsed = !_sidebarCollapsed;
+        _sidebarChosenByUser = true;
+      });
+
+  /// Applies the width rule below the design threshold (1100 px) unless the
+  /// user has made an explicit choice.
+  void _applyAutoCollapse(double width) {
+    if (_sidebarChosenByUser) return;
+    final shouldCollapse = width < DesktopTokens.autoCollapseBelow;
+    if (shouldCollapse != _sidebarCollapsed) {
+      _sidebarCollapsed = shouldCollapse;
+    }
+  }
 
   /// CallbackShortcuts reports a matched key as handled even when its callback
   /// does nothing, so the old "skip when typing" check still swallowed the key:
@@ -209,6 +233,8 @@ class _DesktopShellState extends State<DesktopShell> {
             widget.onSelectTab(2),
         const SingleActivator(LogicalKeyboardKey.digit4, control: true): () =>
             widget.onSelectTab(3),
+        const SingleActivator(LogicalKeyboardKey.keyB, control: true):
+            _toggleSidebar,
         const SingleActivator(LogicalKeyboardKey.digit5, control: true): () =>
             widget.onSelectTab(4),
       },
@@ -221,16 +247,10 @@ class _DesktopShellState extends State<DesktopShell> {
             bottom: false,
             child: Column(
               children: [
-                DesktopMenuBar(
-                  currentIndex: widget.currentIndex,
-                  onSelectTab: widget.onSelectTab,
-                  onToggleLyrics: _toggleLyrics,
-                  onOpenPalette: _openCommandPalette,
-                  onQuit: () => unawaited(DesktopLifecycle.instance.quitApplication()),
-                ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
+                      _applyAutoCollapse(constraints.maxWidth + 240);
                       final showInspector =
                           _lyricsOpen && constraints.maxWidth >= 1240;
                       return Row(
@@ -261,10 +281,20 @@ class _DesktopShellState extends State<DesktopShell> {
                                 ),
                                 const Divider(height: 1, color: kDividerColor),
                                 Expanded(
-                                  child: IndexedStack(
-                                    key: widget.tabStackKey,
-                                    index: widget.currentIndex,
-                                    children: widget.tabChildren,
+                                  // The content navigator: tabs are the
+                                  // first route, pushed pages stack on top of
+                                  // them, the shell never leaves.
+                                  child: Navigator(
+                                    key: _contentNavKey,
+                                    onGenerateRoute: (settings) =>
+                                        MaterialPageRoute<void>(
+                                      settings: settings,
+                                      builder: (_) => IndexedStack(
+                                        key: widget.tabStackKey,
+                                        index: widget.currentIndex,
+                                        children: widget.tabChildren,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -286,7 +316,7 @@ class _DesktopShellState extends State<DesktopShell> {
                 _PlayerDock(
                   lyricsOpen: _lyricsOpen,
                   onLyrics: _toggleLyrics,
-                  onLyricsPage: () => Navigator.of(context).push(
+                  onLyricsPage: () => _contentNav?.push(
                     drillDownRoute(
                         LyricsScreen(initialSong: song, embedded: false)),
                   ),
@@ -328,7 +358,9 @@ class _DesktopSidebar extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
-      width: collapsed ? 76 : 236,
+      width: collapsed
+          ? DesktopTokens.sidebarCollapsed
+          : DesktopTokens.sidebarExpanded,
       decoration: const BoxDecoration(color: kCardColor),
       child: SafeArea(
         right: false,
@@ -351,11 +383,16 @@ class _DesktopSidebar extends StatelessWidget {
                     ),
                   ),
                   if (!collapsed)
-                    IconButton(
-                      tooltip: 'Collapse navigation',
-                      onPressed: onCollapse,
-                      color: Colors.white60,
-                      icon: const Icon(Icons.menu_open_rounded, size: 21),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        'Shuro',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white60,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3),
+                      ),
                     ),
                 ],
               ),
@@ -391,7 +428,9 @@ class _DesktopSidebar extends StatelessWidget {
               child: const Divider(height: 1, color: kDividerColor),
             ),
             _RailItem(
-              icon: Icons.auto_awesome_rounded,
+              // A shelf, not the Pulse sparkle: the two destinations were
+              // indistinguishable in the collapsed rail.
+              icon: Icons.view_agenda_outlined,
               label: 'Personal shelves',
               collapsed: collapsed,
               onTap: onShelves,
@@ -409,6 +448,14 @@ class _DesktopSidebar extends StatelessWidget {
               onTap: onDownloads,
             ),
             const Spacer(),
+            _RailItem(
+              icon: collapsed
+                  ? Icons.keyboard_double_arrow_right_rounded
+                  : Icons.keyboard_double_arrow_left_rounded,
+              label: 'Collapse sidebar',
+              collapsed: collapsed,
+              onTap: onCollapse,
+            ),
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: _RailItem(
@@ -556,6 +603,72 @@ class _DesktopHeader extends StatelessWidget {
     );
   }
 
+  /// The same row shape as [_quickItem], for entries that are built inline
+  /// (dividers, keybinding reference, quit).
+  Widget _quickRowContent(IconData icon, String label) => Row(
+        children: [
+          Icon(icon, size: 17, color: Colors.white70),
+          const SizedBox(width: 10),
+          Text(label,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white, fontSize: 12.5)),
+        ],
+      );
+
+  /// Keyboard reference, carried over from the retired menu bar so the
+  /// shortcut list did not disappear with that row.
+  void _showShortcuts(BuildContext context) {
+    final rows = <(String, String)>[
+      ('Space', 'Play / pause'),
+      ('Ctrl+→ / Ctrl+←', 'Next / previous track'),
+      ('Ctrl+1 … Ctrl+5', 'Home, Library, Search, Shuro Pulse, Favorites'),
+      ('Ctrl+K', 'Search'),
+      ('Ctrl+L', 'Lyrics panel'),
+      ('Ctrl+Shift+P', 'Command palette'),
+      ('Ctrl+B', 'Collapse sidebar'),
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: kCardColor,
+        title: Text('Keyboard shortcuts',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 15)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (keys, action) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 150,
+                      child: Text(keys,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kBrandColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    Expanded(
+                      child: Text(action,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: Colors.white60, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -646,6 +759,10 @@ class _DesktopHeader extends StatelessWidget {
                     onOpenPalette();
                   case 'sidebar':
                     onCollapseSidebar();
+                  case 'shortcuts':
+                    _showShortcuts(context);
+                  case 'quit':
+                    unawaited(DesktopLifecycle.instance.quitApplication());
                 }
               },
               itemBuilder: (context) => [
@@ -669,6 +786,17 @@ class _DesktopHeader extends StatelessWidget {
                   label: sidebarCollapsed
                       ? 'Expand sidebar'
                       : 'Collapse sidebar',
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'shortcuts',
+                  child: _quickRowContent(Icons.keyboard_rounded,
+                      'Keyboard shortcuts'),
+                ),
+                PopupMenuItem<String>(
+                  value: 'quit',
+                  child:
+                      _quickRowContent(Icons.power_settings_new_rounded, 'Quit'),
                 ),
               ],
             ),
@@ -740,11 +868,13 @@ class _PlayerDockState extends State<_PlayerDock> {
     final song = player.currentSong;
     if (song == null) return const _EmptyPlayerDock();
 
-    final accent =
-        song.gradientColors.isNotEmpty ? song.gradientColors.last : kBrandColor;
+    // Accent rule (design doc): chrome is always brand violet. The per-song
+    // gradient is a placeholder derived from the id, so using it here made the
+    // play button orange for a teal cover and green for a red one.
+    const accent = kBrandColor;
     final favorite = appState.isFavoriteSong(song.id);
     return Container(
-      height: 100,
+      height: DesktopTokens.playerBarHeight,
       decoration: const BoxDecoration(
         color: kCardColor,
         border: Border(top: BorderSide(color: kDividerColor)),
@@ -837,7 +967,7 @@ class _EmptyPlayerDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 100,
+      height: DesktopTokens.playerBarHeight,
       alignment: Alignment.center,
       decoration: const BoxDecoration(
         color: kCardColor,

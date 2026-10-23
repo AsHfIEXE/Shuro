@@ -15,6 +15,7 @@ import '../../services/rediscovery.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
 import '../../widgets/album_card.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/recent_song_card.dart';
@@ -620,6 +621,24 @@ class _SongRail extends StatelessWidget {
 /// wrapped in nothing — refresh lives in an explicit, visible button (and the
 /// command palette), because a mouse drag from the top of a window is not a
 /// gesture anyone looks for.
+/// Desktop width discipline (design doc): Home is designed for 1280 px and
+/// extra window width becomes margin. Mobile keeps the full width it has
+/// always had.
+class _HomeFrame extends StatelessWidget {
+  final Widget child;
+
+  const _HomeFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb ||
+        !(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      return child;
+    }
+    return DesktopContentFrame(child: child);
+  }
+}
+
 class _HomeScroll extends StatelessWidget {
   final Widget child;
   final Future<void> Function() onRefresh;
@@ -630,7 +649,7 @@ class _HomeScroll extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      return child;
+      return _HomeFrame(child: child);
     }
     return RefreshIndicator(
       color: kBrandColor,
