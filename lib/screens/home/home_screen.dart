@@ -21,6 +21,7 @@ import '../../widgets/page_transitions.dart';
 import '../../widgets/recent_song_card.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/shimmer_box.dart';
+import '../../widgets/shelf_row.dart';
 import '../../widgets/state_views.dart';
 import '../album/album_detail_screen.dart';
 import '../collection/collection_screens.dart';
@@ -592,22 +593,21 @@ class _SongRail extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (showHeader) SectionHeader(title: title, onSeeAll: onSeeAll),
-          SizedBox(
+          // ShelfRow (phase 3): hover arrows step whole cards so a mouse
+          // never needs shift-wheel, and no card stops half-cut.
+          ShelfRow(
             height: cardRailHeight(context),
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: songs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (context, i) {
-                final song = songs[i];
-                return RecentSongCard(
-                  song: song,
-                  isPlaying: song.id == currentSongId,
-                  onTap: () => onTapSong(song),
-                );
-              },
-            ),
+            cardWidth: 150,
+            gap: 16,
+            itemCount: songs.length,
+            itemBuilder: (context, i) {
+              final song = songs[i];
+              return RecentSongCard(
+                song: song,
+                isPlaying: song.id == currentSongId,
+                onTap: () => onTapSong(song),
+              );
+            },
           ),
           const SizedBox(height: 8),
         ],
