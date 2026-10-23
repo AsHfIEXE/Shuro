@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -62,9 +64,14 @@ class DesktopLifecycle with WindowListener, TrayListener {
   }
 
   Future<bool> _installTray() async {
+    // An installed app's working directory is not the exe's directory, and
+    // the loose .ico is not shipped beside the exe — a relative path broke
+    // the tray on every real install. Resolve the bundled asset absolutely
+    // from the executable instead.
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
     final iconPath = defaultTargetPlatform == TargetPlatform.windows
-        ? 'windows/runner/resources/app_icon.ico'
-        : '_assets/icon_512.png';
+        ? '$exeDir/data/flutter_assets/windows/runner/resources/app_icon.ico'
+        : '$exeDir/data/flutter_assets/_assets/icon_512.png';
     await trayManager.setIcon(iconPath);
     await trayManager.setToolTip('Shuro');
     await trayManager.setContextMenu(
@@ -72,6 +79,13 @@ class DesktopLifecycle with WindowListener, TrayListener {
         items: [
           MenuItem(key: 'show', label: 'Show Shuro'),
           MenuItem(key: 'hide', label: 'Hide Shuro'),
+          MenuItem.separator(),
+          // Transport from the tray: the playbackCallback bridge has existed
+          // since the tray landed, but no menu item ever invoked it — the
+          // tray could only show/hide/quit.
+          MenuItem(key: 'play_pause', label: 'Play / Pause'),
+          MenuItem(key: 'previous', label: 'Previous track'),
+          MenuItem(key: 'next', label: 'Next track'),
           MenuItem.separator(),
           MenuItem(key: 'quit', label: 'Quit Shuro'),
         ],
@@ -109,6 +123,10 @@ class DesktopLifecycle with WindowListener, TrayListener {
         unawaited(showWindow());
       case 'hide':
         unawaited(hideWindow());
+      case 'play_pause':
+      case 'previous':
+      case 'next':
+        playbackCallback?.call(menuItem.key!);
       case 'quit':
         unawaited(quitApplication());
     }
