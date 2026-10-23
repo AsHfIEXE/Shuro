@@ -23,6 +23,7 @@ import '../../widgets/shuro_icons.dart';
 import 'lyrics_edit_sheet.dart';
 import 'lyrics_appearance_sheet.dart';
 import '../../services/lrc_tools.dart';
+import '../../services/lyrics_prefetch.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
 /// point: the screen follows [PlayerController.currentSong] from then on, so
@@ -244,7 +245,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
     }
 
     try {
-      final embedded = await _appState.fetchEmbeddedLyrics(song);
+      // Through the shared cache: if the prefetcher already warmed this track
+      // (it warms the current and next song on every change), this is a hit
+      // and the screen renders without waiting on the network at all.
+      final embedded = await EmbeddedLyricsCache.fetch(
+          song.id, () => _appState.fetchEmbeddedLyrics(song));
       if (embedded != null && embedded.lines.isNotEmpty) {
         return _LyricsView.found(embedded);
       }

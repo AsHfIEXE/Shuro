@@ -25,7 +25,11 @@ class DeviceBasics {
       map['App version'] = '${info.version} (${info.buildNumber})';
     } catch (_) {}
     try {
-      map['Operating system'] = 'Android ${Platform.operatingSystemVersion}';
+      // The OS name comes from the platform, not a hardcoded 'Android' — the
+      // Windows build's reports used to claim they were phones.
+      final os = Platform.operatingSystem;
+      final osLabel = os[0].toUpperCase() + os.substring(1);
+      map['Operating system'] = osLabel + ' ' + Platform.operatingSystemVersion;
     } catch (_) {}
     try {
       map['Locale'] = Platform.localeName;

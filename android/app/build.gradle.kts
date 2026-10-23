@@ -64,7 +64,7 @@ android {
             // ever re-enabled, proguard-rules.pro must keep the whole
             // sharedpreferences package first.
             isMinifyEnabled = false
-            shrinkResources = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

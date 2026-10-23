@@ -42,6 +42,8 @@ import 'widgets/shuro_nav.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/page_transitions.dart';
 import 'widgets/state_views.dart';
+import 'services/lyrics_prefetch.dart';
+import 'services/lyrics_service.dart';
 
 /// The app-level ListenBrainz submitter.
 final sharedListenBrainz = ListenBrainzService.instance;
@@ -332,6 +334,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _tabIndex = 0;
   AppState? _boundAppState;
   PlayerController? _boundPlayer;
+
+  /// Tears down the lyrics prefetch listener with this connector.
+  VoidCallback? _disposeLyricsPrefetch;
   String? _lastRecordedSongId;
 
   /// Tabs materialize on first visit (brief §2B): the shell used to build all
@@ -404,6 +409,30 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _boundAppState = appState;
       _boundPlayer = player;
       player.autoplay = appState.autoplay;
+
+      // Lyrics stay one step ahead of the user: the current and next tracks
+      // are warmed the moment playback moves, so opening the lyrics screen is
+      // a cache hit instead of a visible fetch on slow devices.
+      _disposeLyricsPrefetch = LyricsPrefetcher.start(
+        player: player,
+        currentSong: () => player.currentSong,
+        nextSong: () {
+          final queue = player.queue;
+          final index = player.queueIndex + 1;
+          return index < queue.length ? queue[index] : null;
+        },
+        embeddedFetch: appState.fetchEmbeddedLyrics,
+        onlineLookup: (song) async {
+          if (song.isLocal) return;
+          final album = appState.albumById(song.albumId)?.title;
+          await LyricsService.lookup(
+            title: song.title,
+            artist: song.artist,
+            album: album,
+            duration: song.duration,
+          );
+        },
+      );
 
       // One-time migration: mobile data used to default to "High (320 kbps)".
       // The owner wants the original file on every connection unless they
@@ -739,6 +768,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _disposeLyricsPrefetch?.call();
     _reconnectTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _boundAppState?.removeListener(_syncAutoplay);

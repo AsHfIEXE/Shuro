@@ -60,14 +60,36 @@ class AudiobookshelfApi {
     }).toList();
   }
 
+  /// Page size for library items. The server reports `numPages`; 100 keeps
+  /// each request fast while the loop below still collects everything.
+  static const int _itemsPageSize = 100;
+
+  /// Safety cap so a server reporting a pathological page count cannot pin
+  /// the app in a fetch loop (200 pages x 100 items = 20,000 items, well past
+  /// any real personal library).
+  static const int _itemsMaxPages = 200;
+
   Future<List<SpokenItem>> items(SpokenLibrary library) async {
-    final data = await _get('/libraries/${library.id}/items',
-        {'limit': '100', 'sort': 'media.metadata.title'});
-    final rows = data['results'] as List<dynamic>? ?? const [];
-    return rows
-        .whereType<Map<String, dynamic>>()
-        .map((row) => _item(row, library.type))
-        .toList();
+    // Fetch EVERY page. The single-request version returned the first 100
+    // items and silently stopped — the reported "not all data" bug: any
+    // library larger than one page looked truncated with no error.
+    final all = <SpokenItem>[];
+    for (var page = 0; page < _itemsMaxPages; page++) {
+      final data = await _get('/libraries/${library.id}/items', {
+        'limit': '$_itemsPageSize',
+        'page': '$page',
+        'sort': 'media.metadata.title'
+      });
+      final rows = data['results'] as List<dynamic>? ?? const [];
+      all.addAll(rows
+          .whereType<Map<String, dynamic>>()
+          .map((row) => _item(row, library.type)));
+      final numPages = data['numPages'];
+      final last =
+          numPages is num ? page + 1 >= numPages.toInt() : rows.isEmpty;
+      if (last || rows.isEmpty) break;
+    }
+    return all;
   }
 
   SpokenItem _item(Map<String, dynamic> row, SpokenMediaType type) {
