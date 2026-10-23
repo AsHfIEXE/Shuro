@@ -24,7 +24,7 @@ enum _SortColumn { title, artist, album, duration }
 // stay aligned. Title/Artist/Album flex instead of using fixed widths so the
 // table never overflows on a narrow desktop window.
 const double _indexWidth = 44;
-const double _durationWidth = 68;
+const double _durationWidth = 72;
 
 /// Desktop-only data-table song list for the Library Songs tab: a header row
 /// of sort buttons (Title / Artist / Album / Duration) over dense rows.

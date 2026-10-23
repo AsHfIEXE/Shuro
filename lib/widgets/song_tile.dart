@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +20,9 @@ import 'song_actions_sheet.dart';
 /// opens the shared "⋮" actions sheet.
 class SongTile extends StatelessWidget {
   final Song song;
+
+  /// Anchors the desktop ellipsis menu under the button.
+  static final GlobalKey _moreKey = GlobalKey(debugLabel: 'song-more');
   final VoidCallback onTap;
   final int? index;
   final bool showArtist;
@@ -96,9 +103,21 @@ class SongTile extends StatelessWidget {
                     color: accent, size: 18),
               ),
             IconButton(
+              key: _moreKey,
               icon: const Icon(Icons.more_vert_rounded,
                   color: kMutedTextColor, size: 20),
-              onPressed: () => showSongActionsSheet(context, song),
+              onPressed: () {
+                // A menu at the pointer on desktop, the sheet everywhere else
+                // (design doc: "Menus"). Long-press keeps the sheet on touch.
+                if (!kIsWeb &&
+                    (Platform.isWindows ||
+                        Platform.isLinux ||
+                        Platform.isMacOS)) {
+                  showSongMenuAtAnchor(context, song, _moreKey);
+                } else {
+                  showSongActionsSheet(context, song);
+                }
+              },
             ),
           ],
         ),

@@ -183,6 +183,28 @@ class _ContextMenuNoteState extends State<ContextMenuNote> {
       );
 }
 
+/// Opens the song menu AT A CONTROL (the row's ellipsis button), centred
+/// under it, instead of a phone bottom sheet. Desktop only; mobile callers
+/// keep using [showSongActionsSheet].
+Future<void> showSongMenuAtAnchor(
+  BuildContext context,
+  Song song,
+  GlobalKey anchorKey,
+) async {
+  final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  if (box == null || overlay == null) return;
+  final origin = box.localToGlobal(Offset(box.size.width, box.size.height),
+      ancestor: overlay);
+  await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromLTRB(origin.dx, origin.dy, origin.dx + 1, origin.dy + 1),
+    color: kCardColor,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    items: songContextMenuItems(context, song),
+  );
+}
+
 /// Convenience builder for song context menu items (used by right-click on
 /// any song row or card in the desktop shell).
 List<PopupMenuEntry<String>> songContextMenuItems(
