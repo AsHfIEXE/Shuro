@@ -41,7 +41,7 @@ class _AddToPlaylistSheet extends StatelessWidget {
               title: Text('New playlist', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14)),
               onTap: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).push(drillDownRoute(CreatePlaylistScreen(initialSongId: song.id)));
+                pushDrillDownOnce(context, CreatePlaylistScreen(initialSongId: song.id));
               },
             ),
             const Divider(height: 1, color: kDividerColor),

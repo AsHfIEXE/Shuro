@@ -159,7 +159,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                         artist: artist,
                                         onTap: () {
                                           _submit(_query);
-                                          Navigator.of(context).push(drillDownRoute(ArtistDetailScreen(artist: artist)));
+                                          pushDrillDownOnce(context, ArtistDetailScreen(artist: artist));
                                         },
                                       ),
                                     );
@@ -184,7 +184,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                         album: album,
                                         onTap: () {
                                           _submit(_query);
-                                          Navigator.of(context).push(drillDownRoute(AlbumDetailScreen(album: album)));
+                                          pushDrillDownOnce(context, AlbumDetailScreen(album: album));
                                         },
                                       ),
                                     );
@@ -199,7 +199,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                   playlist: playlist,
                                   onTap: () {
                                     _submit(_query);
-                                    Navigator.of(context).push(drillDownRoute(PlaylistDetailScreen(playlist: playlist)));
+                                    pushDrillDownOnce(context, PlaylistDetailScreen(playlist: playlist));
                                   },
                                 ),
                             ],

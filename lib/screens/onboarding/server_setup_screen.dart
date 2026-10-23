@@ -47,7 +47,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
     ));
     if (!mounted) return;
     if (appState.connectionStatus == ConnectionStatus.connected) {
-      Navigator.of(context).push(drillDownRoute(ConnectionSuccessScreen(isAddingAnother: widget.isAddingAnother)));
+      pushDrillDownOnce(context, ConnectionSuccessScreen(isAddingAnother: widget.isAddingAnother));
     }
   }
 

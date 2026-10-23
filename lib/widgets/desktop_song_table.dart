@@ -9,6 +9,7 @@ import '../models/song.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'desktop_context_menu.dart';
+import 'artwork_thumb.dart';
 
 /// True when running as a native desktop app — Windows, Linux or macOS,
 /// never web or a phone/tablet. The Library Songs tab swaps its mobile list
@@ -143,10 +144,26 @@ class _DesktopSongTableState extends State<DesktopSongTable> {
                         ),
                         Expanded(
                           flex: 4,
-                          child: _cellText(
-                            song.title,
-                            color: playing ? kBrandColor : Colors.white,
-                            weight: FontWeight.w600,
+                          child: Row(
+                            children: [
+                              // The doc's Table 4: the Title column carries a
+                              // 40 px cover — a music table without artwork
+                              // read as a text list (reported).
+                              ArtworkThumb(
+                                gradientColors: song.gradientColors,
+                                artwork: song.artwork,
+                                size: 40,
+                                radius: 6,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _cellText(
+                                  song.title,
+                                  color: playing ? kBrandColor : Colors.white,
+                                  weight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         Expanded(

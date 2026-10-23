@@ -49,7 +49,7 @@ class SmartPlaylistsScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded, color: kMutedTextColor),
               onTap: () {
                 final playlist = appState.createSmartPlaylist(preset);
-                Navigator.of(context).push(drillDownRoute(PlaylistDetailScreen(playlist: playlist)));
+                pushDrillDownOnce(context, PlaylistDetailScreen(playlist: playlist));
               },
             ),
         ],

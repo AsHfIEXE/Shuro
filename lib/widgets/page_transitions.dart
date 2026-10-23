@@ -58,6 +58,32 @@ void pushRisingOnce(BuildContext context, Widget page) {
 /// one consistent motion language rather than a different animation per
 /// screen; only the direction differs, matching the "coming from a list"
 /// vs. "rising over what's playing" mental models.
+/// Guards against the rage-tap page stack (reported: rapid presses open
+/// many copies of a page and the app gets stuck).
+String? _drillInFlight;
+DateTime _lastDrillAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+/// Pushes [page] with the drill-down transition, ignoring a push while the
+/// same destination is still animating in, ANY drill-down started within the
+/// last 350 ms, or the current route is already covered by another page.
+void pushDrillDownOnce(BuildContext context, Widget page) {
+  final route = ModalRoute.of(context);
+  if (route != null && !route.isCurrent) return;
+  final key = page.runtimeType.toString();
+  final now = DateTime.now();
+  if (_drillInFlight == key) return;
+  if (now.difference(_lastDrillAt) < const Duration(milliseconds: 350)) return;
+  final nav = Navigator.of(context);
+  final r = drillDownRoute<Object?>(page);
+  _drillInFlight = key;
+  _lastDrillAt = now;
+  // ignore: discarded_futures
+  r.popped.whenComplete(() {
+    if (_drillInFlight == key) _drillInFlight = null;
+  });
+  nav.push(r);
+}
+
 Route<T> drillDownRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
     transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 280),
