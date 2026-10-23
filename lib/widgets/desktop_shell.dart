@@ -882,77 +882,107 @@ class _PlayerDockState extends State<_PlayerDock> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 980;
+          // Three zones (design doc, Table 3): track identity left, transport
+          // centred UNDER the seek bar, auxiliaries right. The old bar put the
+          // transport ~1000px from the track name.
           return Row(
             children: [
-              const SizedBox(width: 18),
-              Semantics(
-                button: true,
-                label: 'Open now playing',
-                child: InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    drillDownRoute(NowPlayingScreen(initialSong: song)),
-                  ),
-                  borderRadius: BorderRadius.circular(11),
-                  child: ArtworkThumb(
-                    gradientColors: song.gradientColors,
-                    artwork: song.artwork,
-                    size: 62,
-                    radius: 11,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 13),
+              // --- Left zone: identity ----------------------------------
               SizedBox(
-                width: compact ? 150 : 210,
-                child: _TrackIdentity(song: song),
-              ),
-              if (compact)
-                const Spacer()
-              else ...[
-                const SizedBox(width: 18),
-                Expanded(
-                    child: _SeekControl(
-                        player: player, song: song, accent: accent)),
-              ],
-              _Transport(player: player, accent: accent, compact: compact),
-              if (compact)
-                IconButton(
-                  tooltip: 'Lyrics',
-                  onPressed: widget.onLyricsPage,
-                  icon: const Icon(Icons.lyrics_rounded, color: Colors.white54),
-                ),
-              if (!compact) ...[
-                const SizedBox(width: 10),
-                _VolumeControl(
-                  volume: playbackPrefs.appVolume,
-                  enabled: true,
-                  onChanged: playbackPrefs.setAppVolume,
-                ),
-                IconButton(
-                  tooltip: 'Lyrics',
-                  onPressed: widget.onLyricsPage,
-                  icon: const Icon(Icons.lyrics_rounded, color: Colors.white54),
-                ),
-                IconButton(
-                  tooltip: 'Queue',
-                  onPressed: () => Navigator.of(context)
-                      .push(drillDownRoute(const QueueScreen())),
-                  icon: const Icon(Icons.queue_music_rounded,
-                      color: Colors.white54),
-                ),
-                IconButton(
-                  tooltip:
-                      favorite ? 'Remove from favourites' : 'Add to favourites',
-                  onPressed: () => appState.toggleFavoriteSong(song.id),
-                  icon: Icon(
-                    favorite
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    color: favorite ? accent : Colors.white54,
+                width: compact ? 240 : 320,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Row(
+                    children: [
+                      Semantics(
+                        button: true,
+                        label: 'Open now playing',
+                        child: InkWell(
+                          onTap: () => Navigator.of(context).push(
+                            drillDownRoute(NowPlayingScreen(initialSong: song)),
+                          ),
+                          borderRadius: BorderRadius.circular(11),
+                          child: ArtworkThumb(
+                            gradientColors: song.gradientColors,
+                            artwork: song.artwork,
+                            size: 56,
+                            radius: 11,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 13),
+                      Expanded(child: _TrackIdentity(song: song)),
+                      IconButton(
+                        tooltip: favorite
+                            ? 'Remove from favourites'
+                            : 'Add to favourites',
+                        onPressed: () => appState.toggleFavoriteSong(song.id),
+                        icon: Icon(
+                          favorite
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          color: favorite ? accent : Colors.white54,
+                          size: 19,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-              const SizedBox(width: 10),
+              ),
+              // --- Center zone: transport over seek ---------------------
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _Transport(player: player, accent: accent, compact: false),
+                    const SizedBox(height: 2),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: _SeekControl(
+                            player: player, song: song, accent: accent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // --- Right zone: auxiliaries ------------------------------
+              if (!compact)
+                SizedBox(
+                  width: 300,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _VolumeControl(
+                        volume: playbackPrefs.appVolume,
+                        enabled: true,
+                        onChanged: playbackPrefs.setAppVolume,
+                      ),
+                      IconButton(
+                        tooltip: 'Lyrics',
+                        onPressed: widget.onLyricsPage,
+                        icon: const Icon(Icons.lyrics_rounded,
+                            color: Colors.white54),
+                      ),
+                      IconButton(
+                        tooltip: 'Queue',
+                        onPressed: () => Navigator.of(context)
+                            .push(drillDownRoute(const QueueScreen())),
+                        icon: const Icon(Icons.queue_music_rounded,
+                            color: Colors.white54),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                  ),
+                ),
+              if (compact)
+                IconButton(
+                  tooltip: 'Lyrics',
+                  onPressed: widget.onLyricsPage,
+                  icon:
+                      const Icon(Icons.lyrics_rounded, color: Colors.white54),
+                ),
             ],
           );
         },
