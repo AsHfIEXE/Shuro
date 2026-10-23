@@ -259,7 +259,7 @@ class AppState extends ChangeNotifier {
             for (final s in servers) {
               if (s.password.isNotEmpty) serverSecrets[s.id] = s.password;
             }
-            await ServerSecretStore.writeAll(serverSecrets);
+            await ServerSecretStore.merge(serverSecrets);
             // Scrub passwords out of prefs right away.
             await persistence.setString(_kServersKey, jsonEncode(sanitized));
           }

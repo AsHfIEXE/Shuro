@@ -35,8 +35,16 @@ class SpokenLibraryState extends ChangeNotifier {
     if (raw == null) return;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final token = (await ServerSecretStore.readAll())[_secretKey];
-      if (token == null || token.isEmpty) return;
+      final token = await ServerSecretStore.readEntry(_secretKey);
+      if (token == null || token.isEmpty) {
+        // The connection config exists but its token is gone from secure
+        // storage. This happened whenever a Navidrome re-save rewrote the
+        // whole secret map without the ABS entry — it must never be silent
+        // again, or the setup "gets deleted" with nothing to see.
+        error = 'Saved Audiobookshelf token is missing — please reconnect.';
+        notifyListeners();
+        return;
+      }
       connection = AudiobookshelfConnection(
           url: json['url'] as String, name: json['name'] as String);
       _api = AudiobookshelfApi(baseUrl: connection!.url, token: token);
@@ -67,9 +75,9 @@ class SpokenLibraryState extends ChangeNotifier {
               : 'Audiobookshelf',
           url: trimmed);
       _api = api;
-      final secrets = await ServerSecretStore.readAll();
-      secrets[_secretKey] = token.trim();
-      await ServerSecretStore.writeAll(secrets);
+      // writeEntry preserves every other secret (Navidrome passwords)
+      // instead of rewriting the whole map from this feature's view.
+      await ServerSecretStore.writeEntry(_secretKey, token.trim());
       final store = await AppPersistence.load();
       await store.setString(_configKey,
           jsonEncode({'name': connection!.name, 'url': connection!.url}));

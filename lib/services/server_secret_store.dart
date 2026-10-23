@@ -45,6 +45,41 @@ class ServerSecretStore {
     }
   }
 
+  /// One secret by name (for example the Audiobookshelf API token), or null.
+  static Future<String?> readEntry(String name) async {
+    final all = await readAll();
+    return all[name];
+  }
+
+  /// Writes ONE entry while preserving every other entry in the map.
+  ///
+  /// The bug this exists for: Navidrome flows used to rewrite the whole map
+  /// from their own partial view, which silently deleted the Audiobookshelf
+  /// token — after a restart the ABS connection was simply gone (reported:
+  /// "setup isn't saving, it gets deleted").
+  static Future<void> writeEntry(String name, String value) async {
+    final all = await readAll();
+    all[name] = value;
+    await writeAll(all);
+  }
+
+  /// Merges [passwords] into the stored map, preserving entries the caller
+  /// does not know about (the ABS token, anything added later). Callers that
+  /// genuinely want to replace everything (a full reset) use [writeAll] or
+  /// [clear] explicitly.
+  static Future<void> merge(Map<String, String> passwords) async {
+    if (passwords.isEmpty) return;
+    final all = await readAll();
+    all.addAll(passwords);
+    await writeAll(all);
+  }
+
+  /// Removes one entry by name without touching the rest.
+  static Future<void> removeEntry(String name) async {
+    final all = await readAll();
+    if (all.remove(name) != null) await writeAll(all);
+  }
+
   /// Removes every stored password (Settings → Reset app data).
   static Future<void> clear() async {
     try {
