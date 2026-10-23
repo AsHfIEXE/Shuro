@@ -1,7 +1,7 @@
 name: shuro
 description: Shuro — the self-hosted Navidrome/OpenSubsonic music player.
 publish_to: "none"
-version: 2.5.3+12
+version: 2.5.4+13
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

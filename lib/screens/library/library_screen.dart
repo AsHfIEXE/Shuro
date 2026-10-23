@@ -14,6 +14,7 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/album_card.dart';
 import '../../widgets/artist_card.dart';
+import '../../widgets/desktop_song_table.dart';
 import '../../widgets/loading_skeletons.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/playlist_card.dart';
@@ -23,6 +24,7 @@ import '../../widgets/state_views.dart';
 import '../album/album_detail_screen.dart';
 import '../artist/artist_detail_screen.dart';
 import '../downloads/downloads_screen.dart';
+import '../../widgets/download_cards.dart';
 import 'personal_shelves_screen.dart';
 import '../playlist/create_playlist_screen.dart';
 import '../playlist/playlist_detail_screen.dart';
@@ -59,7 +61,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 6, vsync: this);
+      TabController(length: 7, vsync: this);
   _SongSort _sort = _SongSort.titleAz;
 
   @override
@@ -120,6 +122,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 Tab(text: 'Genres'),
                 Tab(text: 'Playlists'),
                 Tab(text: 'Local'),
+                Tab(text: 'Downloads'),
               ],
             ),
             Expanded(
@@ -172,6 +175,17 @@ class _SongsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = context.read<PlayerController>();
     final songs = _sorted(context);
+    // Desktop builds get a sortable data-table list instead of the mobile
+    // SongTile list — see DesktopSongTable. Everything below the toolbar
+    // row is desktop-only; the mobile path is unchanged.
+    final desktop = isNativeDesktop;
+    // Album titles for the table's Album column, resolved once per build
+    // instead of an albumById lookup per row. Local songs whose albumId has
+    // no server album get an em dash rather than an empty cell.
+    final albumTitles = {
+      for (final album in context.watch<AppState>().catalogAlbums)
+        album.id: album.title
+    };
     // First fetch in flight: skeleton rows in the shape of the list.
     if (songs.isEmpty &&
         context.watch<AppState>().connectionStatus ==
@@ -219,37 +233,42 @@ class _SongsTab extends StatelessWidget {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 8)),
               ),
-              PopupMenuButton<_SongSort>(
-                color: kCardColor,
-                initialValue: sort,
-                onSelected: onSortChanged,
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                      value: _SongSort.titleAz,
-                      child: Text('Sort: Title A–Z',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(
-                      value: _SongSort.artistAz,
-                      child: Text('Sort: Artist A–Z',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white, fontSize: 13))),
-                  PopupMenuItem(
-                      value: _SongSort.recentlyAdded,
-                      child: Text('Sort: Recently added',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white, fontSize: 13))),
-                ],
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.sort_rounded, color: kMutedTextColor, size: 16),
-                    SizedBox(width: 4),
-                    Icon(Icons.keyboard_arrow_down_rounded,
-                        color: kMutedTextColor, size: 16),
+              // Mobile keeps the sort popup; on desktop the table's column
+              // headers are the sort UI, and a second control fighting them
+              // would be ambiguous.
+              if (!desktop)
+                PopupMenuButton<_SongSort>(
+                  color: kCardColor,
+                  initialValue: sort,
+                  onSelected: onSortChanged,
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                        value: _SongSort.titleAz,
+                        child: Text('Sort: Title A–Z',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: Colors.white, fontSize: 13))),
+                    PopupMenuItem(
+                        value: _SongSort.artistAz,
+                        child: Text('Sort: Artist A–Z',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: Colors.white, fontSize: 13))),
+                    PopupMenuItem(
+                        value: _SongSort.recentlyAdded,
+                        child: Text('Sort: Recently added',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: Colors.white, fontSize: 13))),
                   ],
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sort_rounded,
+                          color: kMutedTextColor, size: 16),
+                      SizedBox(width: 4),
+                      Icon(Icons.keyboard_arrow_down_rounded,
+                          color: kMutedTextColor, size: 16),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -258,12 +277,19 @@ class _SongsTab extends StatelessWidget {
             color: kBrandColor,
             backgroundColor: kCardColor,
             onRefresh: () => _refreshLibrary(context),
-            child: ListView.builder(
-              itemCount: songs.length,
-              itemBuilder: (context, i) => SongTile(
-                  song: songs[i],
-                  onTap: () => player.playSong(songs[i], queue: songs)),
-            ),
+            child: desktop
+                ? DesktopSongTable(
+                    songs: songs,
+                    albumTitleOf: (song) => albumTitles[song.albumId] ?? '—',
+                    onPlaySong: (song, queue) =>
+                        player.playSong(song, queue: queue),
+                  )
+                : ListView.builder(
+                    itemCount: songs.length,
+                    itemBuilder: (context, i) => SongTile(
+                        song: songs[i],
+                        onTap: () => player.playSong(songs[i], queue: songs)),
+                  ),
           ),
         ),
       ],
@@ -460,6 +486,12 @@ class _GenresTab extends StatelessWidget {
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w600)),
+                ),
+                // Downloads & cached music as cards (roadmap ask): artwork
+                // plus metadata, long-press for multi-select, remove
+                // selected/all with confirmation.
+                ListView(
+                  children: const [DownloadCardsSection()],
                 ),
               ],
             ),

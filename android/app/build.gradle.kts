@@ -39,6 +39,20 @@ android {
     }
 
     signingConfigs {
+        // One stable debug key, committed with the app. Without it the
+        // fallback used Gradle's per-machine debug keystore, which on CI is
+        // regenerated EVERY run — each debug-signed release then had a new
+        // signature and no release could install over the previous one
+        // ("App not installed"). A debug key guards nothing; committing it
+        // is standard practice and makes every debug-signed release a real
+        // upgrade path. Real signing still wins whenever the upload keystore
+        // secrets are configured.
+        create("shuroDebug") {
+            storeFile = rootProject.file("app/shuro-debug.keystore")
+            storePassword = "android"
+            keyAlias = "shuro-debug"
+            keyPassword = "android"
+        }
         if (hasUploadKeystore) {
             create("release") {
                 storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
@@ -54,7 +68,7 @@ android {
             signingConfig = if (hasUploadKeystore) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                signingConfigs.getByName("shuroDebug")
             }
             // Shrinking stays OFF on release. shared_preferences_android talks
             // to its Kotlin through package:jni reflective lookups that R8

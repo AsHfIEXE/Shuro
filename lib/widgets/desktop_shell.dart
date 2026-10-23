@@ -120,7 +120,7 @@ class _DesktopShellState extends State<DesktopShell> {
       CommandPaletteEntry(
         label: _sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
         section: 'View',
-        run: () => setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+        run: _toggleSidebar,
       ),
       if (context.read<AppState>().undoStack.canUndo)
         CommandPaletteEntry(
@@ -151,6 +151,12 @@ class _DesktopShellState extends State<DesktopShell> {
     }
     setState(() => _lyricsOpen = !_lyricsOpen);
   }
+
+  /// One shared implementation for every "collapse the sidebar" entry
+  /// point — the sidebar's own button, the header quick menu, and the
+  /// command palette all call this, so there is a single toggle to change.
+  void _toggleSidebar() =>
+      setState(() => _sidebarCollapsed = !_sidebarCollapsed);
 
   /// CallbackShortcuts reports a matched key as handled even when its callback
   /// does nothing, so the old "skip when typing" check still swallowed the key:
@@ -233,9 +239,7 @@ class _DesktopShellState extends State<DesktopShell> {
                             collapsed: _sidebarCollapsed,
                             currentIndex: widget.currentIndex,
                             tabs: _tabs,
-                            onCollapse: () => setState(
-                              () => _sidebarCollapsed = !_sidebarCollapsed,
-                            ),
+                            onCollapse: _toggleSidebar,
                             onSelect: widget.onSelectTab,
                             onShelves: _openShelves,
                             onSpoken: _openSpoken,
@@ -249,8 +253,11 @@ class _DesktopShellState extends State<DesktopShell> {
                                 _DesktopHeader(
                                   label: _tabs[widget.currentIndex].$2,
                                   lyricsOpen: _lyricsOpen,
+                                  sidebarCollapsed: _sidebarCollapsed,
                                   onSearch: () => widget.onSelectTab(2),
                                   onLyrics: _toggleLyrics,
+                                  onOpenPalette: _openCommandPalette,
+                                  onCollapseSidebar: _toggleSidebar,
                                 ),
                                 const Divider(height: 1, color: kDividerColor),
                                 Expanded(
@@ -500,15 +507,54 @@ class _RailItem extends StatelessWidget {
 class _DesktopHeader extends StatelessWidget {
   final String label;
   final bool lyricsOpen;
+  final bool sidebarCollapsed;
   final VoidCallback onSearch;
   final VoidCallback onLyrics;
+  final VoidCallback onOpenPalette;
+  final VoidCallback onCollapseSidebar;
 
   const _DesktopHeader({
     required this.label,
     required this.lyricsOpen,
+    required this.sidebarCollapsed,
     required this.onSearch,
     required this.onLyrics,
+    required this.onOpenPalette,
+    required this.onCollapseSidebar,
   });
+
+  /// One row of the quick menu: icon, label, optional shortcut hint.
+  PopupMenuItem<String> _quickItem({
+    required String value,
+    required IconData icon,
+    required String label,
+    String? hint,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: Colors.white70),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white, fontSize: 12.5),
+            ),
+          ),
+          if (hint != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              hint,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white38, fontSize: 10.5),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -579,6 +625,52 @@ class _DesktopHeader extends StatelessWidget {
                 Icons.lyrics_rounded,
                 color: lyricsOpen ? kBrandColor : Colors.white60,
               ),
+            ),
+            const SizedBox(width: 4),
+            // Compact top-right overflow menu. It is a third entry point to
+            // the SAME callbacks the header buttons and menu bar already
+            // use (lyrics toggle, palette, sidebar collapse) — never a
+            // second implementation of any of them.
+            PopupMenuButton<String>(
+              tooltip: 'Quick actions',
+              color: kCardColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              icon: const Icon(Icons.read_more_rounded,
+                  color: Colors.white60, size: 22),
+              onSelected: (value) {
+                switch (value) {
+                  case 'lyrics':
+                    onLyrics();
+                  case 'palette':
+                    onOpenPalette();
+                  case 'sidebar':
+                    onCollapseSidebar();
+                }
+              },
+              itemBuilder: (context) => [
+                _quickItem(
+                  value: 'lyrics',
+                  icon: Icons.lyrics_rounded,
+                  label:
+                      lyricsOpen ? 'Hide lyrics panel' : 'Show lyrics panel',
+                  hint: 'Ctrl+L',
+                ),
+                _quickItem(
+                  value: 'palette',
+                  icon: Icons.terminal_rounded,
+                  label: 'Command palette',
+                  hint: 'Ctrl+Shift+P',
+                ),
+                const PopupMenuDivider(),
+                _quickItem(
+                  value: 'sidebar',
+                  icon: Icons.menu_open_rounded,
+                  label: sidebarCollapsed
+                      ? 'Expand sidebar'
+                      : 'Collapse sidebar',
+                ),
+              ],
             ),
           ],
         ),
@@ -818,14 +910,11 @@ class _Transport extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (!compact)
-          IconButton(
-            tooltip: player.shuffle ? 'Shuffle on' : 'Shuffle off',
-            onPressed: player.toggleShuffle,
-            icon: Icon(
-              Icons.shuffle_rounded,
-              size: 19,
-              color: player.shuffle ? kBrandColor : Colors.white54,
-            ),
+          _DockToggleButton(
+            tooltip: player.shuffle ? 'Shuffle: on' : 'Shuffle: off',
+            icon: Icons.shuffle_rounded,
+            active: player.shuffle,
+            onTap: player.toggleShuffle,
           ),
         IconButton(
           tooltip: 'Previous',
@@ -875,18 +964,81 @@ class _Transport extends StatelessWidget {
           icon: ShuroIcon(ShuroGlyph.next, size: 21, color: Colors.white),
         ),
         if (!compact)
-          IconButton(
-            tooltip: 'Repeat: ' + player.repeatMode.name,
-            onPressed: player.cycleRepeatMode,
-            icon: Icon(
-              Icons.repeat_rounded,
-              size: 19,
-              color: player.repeatMode == PlayerRepeatMode.off
-                  ? Colors.white54
-                  : kBrandColor,
-            ),
+          _DockToggleButton(
+            tooltip: 'Repeat: ${player.repeatMode.name}',
+            icon: player.repeatMode == PlayerRepeatMode.one
+                ? Icons.repeat_one_rounded
+                : Icons.repeat_rounded,
+            active: player.repeatMode != PlayerRepeatMode.off,
+            onTap: player.cycleRepeatMode,
           ),
       ],
+    );
+  }
+}
+
+/// A 40x40 transport toggle (shuffle, repeat) for the dock. The plain
+/// IconButtons it replaces were too subtle: their "active" state was a
+/// faint icon tint that read as a hover. This keeps the icon always visible
+/// and makes the active state unmistakable — brand-colored icon over a soft
+/// brand wash plus a small underline bar under the icon. Inactive keeps a
+/// neutral icon with the underline slot transparent, so the icon never
+/// shifts position between states.
+class _DockToggleButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _DockToggleButton({
+    required this.tooltip,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Material(
+            color: active
+                ? kBrandColor.withValues(alpha: 0.16)
+                : Colors.transparent,
+            shape: const StadiumBorder(),
+            child: InkWell(
+              onTap: onTap,
+              customBorder: const StadiumBorder(),
+              hoverColor: Colors.white.withValues(alpha: 0.08),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 19,
+                    color: active ? kBrandColor : Colors.white60,
+                  ),
+                  const SizedBox(height: 3),
+                  Container(
+                    width: 14,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: active ? kBrandColor : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

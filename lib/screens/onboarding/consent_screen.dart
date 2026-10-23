@@ -29,7 +29,18 @@ class DeviceBasics {
       // Windows build's reports used to claim they were phones.
       final os = Platform.operatingSystem;
       final osLabel = os[0].toUpperCase() + os.substring(1);
-      map['Operating system'] = osLabel + ' ' + Platform.operatingSystemVersion;
+      var version = Platform.operatingSystemVersion;
+      if (os == 'windows') {
+        // Flutter's Windows version string still says "Windows 10" on every
+        // supported build. The build number is the truth: 22000+ is 11.
+        final build = RegExp(r'(\d{5})').firstMatch(version)?.group(1);
+        final n = build == null ? 0 : int.tryParse(build) ?? 0;
+        if (n >= 22000) {
+          version = version.replaceFirst('Windows 10', 'Windows 11');
+          if (!version.contains('11')) version = 'Windows 11 ($version)';
+        }
+      }
+      map['Operating system'] = osLabel + ' ' + version;
     } catch (_) {}
     try {
       map['Locale'] = Platform.localeName;
