@@ -24,6 +24,7 @@ import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/sheet_scroll.dart';
 import 'equalizer_sheet.dart';
@@ -142,7 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _sectionKeys.putIfAbsent(id, () => GlobalKey(debugLabel: 'settings-$id'));
 
   /// Every section, with the words a user would actually type to find it.
-  static const List<({String id, String title, String keywords})> _index = [
+  /// Shared with the desktop rail.
+  static const List<({String id, String title, String keywords})> index = [
     (id: 'account', title: 'Account', keywords: 'sign in server user logout connect disconnect'),
     (id: 'playback', title: 'Playback', keywords: 'quality stream streaming gapless fade replaygain speed silence crossfade'),
     (id: 'lyrics', title: 'Lyrics', keywords: 'lyrics offset sync font auto follow'),
@@ -159,6 +161,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _jumpToSection(String id) async {
     setState(() => _highlighted = id);
+    // Desktop two-pane: switch the rail to the section (the page itself does
+    // not scroll any more). Mobile keeps the scroll below.
+    _desktopSection.value = id;
     final target = _sectionKeys[id]?.currentContext;
     if (target != null) {
       await Scrollable.ensureVisible(
@@ -174,17 +179,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Which section the desktop rail shows; also the target of a search jump.
+  final ValueNotifier<String> _desktopSection = ValueNotifier<String>('account');
+
   Future<void> _openSettingsSearch(BuildContext context) async {
     final picked = await showDialog<String>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (dialogContext) => _SettingsSearchDialog(index: _index),
+      builder: (dialogContext) => _SettingsSearchDialog(index: index),
     );
     if (picked != null && mounted) await _jumpToSection(picked);
   }
 
   @override
   void dispose() {
+    _desktopSection.dispose();
     _highlightTimer?.cancel();
     super.dispose();
   }
@@ -201,23 +210,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // nothing reads.
     final playbackPrefs = context.watch<PlaybackPrefs>();
 
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        },
-      },
-      child: Scaffold(
-        backgroundColor: kSurfaceColor,
-        body: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            // A Column, not a lazily-built ListView: "find a setting" scrolls
-            // to a section by its GlobalKey, and a key inside an off-screen
-            // lazy child has no context to scroll to.
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+    // The same section widgets feed both layouts: the desktop two-pane view
+    // shows one section at a time, mobile keeps the single scroll.
+    final allSections = <Widget>[
+
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(
@@ -622,9 +618,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _showServiceAttributions(context),
               ),
               const SizedBox(height: 32),
-              ],
-            ),
-          ),
+    ];
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        },
+      },
+      child: Scaffold(
+        backgroundColor: kSurfaceColor,
+        body: SafeArea(
+          bottom: false,
+          // The body owns its scrolling: mobile gets one Column in a
+          // scroll view; desktop gets the two-pane rail (no outer scroll,
+          // which would hand the Row an unbounded height).
+          child: _SettingsBody(allSections, selected: _desktopSection),
         ),
       ),
     );
@@ -2034,6 +2043,211 @@ class _SettingsSearchDialogState extends State<_SettingsSearchDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Chooses the desktop two-pane settings layout or the mobile scroll.
+class _SettingsBody extends StatelessWidget {
+  final List<Widget> sections;
+  final ValueNotifier<String> selected;
+
+  const _SettingsBody(this.sections, {required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = !kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    if (!desktop) {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: sections,
+        ),
+      );
+    }
+    return _TwoPaneSettings(sections: sections, selected: selected);
+  }
+}
+
+/// Desktop settings: a 220 px section rail with its own filter, and one
+/// section of content at a time (design doc: "Two panes", content max 720 px).
+/// Sections are recognised inside the shared widget list by their
+/// `_SectionLabel`, so the rows themselves exist exactly once.
+class _TwoPaneSettings extends StatefulWidget {
+  final List<Widget> sections;
+  final ValueNotifier<String> selected;
+
+  const _TwoPaneSettings({required this.sections, required this.selected});
+
+  @override
+  State<_TwoPaneSettings> createState() => _TwoPaneSettingsState();
+}
+
+class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
+  String _query = '';
+  String _selected = 'account';
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.selected.value;
+    widget.selected.addListener(_onExternalSelect);
+  }
+
+  @override
+  void dispose() {
+    widget.selected.removeListener(_onExternalSelect);
+    super.dispose();
+  }
+
+  void _onExternalSelect() {
+    if (!mounted) return;
+    setState(() => _selected = widget.selected.value);
+  }
+
+  void _select(String id) {
+    setState(() => _selected = id);
+    widget.selected.value = id;
+  }
+
+  /// Splits the flat list into the page header (everything before the first
+  /// section label: title, search field, actions) and id -> rows. The header
+  /// used to be dropped here, which made the page title and "Find a setting"
+  /// disappear on desktop.
+  (List<Widget>, Map<String, List<Widget>>) _split() {
+    final byTitle = <String, String>{
+      for (final entry in _SettingsScreenState.index)
+        entry.title.toUpperCase(): entry.id,
+    };
+    final header = <Widget>[];
+    final groups = <String, List<Widget>>{};
+    String? current;
+    for (final widget in widget.sections) {
+      if (widget is _SectionLabel) {
+        final id = byTitle[widget.label.toUpperCase()];
+        current = id;
+        // The label stays in the group: in the two-pane layout it is the
+        // heading of the content pane.
+        if (id != null) groups.putIfAbsent(id, () => []).add(widget);
+        continue;
+      }
+      if (current == null) {
+        header.add(widget);
+      } else {
+        groups.putIfAbsent(current, () => []).add(widget);
+      }
+    }
+    return (header, groups);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (header, groups) = _split();
+    final entries = _SettingsScreenState.index.where((entry) {
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      return entry.title.toLowerCase().contains(q) || entry.keywords.contains(q);
+    }).toList();
+    if (!groups.containsKey(_selected) && groups.isNotEmpty) {
+      _selected = groups.keys.first;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // The page header keeps its full width above both panes.
+        ...header,
+        const Divider(height: 1, thickness: 1, color: kDividerColor),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 220,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: TextField(
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kTextColor, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: kCardColor,
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 17, color: Colors.white38),
+                    hintText: 'Search settings',
+                    hintStyle: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white30, fontSize: 12.5),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none),
+                  ),
+                  onChanged: (v) => setState(() => _query = v.trim()),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    for (final entry in entries)
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+                        child: Material(
+                          color: entry.id == _selected
+                              ? kBrandColor.withValues(alpha: 0.14)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _select(entry.id),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 9),
+                              child: Text(entry.title,
+                                  style: GoogleFonts.getFont(
+                                      currentFontFamily,
+                                      color: entry.id == _selected
+                                          ? Colors.white
+                                          : Colors.white60,
+                                      fontSize: 13,
+                                      fontWeight: entry.id == _selected
+                                          ? FontWeight.w600
+                                          : FontWeight.w400)),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1, color: kDividerColor),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+                  child: DesktopContentFrame(
+                    maxWidth: DesktopTokens.contentSettings,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // The label doubles as the pane heading.
+                        ...?groups[_selected],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

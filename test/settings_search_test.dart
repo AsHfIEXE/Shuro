@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +29,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Desktop shows one section in a two-pane rail (nothing scrolls); mobile
+  /// stays a single scrolling column. The jump must work in both.
+  final bool desktop =
+      !Platform.environment.containsKey('FLUTTER_TEST_MOBILE_LAYOUT') &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
   double scrollOffset(WidgetTester tester) {
     final state = tester.state<ScrollableState>(find.byType(Scrollable).first);
     return state.position.pixels;
@@ -38,12 +46,15 @@ void main() {
     addTearDown(tester.view.reset);
 
     await pumpSettings(tester);
-    expect(scrollOffset(tester), 0);
+    if (!desktop) expect(scrollOffset(tester), 0);
 
     await tester.tap(find.byTooltip('Find a setting'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'listenbrainz');
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(Dialog), matching: find.byType(TextField)),
+        'listenbrainz');
     await tester.pumpAndSettle();
 
     // The index should narrow to the ListenBrainz section. Scope to the
@@ -55,8 +66,10 @@ void main() {
     await tester.tap(dialogRow);
     await tester.pumpAndSettle();
 
-    expect(scrollOffset(tester), greaterThan(0),
-        reason: 'the page must actually move to the section');
+    if (!desktop) {
+      expect(scrollOffset(tester), greaterThan(0),
+          reason: 'the page must actually move to the section');
+    }
     expect(find.text('LISTENBRAINZ'), findsOneWidget,
         reason: 'the section heading must end up in the tree');
 
@@ -71,10 +84,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Find a setting'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'qqqqzz');
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(Dialog), matching: find.byType(TextField)),
+        'qqqqzz');
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Nothing matches'), findsOneWidget);
-    expect(scrollOffset(tester), 0);
+    if (!desktop) expect(scrollOffset(tester), 0);
   });
 }
