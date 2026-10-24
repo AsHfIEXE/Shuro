@@ -1236,13 +1236,19 @@ class _SeekControl extends StatelessWidget {
               overlayColor: accent.withValues(alpha: 0.18),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
             ),
-            child: Slider(
-              value: value,
-              max: maximum,
-              onChanged: active
-                  ? (next) =>
-                      player.seekTo(Duration(milliseconds: next.round()))
-                  : null,
+            child: SizedBox(
+              // A Slider's default preferred height (48) plus the transport
+              // row overflowed the 88px dock by 9px (found in the debug
+              // log). 32px keeps the track, thumb and labels inside the bar.
+              height: 32,
+              child: Slider(
+                value: value,
+                max: maximum,
+                onChanged: active
+                    ? (next) =>
+                        player.seekTo(Duration(milliseconds: next.round()))
+                    : null,
+              ),
             ),
           ),
         ),

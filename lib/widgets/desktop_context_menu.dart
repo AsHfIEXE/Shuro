@@ -189,9 +189,13 @@ class _ContextMenuNoteState extends State<ContextMenuNote> {
 Future<void> showSongMenuAtAnchor(
   BuildContext context,
   Song song,
-  GlobalKey anchorKey,
+  BuildContext anchorContext,
 ) async {
-  final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
+  // The anchor is the button's own element. It used to be one static
+  // GlobalKey shared by every song row, which threw
+  // "Multiple widgets used the same GlobalKey" the moment two rows were
+  // on screen at once and silently broke the menu anchor.
+  final box = anchorContext.findRenderObject() as RenderBox?;
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
   if (box == null || overlay == null) return;
   final origin = box.localToGlobal(Offset(box.size.width, box.size.height),

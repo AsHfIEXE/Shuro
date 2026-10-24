@@ -137,6 +137,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                   const _GenresTab(),
                   const _PlaylistsTab(),
                   const _LocalTab(),
+                  const DownloadCardsSection(),
                 ],
               ),
             ),

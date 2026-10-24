@@ -22,7 +22,6 @@ class SongTile extends StatelessWidget {
   final Song song;
 
   /// Anchors the desktop ellipsis menu under the button.
-  static final GlobalKey _moreKey = GlobalKey(debugLabel: 'song-more');
   final VoidCallback onTap;
   final int? index;
   final bool showArtist;
@@ -102,22 +101,24 @@ class SongTile extends StatelessWidget {
                 child: Icon(Icons.download_done_rounded,
                     color: accent, size: 18),
               ),
-            IconButton(
-              key: _moreKey,
-              icon: const Icon(Icons.more_vert_rounded,
-                  color: kMutedTextColor, size: 20),
-              onPressed: () {
-                // A menu at the pointer on desktop, the sheet everywhere else
-                // (design doc: "Menus"). Long-press keeps the sheet on touch.
-                if (!kIsWeb &&
-                    (Platform.isWindows ||
-                        Platform.isLinux ||
-                        Platform.isMacOS)) {
-                  showSongMenuAtAnchor(context, song, _moreKey);
-                } else {
-                  showSongActionsSheet(context, song);
-                }
-              },
+            Builder(
+              builder: (buttonContext) => IconButton(
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: kMutedTextColor, size: 20),
+                onPressed: () {
+                  // A menu anchored to this button on desktop, the sheet
+                  // everywhere else (design doc: "Menus"). Long-press keeps
+                  // the sheet on touch.
+                  if (!kIsWeb &&
+                      (Platform.isWindows ||
+                          Platform.isLinux ||
+                          Platform.isMacOS)) {
+                    showSongMenuAtAnchor(context, song, buttonContext);
+                  } else {
+                    showSongActionsSheet(context, song);
+                  }
+                },
+              ),
             ),
           ],
         ),
