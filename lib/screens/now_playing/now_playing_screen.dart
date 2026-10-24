@@ -461,12 +461,11 @@ class NowPlayingScreen extends StatelessWidget {
           song: song,
           accent: accent,
           onMore: () => showSongActionsSheet(context, song),
-          onQueue: () => pushRisingOnce(context, const QueueScreen()),
           onAudioInfo: () => showAudioInfoSheet(context, song),
-          onSleep: () => showSleepTimerSheet(context, player),
           sleepActive: player.sleepUntil != null,
-          // Landscape has no quick-actions row, so volume lives up here.
-          onVolume: () => showVolumeSheet(context, player),
+          // Volume/queue/sleep used to live up here AND in the row below the
+          // transport — two volume buttons for one job (reported). They are
+          // only below the controls now.
           dense: compact,
         ),
         Expanded(
@@ -551,11 +550,36 @@ class NowPlayingScreen extends StatelessWidget {
                                         // second seek-bar lookalike and cost layout
                                         // height this column doesn't have.
                                         Center(
-                                          child: _QuickAction(
-                                            icon: Icons.volume_up_rounded,
-                                            label: 'Volume',
-                                            onTap: () => showVolumeSheet(
-                                                context, player),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _QuickAction(
+                                                icon: Icons.volume_up_rounded,
+                                                label: 'Volume',
+                                                onTap: () => showVolumeSheet(
+                                                    context, player),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              _QuickAction(
+                                                icon: Icons
+                                                    .queue_music_rounded,
+                                                label: 'Queue',
+                                                onTap: () => pushRisingOnce(
+                                                    context,
+                                                    const QueueScreen()),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              _QuickAction(
+                                                icon: Icons.bedtime_rounded,
+                                                label: player.sleepUntil !=
+                                                        null
+                                                    ? 'Sleep timer running'
+                                                    : 'Sleep timer',
+                                                onTap: () =>
+                                                    showSleepTimerSheet(
+                                                        context, player),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -917,18 +941,8 @@ class _Header extends StatelessWidget {
   final Color accent;
   final VoidCallback onMore;
 
-  /// Wide screens move Queue/Audio-info up here (the bottom-left column has no
-  /// room for a separate actions row).
-  final VoidCallback? onQueue;
   final VoidCallback? onAudioInfo;
-
-  /// Sleep timer entry — portrait has it in the quick-actions row; landscape
-  /// had NO way to arm or cancel a timer at all.
-  final VoidCallback? onSleep;
   final bool sleepActive;
-
-  /// Volume entry for layouts without a quick-actions row (landscape).
-  final VoidCallback? onVolume;
 
   /// Tighter icon buttons for short windows (48 → 40 dp each).
   final bool dense;
@@ -937,11 +951,8 @@ class _Header extends StatelessWidget {
     required this.song,
     required this.accent,
     required this.onMore,
-    this.onQueue,
     this.onAudioInfo,
-    this.onSleep,
     this.sleepActive = false,
-    this.onVolume,
     this.dense = false,
   });
 
@@ -975,31 +986,8 @@ class _Header extends StatelessWidget {
           ),
           // (No favourite here: the heart lives in its sweet spot under the
           // artist — a second one in the header was duplicate clutter.)
-          if (onVolume != null)
-            IconButton(
-              visualDensity: density,
-              onPressed: onVolume,
-              icon: const Icon(Icons.volume_up_rounded, color: Colors.white70),
-              tooltip: 'Volume',
-            ),
-          if (onSleep != null)
-            IconButton(
-              visualDensity: density,
-              onPressed: onSleep,
-              icon: Icon(
-                Icons.bedtime_rounded,
-                color: sleepActive ? accent : Colors.white70,
-              ),
-              tooltip: sleepActive ? 'Sleep timer running' : 'Sleep timer',
-            ),
-          if (onQueue != null)
-            IconButton(
-              visualDensity: density,
-              onPressed: onQueue,
-              icon:
-                  const Icon(Icons.queue_music_rounded, color: Colors.white70),
-              tooltip: 'Queue',
-            ),
+          if (sleepActive)
+            Icon(Icons.bedtime_rounded, color: accent, size: 18),
           if (onAudioInfo != null)
             IconButton(
               visualDensity: density,

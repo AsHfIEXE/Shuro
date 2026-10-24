@@ -66,17 +66,38 @@ class _DesktopShellState extends State<DesktopShell> {
   NavigatorState? get _contentNav => _contentNavKey.currentState;
   bool _lyricsOpen = false;
 
-  void _openSettings() =>
-      _contentNav?.push(drillDownRoute(const SettingsScreen()));
+  /// The runtime type of the page currently on top of the content navigator,
+  /// or null when the tabs are showing. Every push dedupes against this: the
+  /// reported bug was N clicks stacking N copies of a page, so Back had to be
+  /// pressed N times.
+  String? _topPage;
 
-  void _openDownloads() =>
-      _contentNav?.push(drillDownRoute(const DownloadsScreen()));
+  void _openContentPage(Widget page) {
+    final nav = _contentNav;
+    if (nav == null) return;
+    final name = page.runtimeType.toString();
+    if (_topPage == name) return; // already showing it — never stack copies
+    _topPage = name;
+    nav.push(drillDownRoute(page)).whenComplete(() => _topPage = null);
+  }
 
-  void _openShelves() =>
-      _contentNav?.push(drillDownRoute(const PersonalShelvesScreen()));
+  /// Sidebar and header navigation: switch the tab AND leave any pushed page
+  /// (Settings, Books & podcasts, an album...). Clicking a destination while
+  /// on a pushed page used to switch the tab underneath invisibly, so the
+  /// click appeared dead.
+  void _goToTab(int index) {
+    _topPage = null;
+    _contentNav?.popUntil((route) => route.isFirst);
+    widget.onSelectTab(index);
+  }
 
-  void _openSpoken() =>
-      _contentNav?.push(drillDownRoute(const SpokenLibraryScreen()));
+  void _openSettings() => _openContentPage(const SettingsScreen());
+
+  void _openDownloads() => _openContentPage(const DownloadsScreen());
+
+  void _openShelves() => _openContentPage(const PersonalShelvesScreen());
+
+  void _openSpoken() => _openContentPage(const SpokenLibraryScreen());
 
   /// Ctrl+Shift+P launcher. Every entry closes over an action that already
   /// exists elsewhere in the shell, so there is exactly one implementation of
@@ -260,7 +281,7 @@ class _DesktopShellState extends State<DesktopShell> {
                             currentIndex: widget.currentIndex,
                             tabs: _tabs,
                             onCollapse: _toggleSidebar,
-                            onSelect: widget.onSelectTab,
+                            onSelect: _goToTab,
                             onShelves: _openShelves,
                             onSpoken: _openSpoken,
                             onDownloads: _openDownloads,
@@ -274,7 +295,7 @@ class _DesktopShellState extends State<DesktopShell> {
                                   label: _tabs[widget.currentIndex].$2,
                                   lyricsOpen: _lyricsOpen,
                                   sidebarCollapsed: _sidebarCollapsed,
-                                  onSearch: () => widget.onSelectTab(2),
+                                  onSearch: () => _goToTab(2),
                                   onLyrics: _toggleLyrics,
                                   onOpenPalette: _openCommandPalette,
                                   onCollapseSidebar: _toggleSidebar,
@@ -316,10 +337,9 @@ class _DesktopShellState extends State<DesktopShell> {
                 _PlayerDock(
                   lyricsOpen: _lyricsOpen,
                   onLyrics: _toggleLyrics,
-                  onLyricsPage: () => _contentNav?.push(
-                    drillDownRoute(
-                        LyricsScreen(initialSong: song, embedded: false)),
-                  ),
+                  onLyricsPage: () => _openContentPage(
+                      LyricsScreen(initialSong: song, embedded: false)),
+                  onQueuePage: () => _openContentPage(const QueueScreen()),
                 ),
               ],
             ),
@@ -848,11 +868,13 @@ class _PlayerDock extends StatefulWidget {
   final bool lyricsOpen;
   final VoidCallback onLyrics;
   final VoidCallback onLyricsPage;
+  final VoidCallback onQueuePage;
 
   const _PlayerDock({
     required this.lyricsOpen,
     required this.onLyrics,
     required this.onLyricsPage,
+    required this.onQueuePage,
   });
 
   @override
@@ -967,10 +989,20 @@ class _PlayerDockState extends State<_PlayerDock> {
                       ),
                       IconButton(
                         tooltip: 'Queue',
-                        onPressed: () => Navigator.of(context)
-                            .push(drillDownRoute(const QueueScreen())),
+                        onPressed: widget.onQueuePage,
                         icon: const Icon(Icons.queue_music_rounded,
                             color: Colors.white54),
+                      ),
+                      IconButton(
+                        tooltip: player.sleepUntil != null
+                            ? 'Sleep timer running'
+                            : 'Sleep timer',
+                        onPressed: () =>
+                            showSleepTimerSheet(context, player),
+                        icon: Icon(Icons.bedtime_rounded,
+                            color: player.sleepUntil != null
+                                ? accent
+                                : Colors.white54),
                       ),
                       const SizedBox(width: 10),
                     ],

@@ -92,17 +92,39 @@ class SpokenLibraryState extends ChangeNotifier {
     }
   }
 
+  /// Human-readable progress, e.g. "Fetching Podcasts (2 of 3)…" — a big
+  /// library on a NAS takes real seconds, and a silent wait read as "the
+  /// whole implementation is broken".
+  String? progress;
+
   Future<void> refresh() async {
     final api = _api;
     if (api == null) return;
     loading = true;
     error = null;
+    progress = null;
     notifyListeners();
     try {
       final next = await api.libraries();
       libraries = next;
-      final entries = await Future.wait(next.map(
-          (library) async => MapEntry(library.id, await api.items(library))));
+      // Sequential with per-library isolation: one slow or failing library
+      // must neither time out the burst nor erase the libraries that did
+      // fetch. Failures surface per library instead of as one dead screen.
+      final entries = <MapEntry<String, List<SpokenItem>>>[];
+      for (var i = 0; i < next.length; i++) {
+        final library = next[i];
+        progress = 'Fetching ${library.name} (${i + 1} of ${next.length})…';
+        notifyListeners();
+        try {
+          entries.add(MapEntry(library.id, await api.items(library)));
+        } on AudiobookshelfApiException catch (e) {
+          entries.add(MapEntry(library.id, const <SpokenItem>[]));
+          error = '${library.name}: ${e.message}';
+        } catch (_) {
+          entries.add(MapEntry(library.id, const <SpokenItem>[]));
+          error = '${library.name}: could not reach the server.';
+        }
+      }
       itemsByLibrary
         ..clear()
         ..addEntries(entries);
