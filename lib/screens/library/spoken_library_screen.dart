@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/spoken_media.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
 
 /// Separate books/podcasts workspace. It deliberately does not flatten a
 /// show into a playable row: only whole books and episode rows are playable.
@@ -78,8 +79,12 @@ class SpokenLibraryScreen extends StatelessWidget {
             ? _ConnectState(onConnect: () => _connect(context))
             : RefreshIndicator(
                 onRefresh: state.refresh,
-                child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                // Text lists are designed for 960 px (design doc): on a wide
+                // window the extra width becomes margin, never stretched rows.
+                child: DesktopContentFrame(
+                    maxWidth: DesktopTokens.contentText,
+                    child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                     children: [
                       Text(state.connection!.name,
                           style: headingFont(
@@ -102,7 +107,7 @@ class SpokenLibraryScreen extends StatelessWidget {
                             library: library,
                             items:
                                 state.itemsByLibrary[library.id] ?? const []),
-                    ]),
+                    ])),
               ));
   }
 }

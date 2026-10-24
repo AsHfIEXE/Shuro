@@ -234,45 +234,59 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                       SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                          child: Semantics(
-                            button: true,
-                            label: 'Search your library',
-                            child: Material(
-                              color: kCardColor,
-                              borderRadius: BorderRadius.circular(22),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(22),
-                                onTap: () => Navigator.of(context)
-                                    .push(drillDownRoute(const SearchScreen())),
-                                child: Container(
-                                  height: 44,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.search_rounded,
-                                          color: Colors.white70, size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                            'Search songs, artists, albums...',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.getFont(
-                                                currentFontFamily,
-                                                color: Colors.white60,
-                                                fontSize: 13)),
+                          // Desktop drops the inline search box (design doc):
+                          // the header field is the one search; the box pushed
+                          // the shelves down and duplicated search.
+                          child: (kIsWeb ||
+                                  !(Platform.isWindows ||
+                                      Platform.isLinux ||
+                                      Platform.isMacOS))
+                              ? Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      20, 16, 20, 8),
+                                  child: Semantics(
+                                    button: true,
+                                    label: 'Search your library',
+                                    child: Material(
+                                      color: kCardColor,
+                                      borderRadius:
+                                          BorderRadius.circular(22),
+                                      child: InkWell(
+                                        borderRadius:
+                                            BorderRadius.circular(22),
+                                        onTap: () => Navigator.of(context)
+                                            .push(drillDownRoute(
+                                                const SearchScreen())),
+                                        child: Container(
+                                          height: 44,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.search_rounded,
+                                                  color: Colors.white70,
+                                                  size: 20),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                    'Search songs, artists, albums...',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: GoogleFonts.getFont(
+                                                        currentFontFamily,
+                                                        color:
+                                                            Colors.white60,
+                                                        fontSize: 13)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                                )
+                              : null),
                       const SliverToBoxAdapter(child: SizedBox(height: 12)),
                       if (!appState.hasAnyMusic)
                         SliverFillRemaining(
