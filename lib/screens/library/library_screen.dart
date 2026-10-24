@@ -15,6 +15,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/album_card.dart';
 import '../../widgets/artist_card.dart';
 import '../../widgets/desktop_song_table.dart';
+import '../../theme/desktop_tokens.dart';
 import '../../widgets/loading_skeletons.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/playlist_card.dart';
@@ -441,8 +442,12 @@ class _GenresTab extends StatelessWidget {
         subtitle: 'Connect a Navidrome server to browse by genre here.',
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(20),
+    // Capped like every other content surface; a 1900px window becomes
+    // margin, not stretched tiles.
+    return DesktopContentFrame(
+      maxWidth: DesktopTokens.contentTable,
+      child: GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 240,
         mainAxisSpacing: 16,
@@ -453,7 +458,9 @@ class _GenresTab extends StatelessWidget {
       itemBuilder: (context, i) {
         final genre = genres[i];
         final gradient = _gradients[i % _gradients.length];
-        return GestureDetector(
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
           onTap: () => Navigator.of(context)
               .push(drillDownRoute(_GenreSongsScreen(genre: genre))),
           child: Container(
@@ -488,17 +495,13 @@ class _GenresTab extends StatelessWidget {
                           fontSize: 16,
                           fontWeight: FontWeight.w600)),
                 ),
-                // Downloads & cached music as cards (roadmap ask): artwork
-                // plus metadata, long-press for multi-select, remove
-                // selected/all with confirmation.
-                ListView(
-                  children: const [DownloadCardsSection()],
-                ),
               ],
             ),
           ),
+          ),
         );
       },
+      ),
     );
   }
 }

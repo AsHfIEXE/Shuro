@@ -6,6 +6,8 @@ import '../../models/song.dart';
 import '../../services/download_service.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
+import '../widgets/desktop_context_menu.dart';
 import 'artwork_thumb.dart';
 
 /// The downloaded library as cards: artwork plus title/artist metadata, an
@@ -160,7 +162,7 @@ class _DownloadCardsSectionState extends State<DownloadCardsSection> {
                     .playOrToggle(songs[i], queue: songs);
               }
             },
-            onLongPress: () => _toggle(songs[i].id),
+            onLongPress: isDesktopPlatform ? null : () => _toggle(songs[i].id),
           ),
         ),
       ],
@@ -173,7 +175,7 @@ class _DownloadCard extends StatelessWidget {
   final bool selecting;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
 
   const _DownloadCard({
     required this.song,
@@ -185,7 +187,18 @@ class _DownloadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    // Desktop selects by right-click (hold is a touch pattern).
+    return ContextMenuRegion(
+      items: [
+        ContextMenuItem(
+          label: selecting ? 'Deselect card' : 'Select card',
+          icon: selecting
+              ? Icons.check_box_outline_blank_rounded
+              : Icons.check_box_rounded,
+          onTap: () => onLongPress?.call(),
+        ),
+      ],
+      child: Material(
       color: selected
           ? kBrandColor.withValues(alpha: 0.14)
           : kCardColor,
@@ -248,6 +261,7 @@ class _DownloadCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

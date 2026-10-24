@@ -2141,6 +2141,17 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
     return (header, groups);
   }
 
+
+  /// Fixed order of the settings rail: sections live in groups, destructive
+  /// items last.
+  static const _railGroups = <(String, List<String>)>[
+    ('User', ['account']),
+    ('Look & feel', ['appearance', 'lyrics', 'behavior']),
+    ('Playback', ['playback']),
+    ('Library & server', ['downloads', 'cache', 'server']),
+    ('System', ['performance', 'listenbrainz', 'about', 'reset']),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final (header, groups) = _split();
@@ -2193,7 +2204,22 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
                 child: ListView(
                   padding: const EdgeInsets.only(bottom: 24),
                   children: [
-                    for (final entry in entries)
+                    // The rail is organised in fixed groups (native-app
+                    // convention); search filters within them.
+                    for (final group in _railGroups)
+                      if (entries.any((e) => group.$2.contains(e.id))) ...[
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(26, 14, 16, 4),
+                          child: Text(group.$1.toUpperCase(),
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: Colors.white30,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2)),
+                        ),
+                        for (final entry in entries)
+                          if (group.$2.contains(entry.id))
                       Padding(
                         padding:
                             const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
@@ -2222,6 +2248,7 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
                           ),
                         ),
                       ),
+                      ], // close group spread
                   ],
                 ),
               ),

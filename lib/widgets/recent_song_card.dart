@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/song.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'artwork_thumb.dart';
 import 'song_actions_sheet.dart';
 
@@ -51,10 +52,13 @@ class RecentSongCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
-          onLongPress: () {
-            HapticFeedback.mediumImpact();
-            showSongActionsSheet(context, song);
-          },
+          // Hold-to-open is touch-only now; desktop right-clicks.
+          onLongPress: isDesktopPlatform
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  showSongActionsSheet(context, song);
+                },
           child: Semantics(
             button: true,
             label:

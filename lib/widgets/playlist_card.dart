@@ -7,6 +7,7 @@ import '../models/playlist.dart';
 import '../services/shuro_pulse.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'playlist_actions_sheet.dart';
 import 'desktop_context_menu.dart';
 import 'playlist_collage_art.dart';
@@ -31,10 +32,13 @@ class PlaylistCard extends StatelessWidget {
       items: playlistContextMenuItems(context, playlist),
       child: ListTile(
       onTap: onTap,
-      onLongPress: () {
-        HapticFeedback.mediumImpact();
-        showPlaylistActionsSheet(context, playlist);
-      },
+      // Hold-to-open is touch-only now; desktop right-clicks.
+      onLongPress: isDesktopPlatform
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              showPlaylistActionsSheet(context, playlist);
+            },
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
       leading: SizedBox(width: 48, height: 48, child: PlaylistCollageArt(playlist: playlist, radius: 8)),
       title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis,

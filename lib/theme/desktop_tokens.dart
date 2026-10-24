@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 
 /// The desktop numbers, defined once (design doc: "Design foundations").
@@ -5,6 +9,12 @@ import 'package:flutter/material.dart';
 /// The point of this file is that no screen invents its own breakpoint,
 /// gutter or row height again: window chrome, content frames and rows all read
 /// from here, so a page cannot drift from the shell.
+/// True on native desktop, where long-press sheets are replaced by
+/// right-click menus and the shell uses desktop layout rules.
+bool get isDesktopPlatform =>
+    !kIsWeb &&
+    (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
 class DesktopTokens {
   const DesktopTokens._();
 

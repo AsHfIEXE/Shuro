@@ -9,6 +9,7 @@ import '../models/download_state.dart';
 import '../models/song.dart';
 import '../services/download_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'artwork_thumb.dart';
 import 'desktop_context_menu.dart';
 import 'song_actions_sheet.dart';
@@ -45,7 +46,10 @@ class SongTile extends StatelessWidget {
       items: songContextMenuItems(context, song),
       child: ListTile(
         onTap: onTap,
-        onLongPress: () => showSongActionsSheet(context, song),
+        // Hold-to-open is touch-only now; desktop right-clicks.
+        onLongPress: isDesktopPlatform
+            ? null
+            : () => showSongActionsSheet(context, song),
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
         leading: index != null
             ? SizedBox(

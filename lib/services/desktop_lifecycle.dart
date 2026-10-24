@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Owns the native Windows/Linux app lifetime.
@@ -38,15 +40,36 @@ class DesktopLifecycle with WindowListener, TrayListener {
     try {
       await windowManager.ensureInitialized();
       windowManager.addListener(this);
-      windowManager.waitUntilReadyToShow(
-        const WindowOptions(
-          size: Size(1280, 800),
-          minimumSize: Size(960, 640),
-          center: true,
-          backgroundColor: Color(0xFF0B0F14),
+      // Restore the last window size and position (phase 6 ask: the window
+      // should reopen where the user left it, like a native desktop app).
+      Map<String, double>? savedBounds;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString('desktop_window_v1');
+        if (raw != null) {
+          savedBounds =
+              (jsonDecode(raw) as Map<String, dynamic>).cast<String, double>();
+        }
+      } catch (_) {}
+      await windowManager.waitUntilReadyToShow(
+        WindowOptions(
+          size: Size(savedBounds?['w'] ?? 1280, savedBounds?['h'] ?? 800),
+          minimumSize: const Size(960, 640),
+          center: savedBounds == null,
+          backgroundColor: const Color(0xFF0B0F14),
           title: 'Shuro',
         ),
         () async {
+          // WindowOptions has no position in window_manager 0.5.x — set it
+          // before the window becomes visible.
+          if (savedBounds != null &&
+              savedBounds['x'] != null &&
+              savedBounds['y'] != null) {
+            try {
+              await windowManager.setPosition(
+                  Offset(savedBounds['x']!, savedBounds['y']!));
+            } catch (_) {}
+          }
           await windowManager.show();
           await windowManager.focus();
         },
@@ -62,6 +85,41 @@ class DesktopLifecycle with WindowListener, TrayListener {
       debugPrint('Desktop lifecycle setup unavailable: $error');
     }
   }
+
+  Timer? _boundsDebounce;
+
+  void _scheduleBoundsSave() {
+    _boundsDebounce?.cancel();
+    _boundsDebounce = Timer(const Duration(milliseconds: 900), () {
+      unawaited(_saveWindowBounds());
+    });
+  }
+
+  Future<void> _saveWindowBounds() async {
+    try {
+      if (await windowManager.isMaximized() ||
+          await windowManager.isMinimized()) {
+        return; // maximized state is not a size worth restoring
+      }
+      final size = await windowManager.getSize();
+      final pos = await windowManager.getPosition();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'desktop_window_v1',
+          jsonEncode({
+            'w': size.width,
+            'h': size.height,
+            'x': pos.dx,
+            'y': pos.dy,
+          }));
+    } catch (_) {}
+  }
+
+  @override
+  void onWindowMove() => _scheduleBoundsSave();
+
+  @override
+  void onWindowResize() => _scheduleBoundsSave();
 
   Future<bool> _installTray() async {
     // An installed app's working directory is not the exe's directory, and

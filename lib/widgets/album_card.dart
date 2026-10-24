@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/album.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'album_actions_sheet.dart';
 import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
@@ -26,10 +27,15 @@ class AlbumCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          showAlbumActionsSheet(context, album);
-        },
+        // Desktop: right-click opens the context menu; hold-to-open
+        // sheets are a touch pattern (user ask: "remove the hold to
+        // get options, right-click like a normal desktop app").
+        onLongPress: isDesktopPlatform
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                showAlbumActionsSheet(context, album);
+              },
         child: Semantics(
           button: true,
           label: '${album.title} by ${album.artist}',
