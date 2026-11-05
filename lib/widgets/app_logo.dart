@@ -7,9 +7,13 @@ import '../theme/app_theme.dart';
 /// of truth for the mark; every place it appears (splash, Welcome) uses
 /// this widget.
 ///
-/// [progress] (0..1) staggers the two bars in — bar one pops in first,
-/// bar two follows shortly after — for the splash's entrance. Defaults to
-/// 1 (fully settled) for ordinary, non-animated use elsewhere.
+/// [progress] (0..1) plays the entrance from docs/03-splash-brand-motion:
+/// the top pill slides in from the upper-right and the bottom pill from
+/// the lower-left — each from ±0.35 × size away — fading in as it settles.
+/// Windows are the spec's seconds on its 1.4 s entrance scale, so
+/// progress 0..1 == 0..1.4 s: top pill 0.00-0.70 s, bottom pill
+/// 0.15-0.85 s, fades complete early (by 0.45 s / 0.60 s). Defaults to 1
+/// (fully settled) for ordinary, non-animated use elsewhere.
 class AppLogo extends StatelessWidget {
   final double size;
   final double progress;
@@ -46,6 +50,20 @@ class _AppLogoPainter extends CustomPainter {
 
   static const double _rotation = -0.85; // radians, ~-49°
 
+  // Entrance windows in progress-space = spec seconds ÷ 1.4 (the spec's
+  // entrance scale). Slides run on ShuroMotion.std; each pill's fade
+  // completes well before its slide does, so it is seen settling rather
+  // than popping in.
+  static const double _topSlideEnd = 0.70 / 1.4; // 0.50 — top settles at 0.70 s
+  static const double _topFadeEnd = 0.45 / 1.4; // 0.32 — top visible by 0.45 s
+  static const double _bottomStart = 0.15 / 1.4; // bottom held off until 0.15 s
+  static const double _bottomSlideEnd = 0.85 / 1.4; // 0.61 — bottom settles at 0.85 s
+  static const double _bottomFadeEnd = 0.60 / 1.4; // 0.43 — bottom visible by 0.60 s
+
+  /// Slide-in distance as a fraction of size: the top pill drops in from
+  /// the upper-right, the bottom pill rises in from the lower-left.
+  static const double _slideDistance = 0.35;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (showBackground) {
@@ -53,65 +71,67 @@ class _AppLogoPainter extends CustomPainter {
       canvas.drawRRect(bgRect, Paint()..color = kSurfaceColor);
     }
 
-    final double barA = Curves.easeOutBack.transform(_remap(progress, 0.0, 0.65));
-    final double barB = Curves.easeOutBack.transform(_remap(progress, 0.32, 1.0));
-
     final double w = size.width;
     final double barLength = w * 0.60;
     final double barThickness = w * 0.26;
     final double lengthOffset = barLength * 0.28;
     final double crossOffset = barThickness * 0.5;
+    final double slide = w * _slideDistance;
 
-    canvas.save();
-    canvas.translate(w / 2, size.height / 2);
-    canvas.rotate(_rotation);
-
-    _drawBar(
+    _drawPill(
       canvas,
+      size: size,
       center: Offset(lengthOffset, -crossOffset),
       length: barLength,
       thickness: barThickness,
       colors: const [Color(0xFFA78BFA), kBrandColor],
-      t: barA,
+      slideOffset: Offset(slide, -slide),
+      slideT: ShuroMotion.std.transform(_remap(progress, 0.0, _topSlideEnd)),
+      opacity: Curves.easeOut.transform(_remap(progress, 0.0, _topFadeEnd)),
     );
-    _drawBar(
+    _drawPill(
       canvas,
+      size: size,
       center: Offset(-lengthOffset, crossOffset),
       length: barLength,
       thickness: barThickness,
       colors: const [kBrandColor, kSecondaryColor],
-      t: barB,
+      slideOffset: Offset(-slide, slide),
+      slideT: ShuroMotion.std.transform(_remap(progress, _bottomStart, _bottomSlideEnd)),
+      opacity: Curves.easeOut.transform(_remap(progress, _bottomStart, _bottomFadeEnd)),
     );
-
-    canvas.restore();
   }
 
-  void _drawBar(
+  void _drawPill(
     Canvas canvas, {
+    required Size size,
     required Offset center,
     required double length,
     required double thickness,
     required List<Color> colors,
-    required double t,
+    required Offset slideOffset,
+    required double slideT,
+    required double opacity,
   }) {
-    if (t <= 0) return;
-    // Scale (with overshoot from easeOutBack left uncapped, for the bounce)
-    // and fade the whole bar in — keeps its proportions correct throughout
-    // instead of growing its width from a thin sliver, which looked like a
-    // stretching blob against the fixed, fully-rounded corner radius.
-    final double scale = 0.55 + 0.45 * t;
-    final double opacity = t.clamp(0.0, 1.0);
+    if (opacity <= 0) return;
 
     final rect = Rect.fromCenter(center: Offset.zero, width: length, height: thickness);
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(thickness / 2));
 
     canvas.save();
+    // The slide offset is applied *before* the mark's rotation, so it reads
+    // in screen space (from the upper-right / lower-left) rather than along
+    // the bars' own axis. No clip anywhere — callers must leave the mark's
+    // container unclipped (see splash_screen.dart) or this offset gets cut.
+    canvas.translate(slideOffset.dx * (1 - slideT), slideOffset.dy * (1 - slideT));
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(_rotation);
     canvas.translate(center.dx, center.dy);
-    canvas.scale(scale);
+
     canvas.saveLayer(rect.inflate(thickness), Paint()..color = Colors.white.withValues(alpha: opacity));
     canvas.drawRRect(rrect, Paint()..shader = LinearGradient(colors: colors).createShader(rect));
     canvas.restore(); // saveLayer
-    canvas.restore(); // translate/scale
+    canvas.restore(); // slide/rotate/translate
   }
 
   @override

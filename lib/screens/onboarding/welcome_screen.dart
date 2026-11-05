@@ -65,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const AppLogo(size: 96),
+                        _LogoPop(size: 96),
                         const SizedBox(height: 28),
                         Text(kAppName, style: headingFont(color: kTextColor, fontSize: 28, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 10),
@@ -163,4 +163,88 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ),
     );
   }
+}
+
+/// First-build logo pop (docs/03, onboarding): the mark scales 0.8 -> 1 on
+/// the brand spring while a violet ring expands and fades behind it.
+/// One-shot (~600 ms); skipped entirely under reduced motion, which just
+/// shows the settled mark.
+class _LogoPop extends StatefulWidget {
+  final double size;
+
+  const _LogoPop({required this.size});
+
+  @override
+  State<_LogoPop> createState() => _LogoPopState();
+}
+
+class _LogoPopState extends State<_LogoPop> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+  late final Animation<double> _scale = Tween(begin: 0.8, end: 1.0).chain(CurveTween(curve: ShuroMotion.spring)).animate(_controller);
+  late final Animation<double> _ring = CurvedAnimation(parent: _controller, curve: ShuroMotion.std);
+
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.value = 1; // settled: static mark, ring fully faded
+    } else {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      // Clip.none: the ring expands past the mark's own box.
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedBuilder(
+            animation: _ring,
+            builder: (context, _) => CustomPaint(
+              size: Size.square(widget.size),
+              painter: _PopRingPainter(progress: _ring.value, markSize: widget.size),
+            ),
+          ),
+          ScaleTransition(scale: _scale, child: AppLogo(size: widget.size)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The expanding ring behind the welcome logo: stroke grows from the mark's
+/// edge outward (0.35 -> 0.66 of size) while fading to nothing.
+class _PopRingPainter extends CustomPainter {
+  final double progress;
+  final double markSize;
+
+  _PopRingPainter({required this.progress, required this.markSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0 || progress >= 1) return;
+    final double t = Curves.easeOut.transform(progress);
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = kVioletLight.withValues(alpha: 0.5 * (1 - t));
+    canvas.drawCircle(size.center(Offset.zero), markSize * (0.35 + 0.31 * t), stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PopRingPainter oldDelegate) => oldDelegate.progress != progress;
 }
