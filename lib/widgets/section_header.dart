@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 
 /// Recurring "Title ... See all" row used to head every horizontal/section
 /// list on Home, Library, Album/Artist detail, etc.
+///
+/// Title type is responsive per the redesign boards: 24/ExtraBold shelf
+/// titles on desktop-width windows ([DesktopTokens.section]), ~20/700 on
+/// phones. "See all" is brand violet with a chevron.
 class SectionHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onSeeAll;
@@ -18,6 +24,13 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Phones keep ~20/700; desktop-width windows get the boards' 24/800
+    // shelf title straight from the shared token, so no screen can drift.
+    final mobileTitle = headingFont(
+        color: kTextColor, fontSize: 20, fontWeight: FontWeight.w700);
+    final titleStyle = MediaQuery.sizeOf(context).width >= 800
+        ? DesktopTokens.section(mobileTitle)
+        : mobileTitle;
     return Padding(
       padding: padding,
       child: Row(
@@ -28,7 +41,7 @@ class SectionHeader extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600),
+              style: titleStyle,
             ),
           ),
           if (onSeeAll != null)
@@ -47,8 +60,15 @@ class SectionHeader extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('See all', style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13)),
-                      const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 18),
+                      Text(
+                        'See all',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kVioletLight,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: kVioletLight, size: 18),
                     ],
                   ),
                 ),

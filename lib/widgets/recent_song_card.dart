@@ -8,21 +8,25 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
 import 'artwork_thumb.dart';
+import 'desktop_context_menu.dart';
 import 'song_actions_sheet.dart';
 
 /// A single card in a horizontal song rail (Home's Recently Played /
-/// Recently Added / Favorites / Recommended). Full square artwork with a
-/// "now playing" badge overlaid in the corner when active — no partial banner
-/// or overlapping avatar cutting into the art.
+/// Recently Added / Favorites / Recommended). Full square artwork (168 on
+/// desktop-width windows, 150 on phones — see [railCardWidth]) with a
+/// "now playing" badge overlaid in the corner when active.
 ///
-/// Two things this card deliberately does that it didn't before, both of them
-/// about making it obvious what a tap will do:
+/// Three things this card deliberately does, all of them about making it
+/// obvious what a tap will do:
 ///  - The whole card shows a ripple on press. It used to be a bare
 ///    [GestureDetector], so nothing on screen moved when you touched a card —
 ///    reading as "not a button" rather than "tappable".
 ///  - The card for the track that's playing shows a **pause** control instead
 ///    of silently restarting that track from 0:00 when tapped (see
 ///    [PlayerController.playOrToggle]).
+///  - On desktop the card right-clicks into the same song menu every row
+///    has ([ContextMenuRegion] + [songContextMenuItems], the song_tile
+///    pattern); touch keeps the long-press actions sheet.
 class RecentSongCard extends StatelessWidget {
   final Song song;
   final bool isPlaying;
@@ -45,14 +49,14 @@ class RecentSongCard extends StatelessWidget {
     final isCurrent = player.currentSong?.id == song.id;
     final playing = isCurrent && player.isPlaying;
 
-    return SizedBox(
+    final card = SizedBox(
       width: width,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
-          // Hold-to-open is touch-only now; desktop right-clicks.
+          // Hold-to-open is touch-only; desktop right-clicks (below).
           onLongPress: isDesktopPlatform
               ? null
               : () {
@@ -92,24 +96,27 @@ class RecentSongCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
                   song.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  // The playing card keeps its per-artist accent; everything
+                  // else is the board's #E8E8F0 title tone.
                   style: GoogleFonts.getFont(currentFontFamily,
-                      color: playing ? song.gradientColors.last : Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500),
+                      color: playing ? song.gradientColors.last : kTextColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
                 ),
                 Text(
                   song.artist,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  // white60 rather than the app's 38%-white muted tone: at this
-                  // size the darker tone fell below the 4.5:1 contrast bar.
+                  // kStatusText (#9AA3B5) is the boards' card-artist tone —
+                  // deliberately lighter than white54 but still 4.5:1+ on the
+                  // app surface.
                   style: GoogleFonts.getFont(currentFontFamily,
-                      color: Colors.white60, fontSize: 11),
+                      color: kStatusText, fontSize: 13),
                 ),
               ],
             ),
@@ -117,6 +124,13 @@ class RecentSongCard extends StatelessWidget {
         ),
       ),
     );
+
+    // Desktop right-click → the shared song menu (exactly how song_tile does
+    // it); everywhere else the card above behaves as it always has.
+    return isDesktopPlatform
+        ? ContextMenuRegion(
+            items: songContextMenuItems(context, song), child: card)
+        : card;
   }
 }
 
@@ -207,12 +221,19 @@ class _PlayingBadgeState extends State<_PlayingBadge>
   }
 }
 
-/// Height of a horizontal rail of 150 dp cards (square cover + title + artist).
+/// Rail cover width: the boards' 168 px covers on desktop-width windows,
+/// the long-standing 150 on phones.
+double railCardWidth(BuildContext context) =>
+    MediaQuery.sizeOf(context).width >= 800 ? 168.0 : 150.0;
+
+/// Height of a horizontal rail of square cards (cover + title + artist).
 /// A fixed 200 fit at the default font size but overflowed (yellow/black
 /// stripes under every song card) once the device font scale reached ~1.5, so
 /// the two text lines are measured with the user's text scaler.
 double cardRailHeight(BuildContext context, {double coverWidth = 150}) {
   final scaler = MediaQuery.textScalerOf(context);
-  final text = scaler.scale(13) * 1.4 + scaler.scale(11) * 1.4;
-  return (coverWidth + 8 + text + 4).clamp(200.0, 320.0);
+  // Title is 14/600 and artist 13 (board card), with a 10 px gap under the
+  // cover and 2 px between the lines.
+  final text = scaler.scale(14) * 1.4 + scaler.scale(13) * 1.4;
+  return (coverWidth + 10 + text + 4).clamp(200.0, 340.0);
 }

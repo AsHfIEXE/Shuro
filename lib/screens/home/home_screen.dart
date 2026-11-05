@@ -31,19 +31,24 @@ import '../search/search_screen.dart';
 import '../onboarding/server_setup_screen.dart';
 import '../settings/settings_screen.dart';
 
-/// The time-of-day greeting, refreshing itself every minute.
+/// Rebuilds its subtree once a minute so the greeting words on a long-lived
+/// Home tab never go stale.
 ///
 /// It used to be a static helper evaluated once per build of a *stateless*
 /// screen: a session left open kept the old words, and the ranges had no night
 /// band at all — which is how "Good evening" ended up on screen at 11:29 pm.
-class _GreetingText extends StatefulWidget {
-  const _GreetingText();
+/// Now a builder: the greeting feeds both the hero eyebrow ("GOOD EVENING ·
+/// CONTINUE LISTENING") and the hero title.
+class _GreetingBuilder extends StatefulWidget {
+  final Widget Function(String greeting) builder;
+
+  const _GreetingBuilder({required this.builder});
 
   @override
-  State<_GreetingText> createState() => _GreetingTextState();
+  State<_GreetingBuilder> createState() => _GreetingBuilderState();
 }
 
-class _GreetingTextState extends State<_GreetingText> {
+class _GreetingBuilderState extends State<_GreetingBuilder> {
   Timer? _timer;
 
   @override
@@ -74,20 +79,25 @@ class _GreetingTextState extends State<_GreetingText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(greetingFor(DateTime.now()),
-        style: GoogleFonts.getFont(currentFontFamily,
-            color: Colors.white60, fontSize: 13));
+    return widget.builder(greetingFor(DateTime.now()));
   }
 }
 
-/// "02. Home" — search, greeting, and the Recently Played / Recently Added /
-/// Favorites / Recommended / Recently Played Albums rails. The Mini Player
-/// itself lives in AppShell so it persists across tabs.
+/// "m:ss" for the hero's "Paused at" line (board copy: "Paused at 1:26").
+String _formatClock(Duration d) =>
+    '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+/// "02. Home" — greeting/continue-listening hero, search, and the Recently
+/// Played / Recently Added / Favorites / Recommended / Recently Played Albums
+/// rails. The Mini Player itself lives in AppShell so it persists across tabs.
 ///
 /// Everything here is built so it's obvious what each thing does:
+///  - the hero picks up the last played track where it was paused (or shows
+///    the greeting alone when nothing has ever been played);
 ///  - every rail has a working "See all" that opens the full list;
-///  - a card ripples when pressed, long-presses into the track's actions, and
-///    pausing takes one tap on the card that's playing;
+///  - a card ripples when pressed, long-presses into the track's actions
+///    (right-clicks into the same menu on desktop), and pausing takes one tap
+///    on the card that's playing;
 ///  - the skeleton appears only while a library is genuinely still loading,
 ///    never as a fixed delay dressed up as work.
 class HomeScreen extends StatelessWidget {
@@ -100,6 +110,28 @@ class HomeScreen extends StatelessWidget {
   Future<void> _refresh(BuildContext context) async {
     HapticFeedback.mediumImpact();
     await context.read<AppState>().refreshLibrary();
+  }
+
+  /// Hero "Resume playback": if the hero track is still the loaded one, just
+  /// un-pause it — the audio engine kept its position across the pause, so
+  /// that live position IS the resume point. Anything else plays from the
+  /// start: AppState persists no per-song position (the only saved position
+  /// belongs to the one-shot session-queue restore in app.dart), so a track
+  /// that is no longer loaded has no spot to seek to.
+  void _resumePlayback(PlayerController player, Song song, List<Song> queue) {
+    if (player.currentSong?.id == song.id) {
+      if (!player.isPlaying) player.togglePlayPause();
+      return;
+    }
+    player.playSong(song, queue: queue);
+  }
+
+  /// Hero "Shuffle all" — exactly what Library's Shuffle button does: shuffle
+  /// the whole playable library and start on the first draw.
+  void _shuffleLibrary(PlayerController player, List<Song> library) {
+    if (library.isEmpty) return;
+    final shuffled = [...library]..shuffle();
+    player.playSong(shuffled.first, queue: shuffled);
   }
 
   @override
@@ -156,6 +188,40 @@ class HomeScreen extends StatelessWidget {
         recentAlbums.addAll(appState.recentlyAddedAlbums());
     }
 
+    // --- Continue-listening hero data --------------------------------------
+    // The last played track from the app's own history (real plays only, so
+    // it works for a local-only library too). With no history the hero hides
+    // and the greeting header above stands alone.
+    final heroQueue = appState.recentlyPlayedSongs();
+    final heroSong = heroQueue.isNotEmpty ? heroQueue.first : null;
+    final heroIsCurrent =
+        heroSong != null && player.currentSong?.id == heroSong.id;
+    final heroPausedAt = (heroIsCurrent &&
+            !player.isPlaying &&
+            player.position > Duration.zero)
+        ? player.position
+        : null;
+    // Board copy shape: "Aria Vale · Orbit. Paused at 1:26. Pick up where
+    // you left off…". The Pulse closer only makes sense with a server behind
+    // Shuro Pulse.
+    String? heroSubtitle;
+    if (heroSong != null) {
+      final albumTitle = appState.albumById(heroSong.albumId)?.title;
+      final byline = [
+        heroSong.artist,
+        if (albumTitle != null && albumTitle.isNotEmpty) albumTitle,
+      ].join(' · ');
+      final tail = hasServer
+          ? 'Pick up where you left off, or let Shuro Pulse build something new from what you play.'
+          : 'Pick up where you left off, or shuffle your library for something new.';
+      heroSubtitle = heroPausedAt != null
+          ? '$byline. Paused at ${_formatClock(heroPausedAt)}. $tail'
+          : '$byline. $tail';
+    }
+
+    // Board covers: 168 px on desktop-width windows, 150 on phones.
+    final railCoverWidth = railCardWidth(context);
+
     return Scaffold(
       backgroundColor: kSurfaceColor,
       body: SafeArea(
@@ -174,19 +240,29 @@ class HomeScreen extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                           child: Row(
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const _GreetingText(),
-                                    Text('Your library',
+                              // No listening history yet → the greeting is
+                              // the whole hero (see _ContinueHero for the
+                              // with-history treatment).
+                              if (heroSong == null)
+                                Expanded(
+                                  child: _GreetingBuilder(
+                                    builder: (greeting) => Text(greeting,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: headingFont(
                                             color: kTextColor,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
+                                            fontSize:
+                                                MediaQuery.sizeOf(context)
+                                                            .width >=
+                                                        800
+                                                    ? 36
+                                                    : 24,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.9)),
+                                  ),
+                                )
+                              else
+                                const Spacer(),
                               if (!kIsWeb &&
                                   (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
                                 IconButton(
@@ -239,8 +315,7 @@ class HomeScreen extends StatelessWidget {
                           // the shelves down and duplicated search.
                           child: (kIsWeb ||
                                   !(Platform.isWindows ||
-                                      Platform.isLinux ||
-                                      Platform.isMacOS))
+                                      Platform.isLinux || Platform.isMacOS))
                               ? Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                       20, 16, 20, 8),
@@ -287,6 +362,20 @@ class HomeScreen extends StatelessWidget {
                                   ),
                                 )
                               : null),
+                      if (heroSong != null)
+                        SliverToBoxAdapter(
+                          child: _GreetingBuilder(
+                            builder: (greeting) => _ContinueHero(
+                              greeting: greeting,
+                              song: heroSong,
+                              subtitle: heroSubtitle!,
+                              onResume: () =>
+                                  _resumePlayback(player, heroSong, heroQueue),
+                              onShuffleAll: () =>
+                                  _shuffleLibrary(player, appState.allSongs),
+                            ),
+                          ),
+                        ),
                       const SliverToBoxAdapter(child: SizedBox(height: 12)),
                       if (!appState.hasAnyMusic)
                         SliverFillRemaining(
@@ -303,6 +392,7 @@ class HomeScreen extends StatelessWidget {
                                 queue: recentlyPlayed),
                             onSeeAll: () => openSongList(
                                 context, 'Recently played', recentlyPlayed),
+                            coverWidth: railCoverWidth,
                           ),
                         _SongRail(
                           title: 'Recently Added',
@@ -312,6 +402,7 @@ class HomeScreen extends StatelessWidget {
                               player.playOrToggle(song, queue: recentlyAdded),
                           onSeeAll: () => openSongList(
                               context, 'Recently added', recentlyAdded),
+                          coverWidth: railCoverWidth,
                         ),
                         SliverToBoxAdapter(
                           child: SectionHeader(
@@ -341,6 +432,7 @@ class HomeScreen extends StatelessWidget {
                                 player.playOrToggle(song, queue: favorites),
                             showHeader: false,
                             onSeeAll: null,
+                            coverWidth: railCoverWidth,
                           ),
                         _SongRail(
                           title: 'Rediscover',
@@ -352,6 +444,7 @@ class HomeScreen extends StatelessWidget {
                               ? null
                               : () => openSongList(
                                   context, 'Rediscover', rediscover),
+                          coverWidth: railCoverWidth,
                         ),
                         if (hasServer) ...[
                           _SongRail(
@@ -366,6 +459,7 @@ class HomeScreen extends StatelessWidget {
                               recommended,
                               subtitle: 'Ranked from what you actually play',
                             ),
+                            coverWidth: railCoverWidth,
                           ),
                           SliverToBoxAdapter(
                             child: SectionHeader(
@@ -381,7 +475,8 @@ class HomeScreen extends StatelessWidget {
                           ),
                           SliverToBoxAdapter(
                             child: SizedBox(
-                              height: cardRailHeight(context),
+                              height: cardRailHeight(context,
+                                  coverWidth: railCoverWidth),
                               child: ListView.separated(
                                 scrollDirection: Axis.horizontal,
                                 padding:
@@ -392,7 +487,7 @@ class HomeScreen extends StatelessWidget {
                                 itemBuilder: (context, i) {
                                   final album = recentAlbums[i];
                                   return SizedBox(
-                                    width: 150,
+                                    width: railCoverWidth,
                                     child: AlbumCard(
                                       album: album,
                                       onTap: () => Navigator.of(context).push(
@@ -416,9 +511,309 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+/// The continue-listening hero from the redesign board: an ambient brand
+/// gradient with soft decorative discs, the greeting eyebrow ("GOOD EVENING ·
+/// CONTINUE LISTENING", 12/600 violet-pale) over the greeting as the hero
+/// title (36–56/800, responsive), and the last-played track under it with
+/// "Resume playback" / "Shuffle all".
+///
+/// Everything decorative is [IgnorePointer]ed and nothing animates, so the
+/// hero adds no motion (reduced-motion rule) and never steals a tap. All
+/// colours come from palette tokens — the board's #1B0F3D→#0B0F14 backdrop is
+/// rebuilt as a brand wash fading into [kSurfaceColor].
+class _ContinueHero extends StatelessWidget {
+  final String greeting;
+  final Song song;
+  final String subtitle;
+  final VoidCallback onResume;
+  final VoidCallback onShuffleAll;
+
+  const _ContinueHero({
+    required this.greeting,
+    required this.song,
+    required this.subtitle,
+    required this.onResume,
+    required this.onShuffleAll,
+  });
+
+  // Board backdrop: violet (#1B0F3D) fading down into the app surface.
+  static final LinearGradient _backdrop = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [kBrandColor.withValues(alpha: 0.35), kSurfaceColor],
+  );
+  // Ambient brand washes behind the discs (pink high-right, cyan low-mid).
+  static final RadialGradient _pinkWash = RadialGradient(
+    center: const Alignment(0.9, -0.15),
+    radius: 1.1,
+    colors: [kPinkLight.withValues(alpha: 0.30), Colors.transparent],
+  );
+  static final RadialGradient _cyanWash = RadialGradient(
+    center: const Alignment(0.45, 0.95),
+    radius: 1.2,
+    colors: [kSecondaryColor.withValues(alpha: 0.22), Colors.transparent],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 800;
+    final titleSize = wide ? 56.0 : 36.0;
+    // The discs shrink on phone-width heroes instead of drowning the copy.
+    final discScale = wide ? 1.0 : 0.62;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: wide ? 400.0 : 0.0),
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              // --- decorative layer -------------------------------------
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Stack(
+                    children: [
+                      // Board backdrop first, washes and discs over it.
+                      Positioned.fill(
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(gradient: _backdrop))),
+                      Positioned.fill(
+                          child: DecoratedBox(
+                              decoration:
+                                  BoxDecoration(gradient: _pinkWash))),
+                      Positioned.fill(
+                          child: DecoratedBox(
+                              decoration:
+                                  BoxDecoration(gradient: _cyanWash))),
+                      // The board's three rotated "albums", done as soft
+                      // gradient discs (palette tokens only).
+                      Positioned(
+                        top: wide ? 72 : 12,
+                        right: wide ? 96 : -56,
+                        child: _HeroDisc(
+                          size: 320 * discScale,
+                          gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [kAccentColor, kBrandColor]),
+                          glow: kAccentColor,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: wide ? 48 : 12,
+                        right: wide ? 320 : 24,
+                        child: Transform.rotate(
+                          angle: -0.09,
+                          child: _HeroDisc(
+                            size: 200 * discScale,
+                            gradient: const LinearGradient(
+                                begin: Alignment.topRight,
+                                end: Alignment.bottomLeft,
+                                colors: [kSecondaryColor, kBrandColor]),
+                            glow: kSecondaryColor,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: wide ? 264 : null,
+                        bottom: wide ? null : 64,
+                        right: wide ? 28 : -24,
+                        child: Transform.rotate(
+                          angle: 0.14,
+                          child: _HeroDisc(
+                            size: 110 * discScale,
+                            gradient: const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomLeft,
+                                colors: [kSecondaryColor, kBrandColor]),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // --- content -----------------------------------------------
+              Padding(
+                padding: wide
+                    ? const EdgeInsets.fromLTRB(28, 32, 28, 32)
+                    : const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 660),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        // "GOOD EVENING · CONTINUE LISTENING" — the eyebrow
+                        // tracks the same four greeting bands as the title.
+                        '${greeting.toUpperCase()} · CONTINUE LISTENING',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kVioletPale,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        greeting,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        // Board: 56/800 with tight (-0.03em) tracking on
+                        // desktop; 36 on phones.
+                        style: headingFont(
+                            color: kTextColor,
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: wide ? -1.6 : -1.1,
+                            height: 1.08),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        subtitle,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kTextColor, fontSize: 15, height: 1.45),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          _HeroPill(
+                            label: 'Resume playback',
+                            icon: Icons.play_arrow_rounded,
+                            minWidth: 187,
+                            onTap: onResume,
+                          ),
+                          _HeroPill(
+                            label: 'Shuffle all',
+                            glass: true,
+                            onTap: onShuffleAll,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One 44 dp pill button from the hero board: brand-gradient fill (with a
+/// leading icon) for the primary action, glass + hairline ring for secondary
+/// ones. Radius 22 = a full pill at this height.
+class _HeroPill extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+
+  /// Board width for the primary pill; secondary pills size to their label.
+  final double minWidth;
+  final bool glass;
+  final VoidCallback onTap;
+
+  const _HeroPill({
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.minWidth = 0,
+    this.glass = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(22);
+    return Material(
+      color: glass ? kGlass : Colors.transparent,
+      shape: glass
+          ? RoundedRectangleBorder(
+              borderRadius: radius, side: BorderSide(color: kHairline))
+          : RoundedRectangleBorder(borderRadius: radius),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        // The gradient sits on the Ink (under the splash); the glass pill
+        // keeps its flat kGlass fill from the Material above.
+        decoration: glass
+            ? null
+            : BoxDecoration(
+                gradient: const LinearGradient(colors: kBrandGradient),
+                borderRadius: radius),
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: 44,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: icon != null ? 22 : 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    label,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: glass ? 14 : 15,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A soft decorative disc for the hero backdrop. Gradient + shadows only —
+/// never interactive, never animated.
+class _HeroDisc extends StatelessWidget {
+  final double size;
+  final Gradient gradient;
+
+  /// Optional outer glow in the disc's own tint.
+  final Color? glow;
+
+  const _HeroDisc({required this.size, required this.gradient, this.glow});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: gradient,
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 48,
+              offset: const Offset(0, 24)),
+          if (glow != null)
+            BoxShadow(
+                color: glow!.withValues(alpha: 0.30), blurRadius: 90),
+        ],
+      ),
+    );
+  }
+}
+
 /// Skeleton placeholder shown while a library fetch is genuinely in flight —
-/// mirrors the real layout's proportions so the transition into real content
-/// doesn't jump around.
+/// mirrors the real layout's proportions (hero first, then a rail) so the
+/// transition into real content doesn't jump around.
 class _HomeSkeleton extends StatelessWidget {
   const _HomeSkeleton({super.key});
 
@@ -428,11 +823,7 @@ class _HomeSkeleton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       physics: const NeverScrollableScrollPhysics(),
       children: const [
-        ShimmerBox(width: 90, height: 12),
-        SizedBox(height: 8),
-        ShimmerBox(width: 140, height: 20),
-        SizedBox(height: 20),
-        ShimmerBox(width: double.infinity, height: 44, radius: 22),
+        ShimmerBox(width: double.infinity, height: 240, radius: 26),
         SizedBox(height: 24),
         ShimmerBox(width: 130, height: 16),
         SizedBox(height: 12),
@@ -589,6 +980,10 @@ class _SongRail extends StatelessWidget {
   final bool showHeader;
   final VoidCallback? onSeeAll;
 
+  /// Square cover size (168 on desktop windows, 150 on phones — see
+  /// [railCardWidth]); drives the row height and the arrow step too.
+  final double coverWidth;
+
   const _SongRail({
     required this.title,
     required this.songs,
@@ -596,6 +991,7 @@ class _SongRail extends StatelessWidget {
     required this.onTapSong,
     this.showHeader = true,
     this.onSeeAll,
+    required this.coverWidth,
   });
 
   @override
@@ -610,8 +1006,8 @@ class _SongRail extends StatelessWidget {
           // ShelfRow (phase 3): hover arrows step whole cards so a mouse
           // never needs shift-wheel, and no card stops half-cut.
           ShelfRow(
-            height: cardRailHeight(context),
-            cardWidth: 150,
+            height: cardRailHeight(context, coverWidth: coverWidth),
+            cardWidth: coverWidth,
             gap: 16,
             itemCount: songs.length,
             itemBuilder: (context, i) {
@@ -619,6 +1015,7 @@ class _SongRail extends StatelessWidget {
               return RecentSongCard(
                 song: song,
                 isPlaying: song.id == currentSongId,
+                width: coverWidth,
                 onTap: () => onTapSong(song),
               );
             },

@@ -125,22 +125,24 @@ class _ArrowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Board arrows: 32 px glass circles with a hairline ring — light enough
+    // to sit over album art without covering it. Stepping behavior is
+    // unchanged (see _ShelfRowState._step).
     return Material(
-      color: kCardColor.withValues(alpha: 0.92),
-      elevation: 3,
-      shape: const CircleBorder(),
+      color: kGlass,
+      shape: CircleBorder(side: BorderSide(color: kDividerColor)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
+          width: 32,
+          height: 32,
           child: Icon(
             forward
                 ? Icons.chevron_right_rounded
                 : Icons.chevron_left_rounded,
-            size: 22,
-            color: Colors.white,
+            size: 16,
+            color: kTextColor,
           ),
         ),
       ),
