@@ -9,6 +9,38 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
+## [2.6.0] - 2026-11-06
+
+The full UI/UX redesign (shuro-ui-handoff) lands - a visual and interaction
+refresh only; every feature, route, nav destination and setting is unchanged.
+
+- **Ring everywhere**: the progress ring now starts at 12 o'clock with a
+  buffered arc, the fixed pink-violet brand gradient and spec knob sizes -
+  Now Playing (desktop 400 / mobile 330), the lyrics mini transport (52), the
+  desktop dock (52) and the mobile mini player (44, fully scrubbable with
+  haptic ticks; the linear seek bar is gone).
+- **Now Playing**: white play discs (76/68), pink artist + album + year line,
+  lossless quality chip, PLAYING FROM header with output chip, scrub bubble,
+  arrow +/-5 s seeks, desktop hint row, mobile Now Playing | Lyrics | Queue
+  page tabs, mesh-blob backdrop.
+- **Lyrics**: word-synced chip + tools pill, violet cue bar, neighbour fade
+  ladder, hover timestamps, footer credits, shimmer loading, word/line sync
+  toggle in appearance.
+- **Desktop shell**: board sidebar (#0E131B, hairline, account card with
+  server status, violet active items with left bar, PLAYLISTS quick access),
+  52 px ring artwork in the 88 px dock, auto-collapse fixed to the window
+  width.
+- **Home**: continue-listening hero (Resume playback / Shuffle all), greeting
+  eyebrow, 168 px recent covers with right-click menus, 24/800 sections.
+- **Library / Downloads**: design tab set (Songs, Albums, Artists, Playlists,
+  Genres, Cached, Local files), hairline table card with filter + sort chip
+  pills, downloads status chips, active rows with cancel/retry and a storage
+  bar card.
+- **Brand motion**: real-mark slide-in splash timeline with gradient loader
+  and cycling status line, welcome logo pop - all reduced-motion aware.
+
+---
+
 ## [2.2.3] — 2026-10-14
 
 - **Critical: release builds had no INTERNET permission.** Flutter adds it
