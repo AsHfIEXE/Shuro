@@ -12,6 +12,12 @@ import 'shuro_icons.dart';
 /// this — see NowPlayingScreen) rather than read off `song.gradientColors`
 /// here, since that per-ID hash color has nothing to do with what the
 /// cover art actually looks like.
+///
+/// The redesigned Now Playing (docs/02) no longer uses this row — its
+/// shuffle/repeat moved to the transport flanks and the metadata grew a
+/// dedicated block — but it remains the shared row for the compact
+/// landscape cluster and any future host, so the layout stays identical
+/// across the app.
 class TrackInfoRow extends StatelessWidget {
   final Song song;
   final Color accent;
@@ -132,6 +138,17 @@ class TrackInfoRow extends StatelessWidget {
 }
 
 /// Previous / play-pause / next — the "Play/Pause" group from the design.
+///
+/// Two geometries:
+///
+///  * **Legacy** (no [discSize]): a centred row with an 80 dp accent disc
+///    (56 compact), used by the landscape-compact cluster where the column
+///    is barely 360 dp tall.
+///  * **Redesigned** ([discSize] set, docs/02): exact board geometry — the
+///    play disc is WHITE with dark icons and a soft drop shadow, prev/next
+///    get explicit icon sizes, and [flankDistance] pins the shuffle/repeat
+///    centres at ±2·62 (desktop) / ±2·54 (mobile) from the middle. The row
+///    is then a fixed-width `spaceBetween` so those offsets are exact.
 class PlaybackControls extends StatelessWidget {
   final bool isPlaying;
 
@@ -155,6 +172,23 @@ class PlaybackControls extends StatelessWidget {
   final Widget? leading;
   final Widget? trailing;
 
+  /// Play disc diameter for the redesigned geometry: 76 on desktop, 68 on
+  /// mobile ([NpvMetrics.playDiscDesktop] / [NpvMetrics.playDiscMobile]).
+  /// Null keeps the legacy 80/56 accent disc.
+  final double? discSize;
+
+  /// Distance of the flank (shuffle/repeat) button CENTRES from the row
+  /// centre: ±2·62 = 124 on desktop, ±2·54 = 108 on mobile (docs/02).
+  /// Only meaningful together with [discSize] and a [leading] widget.
+  final double? flankDistance;
+
+  /// Prev/next icon size: 35 desktop / 31 mobile (legacy stays 30).
+  final double? prevNextIconSize;
+
+  /// White disc with dark icons and subtle elevation (redesign) instead of
+  /// the accent gradient with a glow.
+  final bool whiteDisc;
+
   const PlaybackControls({
     super.key,
     this.leading,
@@ -166,10 +200,22 @@ class PlaybackControls extends StatelessWidget {
     required this.onNext,
     this.isBuffering = false,
     this.compact = false,
+    this.discSize,
+    this.flankDistance,
+    this.prevNextIconSize,
+    this.whiteDisc = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Redesigned transport only when the board geometry was asked for.
+    if (discSize != null) return _buildRedesigned(context);
+    return _buildLegacy(context);
+  }
+
+  // --- legacy: centred accent-disc row (landscape compact) ------------------
+
+  Widget _buildLegacy(BuildContext context) {
     final discSize = compact ? 56.0 : 80.0;
     final iconSize = compact ? 24.0 : 30.0;
     final gap = compact ? 18.0 : 26.0;
@@ -190,49 +236,7 @@ class PlaybackControls extends StatelessWidget {
           ),
         ),
         SizedBox(width: gap),
-        GestureDetector(
-          onTap: onPlayPause,
-          child: Semantics(
-            button: true,
-            label: isBuffering ? 'Loading' : (isPlaying ? 'Pause' : 'Play'),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              width: discSize,
-              height: discSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                    colors: [accentColor, accentColor.withValues(alpha: 0.7)]),
-                boxShadow: [
-                  BoxShadow(
-                      color:
-                          accentColor.withValues(alpha: isPlaying ? 0.65 : 0.4),
-                      blurRadius: isPlaying ? 32 : 20,
-                      spreadRadius: 1),
-                ],
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                transitionBuilder: (child, animation) =>
-                    ScaleTransition(scale: animation, child: child),
-                child: isBuffering
-                    ? Padding(
-                        key: const ValueKey('buffering'),
-                        padding: EdgeInsets.all(compact ? 17 : 26),
-                        child: const CircularProgressIndicator(
-                            strokeWidth: 2.6, color: Colors.white),
-                      )
-                    : ShuroIcon(
-                        isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
-                        key: ValueKey(isPlaying),
-                        color: Colors.white,
-                        size: compact ? 24 : 34,
-                      ),
-              ),
-            ),
-          ),
-        ),
+        _disc(discSize, compact ? 24.0 : 34.0),
         SizedBox(width: gap),
         Semantics(
           button: true,
@@ -240,14 +244,142 @@ class PlaybackControls extends StatelessWidget {
           child: IconButton(
             visualDensity:
                 compact ? VisualDensity.compact : VisualDensity.standard,
-            icon:
-                ShuroIcon(ShuroGlyph.next, size: iconSize, color: Colors.white),
+            icon: ShuroIcon(ShuroGlyph.next, size: iconSize, color: Colors.white),
             onPressed: onNext,
             tooltip: 'Next',
           ),
         ),
         if (trailing != null) ...[SizedBox(width: gap * 0.5), trailing!],
       ],
+    );
+  }
+
+  // --- redesigned: exact board geometry (docs/02 transport) ----------------
+
+  Widget _buildRedesigned(BuildContext context) {
+    final disc = discSize!;
+    // Touch targets: 48 desktop / 44 mobile (the a11y floor) — the flank
+    // distance is measured to these slots' centres.
+    final sideBox = disc >= 76 ? 48.0 : 44.0;
+    final iconSize = prevNextIconSize ?? 30.0;
+
+    Widget flank(Widget? child) => child == null
+        ? const SizedBox.shrink()
+        : SizedBox(
+            width: sideBox, height: disc, child: Center(child: child));
+
+    Widget skip(String label, ShuroGlyph glyph, VoidCallback? onPressed) =>
+        SizedBox(
+          width: sideBox,
+          height: disc,
+          child: Center(
+            child: IconButton(
+              tooltip: label,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              iconSize: iconSize,
+              visualDensity: VisualDensity.compact,
+              icon: ShuroIcon(glyph, size: iconSize, color: Colors.white),
+              onPressed: onPressed,
+            ),
+          ),
+        );
+
+    final children = [
+      if (leading != null) flank(leading),
+      skip('Previous', ShuroGlyph.previous, onPrevious),
+      _disc(disc, (disc * 0.42).roundToDouble()),
+      skip('Next', ShuroGlyph.next, onNext),
+      if (trailing != null) flank(trailing),
+    ];
+
+    if (flankDistance != null && leading != null) {
+      // Fixed width + spaceBetween: with symmetric outer slot widths the
+      // flank centres land exactly at ±flankDistance from the middle.
+      final rowWidth = 2 * flankDistance! + sideBox;
+      return SizedBox(
+        width: rowWidth,
+        height: disc,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: children,
+        ),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(width: 12),
+          children[i],
+        ],
+      ],
+    );
+  }
+
+  /// The play disc itself. Redesign: white plate, DARK glyphs, one soft drop
+  /// shadow ("subtle elevation"). Legacy: accent gradient + accent glow.
+  /// The buffering spinner keeps working in both, recoloured to sit on the
+  /// disc.
+  Widget _disc(double size, double iconSize) {
+    final fg = whiteDisc ? kSurfaceColor : Colors.white;
+    return GestureDetector(
+      onTap: onPlayPause,
+      child: Semantics(
+        button: true,
+        label: isBuffering ? 'Loading' : (isPlaying ? 'Pause' : 'Play'),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: ShuroMotion.std,
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: whiteDisc ? Colors.white : null,
+            gradient: whiteDisc
+                ? null
+                : LinearGradient(colors: [
+                    accentColor,
+                    accentColor.withValues(alpha: 0.7)
+                  ]),
+            boxShadow: whiteDisc
+                ? [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6)),
+                  ]
+                : [
+                    BoxShadow(
+                        color:
+                            accentColor.withValues(alpha: isPlaying ? 0.65 : 0.4),
+                        blurRadius: isPlaying ? 32 : 20,
+                        spreadRadius: 1),
+                  ],
+          ),
+          child: AnimatedSwitcher(
+            // docs/02 motion: play/pause glyph cross-fades in 160 ms.
+            duration: const Duration(milliseconds: 160),
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: isBuffering
+                ? Padding(
+                    key: const ValueKey('buffering'),
+                    padding: EdgeInsets.all(size * 0.33),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.6, color: fg),
+                  )
+                : ShuroIcon(
+                    isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
+                    key: ValueKey(isPlaying),
+                    color: fg,
+                    size: iconSize,
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -259,6 +391,10 @@ class PlaybackControls extends StatelessWidget {
 /// This one mutes the icon when off, colours it with the accent and draws a dot
 /// under it when on, swaps the icon entirely for repeat-one, and states the mode
 /// in words for screen readers and tooltips.
+///
+/// [plain] drops the dim background circle for the redesigned transport
+/// flanks (docs/02): bare icons at white 60% when off; on-state colour comes
+/// from [activeColor] (repeat: brand violet; shuffle: full white) plus the dot.
 class PlayerModeButton extends StatelessWidget {
   /// Shuro's own glyph set, when the mode has one (shuffle).
   final ShuroGlyph? shuroIcon;
@@ -271,6 +407,16 @@ class PlayerModeButton extends StatelessWidget {
   final Color accent;
   final VoidCallback onTap;
 
+  /// Bare-icon variant for the transport flanks — no tinted circle.
+  final bool plain;
+
+  /// Icon size (transport flanks shrink to 20-22).
+  final double size;
+
+  /// Colour used for the ON state (defaults to [accent]); the redesigned
+  /// repeat passes brand violet regardless of the track's artwork accent.
+  final Color? activeColor;
+
   const PlayerModeButton({
     super.key,
     required this.modeLabel,
@@ -280,36 +426,62 @@ class PlayerModeButton extends StatelessWidget {
     this.shuroIcon,
     this.materialIcon,
     this.badge,
+    this.plain = false,
+    this.size = 22,
+    this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final colour = active ? accent : Colors.white.withValues(alpha: 0.9);
+    final onColor = activeColor ?? accent;
+    final colour = plain
+        ? (active ? onColor : Colors.white.withValues(alpha: 0.6))
+        : (active ? accent : Colors.white.withValues(alpha: 0.9));
     final iconWidget = materialIcon != null
-        ? Icon(materialIcon, size: 22, color: colour)
-        : ShuroIcon(shuroIcon!, size: 22, color: colour);
+        ? Icon(materialIcon, size: size, color: colour)
+        : ShuroIcon(shuroIcon!, size: size, color: colour);
 
-    // A dim circle behind every mode button: on Now Playing the background is
-    // bright blurred artwork, and bare white54 icons disappeared into it (the
-    // "shuffle button is gone" report). The circle keeps both states readable
-    // over any cover; the active state adds the accent tint + the dot below.
+    // Plain mode marks ON with a small dot under the icon — without the
+    // tinted circle there is no other place for the state to live.
+    final content = (plain && active && badge == null)
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              iconWidget,
+              const SizedBox(height: 2),
+              Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(color: onColor, shape: BoxShape.circle),
+              ),
+            ],
+          )
+        : iconWidget;
+
+    // A dim circle behind every (non-plain) mode button: on Now Playing the
+    // background is bright blurred artwork, and bare white54 icons
+    // disappeared into it (the "shuffle button is gone" report). The circle
+    // keeps both states readable over any cover; the active state adds the
+    // accent tint + the dot below.
     return Semantics(
       button: true,
       label: '$modeLabel, ${active ? 'on' : 'off'}',
       child: IconButton(
         tooltip: '$modeLabel — ${active ? 'on' : 'off'}',
         onPressed: onTap,
-        style: IconButton.styleFrom(
-          backgroundColor: active
-              ? accent.withValues(alpha: 0.22)
-              : Colors.black.withValues(alpha: 0.28),
-        ),
+        style: plain
+            ? null
+            : IconButton.styleFrom(
+                backgroundColor: active
+                    ? accent.withValues(alpha: 0.22)
+                    : Colors.black.withValues(alpha: 0.28),
+              ),
         icon: badge == null
-            ? iconWidget
+            ? content
             : Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  iconWidget,
+                  content,
                   Positioned(
                     right: -4,
                     top: -3,

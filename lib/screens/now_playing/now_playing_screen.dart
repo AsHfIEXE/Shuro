@@ -9,16 +9,18 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import '../../services/playback_prefs.dart';
+import '../../services/server_link.dart';
 
 import '../../models/download_state.dart';
 import '../../models/song.dart';
 import '../../playback/audio_capability.dart';
 import '../../playback/audio_diagnostics.dart';
-import '../../services/server_link.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
+import '../../widgets/add_to_playlist_sheet.dart';
 import '../../widgets/animated_favorite_icon.dart';
 import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
@@ -39,17 +41,14 @@ import 'queue_screen.dart';
 /// desktop windows and Android TV.
 const double kNowPlayingWideBreakpoint = 1024;
 
-/// Vertical space the non-artwork chrome needs in the phone layout: header,
-/// title block, transport, quick actions and the lyrics affordance, plus their
-/// paddings. The ring is sized from what is *left*, which is what keeps this
-/// screen from overflowing on a short or landscape window.
-const double _kPhoneChromeHeight = 520;
+/// Vertical space the Now Playing SEGMENT's own chrome needs: times row,
+/// metadata block, quality chip, transport and the bottom action row, plus
+/// their gaps (header and page tabs sit outside the segment). The ring is
+/// sized from the design proportion (NpvMetrics.ring) minus what this chrome
+/// needs, which keeps the screen from overflowing on short viewports; the
+/// scroll fallback catches anything the estimate misses.
+const double _kPhoneBodyChrome = 300;
 
-/// The inline lyric preview shares what the ring leaves over: it never drops
-/// below the minimum (a sung line plus the next one) and never grows past the
-/// maximum (it must not turn Now Playing into a second lyrics page).
-const double _kLyricPreviewMin = 110;
-const double _kLyricPreviewMax = 190;
 
 /// "09. Now Playing" — artwork, metadata, a drag-to-seek progress ring,
 /// transport controls, and quick access to Queue / Lyrics / Audio info.
@@ -76,30 +75,6 @@ class NowPlayingScreen extends StatelessWidget {
   final Song? initialSong;
 
   const NowPlayingScreen({super.key, this.initialSong});
-
-  static const Duration _trackChangeDuration = Duration(milliseconds: 360);
-
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  // Retained while the wide-layout ring gesture is reworked.
-  // ignore: unused_element
-  void _handleSeekDrag(
-      PlayerController player, Offset localPosition, double size) {
-    final center = Offset(size / 2, size / 2);
-    final dx = localPosition.dx - center.dx;
-    final dy = localPosition.dy - center.dy;
-    final theta = math.atan2(dy, dx);
-    var delta = theta - math.pi / 2;
-    while (delta < 0) {
-      delta += 2 * math.pi;
-    }
-    final progress = (delta / (2 * math.pi)).clamp(0.0, 1.0);
-    player.seekToProgress(progress);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +123,21 @@ class NowPlayingScreen extends StatelessWidget {
         cacheKey: song.id,
         builder: (context, colors) {
           final accent = colors.last;
-          return Scaffold(
+          // Plain arrow keys nudge the position ±5 s (docs/02 interaction
+          // table). Space and L are the shell's global bindings and are
+          // deliberately NOT re-wired here. The Focus node gives the route a
+          // primary focus so the bindings work without a prior tap.
+          return CallbackShortcuts(
+            bindings: <ShortcutActivator, VoidCallback>{
+              const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+                  _nudgeBy(live, player, const Duration(seconds: -5)),
+              const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+                  _nudgeBy(live, player, const Duration(seconds: 5)),
+            },
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+
             backgroundColor: kSurfaceColor,
             body: Stack(
               children: [
@@ -158,6 +147,14 @@ class NowPlayingScreen extends StatelessWidget {
                     palette: colors,
                     cacheKey: song.id,
                   ),
+                ),
+                // Three soft mesh blobs behind the content (docs/02
+                // backdrop): pink / violet / cyan radial washes, static, at
+                // 10-16% alpha. Pure gradients - no blur filter, no per-frame
+                // work - and skipped entirely under reduce-motion
+                // (see _MeshBlobs).
+                Positioned.fill(
+                  child: IgnorePointer(child: _MeshBlobs()),
                 ),
                 // The right pane's darkening lives HERE, full-screen, so it is
                 // vertically uniform across the whole viewport — painting it
@@ -209,8 +206,7 @@ class NowPlayingScreen extends StatelessWidget {
                               appState: appState,
                               player: player,
                             )
-                          : _phoneLayout(
-                              context: context,
+                          : _PhoneNowPlaying(
                               constraints: constraints,
                               song: song,
                               accent: accent,
@@ -230,187 +226,22 @@ class NowPlayingScreen extends StatelessWidget {
                 ),
               ],
             ),
-          );
+          ),
+        ),
+      );
         },
       ),
     );
   }
 
-  // --- phone / compact: one column that scrolls rather than overflowing ----
-
-  Widget _phoneLayout({
-    required BuildContext context,
-    required BoxConstraints constraints,
-    required Song song,
-    required Color accent,
-    required List<Color> colors,
-    required double progress,
-    required Duration position,
-    required Duration total,
-    required bool isPlaying,
-    required bool isCurrent,
-    required bool isFav,
-    required AppState appState,
-    required PlayerController player,
-  }) {
-    // The ring gives way before anything else does. Clamped at the low end so a
-    // very short window still shows recognisable artwork, and at 320 so a tall
-    // phone keeps the design's proportions.
-    //
-    // The chrome constant covers everything EXCEPT the ring and the lyric
-    // preview; the preview's minimum is reserved first. Before, the ring was
-    // sized as if the 150 dp preview did not exist, so on a normal tall phone
-    // the quick-actions row and the Lyrics button ended up below the fold and
-    // the page opened already scrolled/clipped.
-    final ringCap = math.min(constraints.maxWidth * 0.79, 360.0);
-    final ringSize = math
-        .min(
-            ringCap,
-            constraints.maxHeight -
-                _kPhoneChromeHeight -
-                _kLyricPreviewMin -
-                10)
-        .clamp(170.0, math.max(170.0, ringCap))
-        .toDouble();
-    final previewHeight =
-        (constraints.maxHeight - _kPhoneChromeHeight - ringSize - 10)
-            .clamp(_kLyricPreviewMin, _kLyricPreviewMax)
-            .toDouble();
-
-    return LayoutBuilder(
-      builder: (context, viewport) => _RingAwareScroll(
-        // A stable storage identity: the scroll offset survives every rebuild
-        // (the player notifies ~1×/s while playing), so the page can never
-        // silently jump position mid-playback.
-        scrollKey: const PageStorageKey('npv_portrait'),
-        // Real scrolling: ConstrainedBox(minHeight) lets the column stretch to
-        // the viewport on tall phones (spaceBetween still separates the
-        // groups), while content taller than the viewport (small phones, with
-        // the title heart + output line that the old fixed-height sliver
-        // overflowed on) now SCROLLS instead of drawing an overflow — the
-        // sliver variant overflowed the moment the content grew.
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: viewport.maxHeight),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _Header(
-                song: song,
-                accent: accent,
-                onMore: () => showSongActionsSheet(context, song),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _ring(context, player, song, progress, colors,
-                        'artwork_${song.id}', ringSize),
-                    const SizedBox(height: 18),
-                    _TimesRow(
-                        position: position,
-                        total: total,
-                        format: _formatDuration),
-                    const SizedBox(height: 6),
-                    const _PlayingFromLine(),
-                    const SizedBox(height: 14),
-                    _TrackTitleBlock(
-                      song: song,
-                      accent: accent,
-                      duration: _trackChangeDuration,
-                      shuffleOn: player.shuffle,
-                      repeatMode: player.repeatMode,
-                      onShuffleToggle: player.toggleShuffle,
-                      onRepeatToggle: player.cycleRepeatMode,
-                      isFavorite: isFav,
-                      onToggleFavorite: () =>
-                          Favorites.toggle(context, song.id),
-                    ),
-                    const SizedBox(height: 22),
-                    _transport(player, song, isPlaying, isCurrent, accent),
-                  ],
-                ),
-              ),
-              // The lyric that's being sung right now, plus the next lines —
-              // this is what fills the portrait screen's empty space. The same
-              // lyrics view the full screen uses, hosted inline (embedded: no
-              // chrome of its own, compact: no sync bar), in a fade-masked box
-              // so lines appear out of the background instead of inside a
-              // visible rectangle. Tapping a line seeks; the LYRICS bar below
-              // opens the full screen.
-              // A small, fixed-height preview: the sung line plus the next
-              // ones, fade-masked. Deliberately NOT expanded to all leftover
-              // space — the first version swallowed the whole lower screen and
-              // turned Now Playing into a second lyrics page.
-              SizedBox(
-                height: previewHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  // Edge fade = ALPHA-ONLY mask on the lyrics themselves
-                  // (ClipRect + dstIn ShaderMask, bounded to this 150 dp box:
-                  // static, small, no per-frame work — safe on Skia and
-                  // CanvasKit). Painting kSurfaceColor over the box instead —
-                  // as an earlier iteration did — draws a dark rectangular
-                  // band over the artwork; darkening overlays on the backdrop
-                  // are never the answer, the lyrics fade, the art stays.
-                  child: ClipRect(
-                    child: ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0x00000000),
-                          Color(0xFF000000),
-                          Color(0xFF000000),
-                          Color(0x00000000)
-                        ],
-                        stops: [0.0, 0.22, 0.78, 1.0],
-                      ).createShader(bounds),
-                      blendMode: BlendMode.dstIn,
-                      child: ScrollConfiguration(
-                        // The preview is a passive glance, not a document: no
-                        // scrollbar thumb (web/desktop draw one by default,
-                        // and Android flashes one while scrolling). And its
-                        // list ALWAYS absorbs drag gestures (AlwaysScrollable
-                        // + clamping): without this, once the auto-scrolling
-                        // list reached an edge, a drag/drag-end propagated to
-                        // the portrait page's outer scroll view and nudged the
-                        // whole screen a few pixels — the reported "NPV scrolls
-                        // down a little when lyrics change line".
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          scrollbars: false,
-                          physics: const AlwaysScrollableScrollPhysics(
-                              parent: ClampingScrollPhysics()),
-                        ),
-                        child: LyricsScreen(
-                            initialSong: song, embedded: true, compact: true),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _QuickActions(
-                    onQueue: () => pushRisingOnce(context, const QueueScreen()),
-                    onAudioInfo: () => showAudioInfoSheet(context, song),
-                    onSleep: () => showSleepTimerSheet(context, player),
-                    onVolume: () => showVolumeSheet(context, player),
-                    sleepActiveUntil: player.sleepUntil,
-                  ),
-                  const SizedBox(height: 14),
-                  _LyricsBar(
-                      onTap: () => openLyricsScreen(context, song),
-                      accent: accent),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  /// +/-5 s nudge for the plain arrow keys. Ignored while the shown track is
+  /// not the loaded one (the placeholder song must not seek real audio) or
+  /// while a text field has the focus.
+  void _nudgeBy(bool live, PlayerController player, Duration delta) {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText) return;
+    if (!live) return;
+    player.seekBy(delta);
   }
 
   // --- wide: artwork beside the controls (tablet, desktop, TV) -------------
@@ -430,158 +261,134 @@ class NowPlayingScreen extends StatelessWidget {
     required AppState appState,
     required PlayerController player,
   }) {
-    // Compact tuning for short windows (landscape phones: ~360 dp tall) —
-    // the tablet proportions would overflow into the scroll fallback,
-    // which is exactly the cramped landscape look this layout replaces.
-    // The ring cap is derived so ring + times + title + transport + volume
-    // FIT the column without scrolling (that sum overflowing was the
-    // "controls cut off at the bottom" bug).
+    // Compact tuning for short windows (landscape phones: ~360 dp tall):
+    // keeps the old fitted cluster. The redesigned column (docs/02 desktop)
+    // is for windows with room to breathe.
     final compact = constraints.maxHeight < 520;
-    // Sized from the *shorter* axis AND constrained by its own column width —
-    // on short landscape windows the height factor alone let the ring grow
-    // past the column and clip at the screen edge (the reported screenshot).
     final columnWidth =
         math.max(160.0, constraints.maxWidth * 0.5 - (compact ? 40 : 56));
-    // Compact column: header 48 + paddings 6, then ring + gap 6 + times 14 +
-    // gap 2 + title block 43 + gap 2 + one control row 56 + 8 spare — the ring
-    // takes what is left (it was 0.36 × height ≈ 137 dp on a phone, with the
-    // controls still spilling off the bottom).
     final compactRing =
         constraints.maxHeight - 48 - 6 - 6 - 14 - 2 - 43 - 2 - 56 - 8;
-    final artworkSize = math
-        .min(
-            math.min(compact ? compactRing : constraints.maxHeight * 0.44,
-                columnWidth),
-            compact ? 210.0 : 340.0)
-        .clamp(compact ? 110.0 : 160.0, compact ? 210.0 : 340.0);
+    // Redesigned ring: NpvMetrics caps the desktop ring at 400 and keeps it
+    // inside its own column. Landscape-compact keeps the tighter budget that
+    // fits the 360 dp window.
+    final artworkSize = compact
+        ? math
+            .min(math.min(compactRing, columnWidth), 210.0)
+            .clamp(110.0, 210.0).toDouble()
+        : NpvMetrics.ring(
+            height: constraints.maxHeight,
+            colWidth: columnWidth,
+            desktop: true);
 
     return Column(
       children: [
         _Header(
           song: song,
           accent: accent,
+          albumName: appState.albumById(song.albumId)?.title,
           onMore: () => showSongActionsSheet(context, song),
           onAudioInfo: () => showAudioInfoSheet(context, song),
           sleepActive: player.sleepUntil != null,
-          // Volume/queue/sleep used to live up here AND in the row below the
-          // transport — two volume buttons for one job (reported). They are
-          // only below the controls now.
+          showOutputChip: !compact,
           dense: compact,
         ),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Left: the player half. One fitted column, spaceBetween, so the
-              // transport owns a real slot instead of hanging off the bottom
-              // edge; the ring drops its progress arc because the linear seek
-              // bar under it is now the single progress display on this screen.
+              // Left: the player column. One fitted column with a scroll
+              // fallback (an unusually short wide window scrolls instead of
+              // overflowing).
               Expanded(
                 flex: 5,
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 2,
                       compact ? 16 : 28, compact ? 4 : 18),
-                  // LayoutBuilder + scroll fallback: at normal sizes the column
-                  // is spaceBetween (artwork up top, controls at the bottom,
-                  // nothing clipped — the reported bug); on an unusually short
-                  // wide window it scrolls instead of overflowing.
                   child: LayoutBuilder(
                     builder: (context, columnConstraints) => _RingAwareScroll(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(
                             minHeight: columnConstraints.maxHeight),
-                        // One centered, cohesive player group: ring, time,
-                        // title, controls. The old spaceBetween pinned the ring
-                        // to the top and controls to the bottom, hollowing out
-                        // the middle on large screens.
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _ring(context, player, song, progress, colors,
-                                'artwork_${song.id}', artworkSize),
-                            SizedBox(height: compact ? 6 : 30),
+                            _ring(player, song, progress, colors,
+                                'artwork_${song.id}', artworkSize,
+                                knobSize: compact ? null : NpvMetrics.knobDesktop),
+                            SizedBox(height: compact ? 6 : 16),
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 560),
+                              constraints:
+                                  const BoxConstraints(maxWidth: 560),
                               child: compact
-                                  ? _compactControls(
-                                      context: context,
-                                      player: player,
-                                      song: song,
-                                      accent: accent,
-                                      position: position,
-                                      total: total,
-                                      isPlaying: isPlaying,
-                                      isCurrent: isCurrent,
-                                      isFav: isFav,
+                                  ? Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _compactControls(
+                                          context: context,
+                                          player: player,
+                                          song: song,
+                                          accent: accent,
+                                          position: position,
+                                          total: total,
+                                          isPlaying: isPlaying,
+                                          isCurrent: isCurrent,
+                                          isFav: isFav,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Landscape phones get the same
+                                        // action row as portrait (volume,
+                                        // sleep, queue...), which the old
+                                        // compact cluster dropped.
+                                        _NpvActionRow(
+                                          desktop: false,
+                                          song: song,
+                                          player: player,
+                                          appState: appState,
+                                          isFav: isFav,
+                                          accent: accent,
+                                        ),
+                                      ],
                                     )
                                   : Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        _TimesRow(
-                                            position: position,
-                                            total: total,
-                                            format: _formatDuration),
-                                        SizedBox(height: compact ? 4 : 14),
-                                        // Title + artist stay visible in landscape
-                                        // too — only the controls dissolve.
-                                        _TrackTitleBlock(
+                                        _smoothTimes(player, position, total,
+                                            live: isCurrent &&
+                                                player.loadedSongId ==
+                                                    song.id),
+                                        const SizedBox(height: 12),
+                                        _MetaBlock(
                                           song: song,
+                                          appState: appState,
+                                          titleSize: 30,
+                                          metaSize: 16,
+                                        ),
+                                        const SizedBox(height: 24),
+                                        _transport(
+                                          player,
+                                          song,
+                                          isPlaying,
+                                          isCurrent,
+                                          accent,
+                                          discSize: NpvMetrics.playDiscDesktop,
+                                          flankDistance: 2 * 62,
+                                          prevNextIconSize: 35,
+                                          whiteDisc: true,
+                                          leading: _shuffleFlank(player),
+                                          trailing: _repeatFlank(player),
+                                        ),
+                                        const SizedBox(height: 24),
+                                        _NpvActionRow(
+                                          desktop: true,
+                                          song: song,
+                                          player: player,
+                                          appState: appState,
+                                          isFav: isFav,
                                           accent: accent,
-                                          duration: _trackChangeDuration,
-                                          shuffleOn: player.shuffle,
-                                          repeatMode: player.repeatMode,
-                                          onShuffleToggle: player.toggleShuffle,
-                                          onRepeatToggle:
-                                              player.cycleRepeatMode,
-                                          isFavorite: isFav,
-                                          onToggleFavorite: () =>
-                                              Favorites.toggle(
-                                                  context, song.id),
-                                          dense: compact,
                                         ),
-                                        SizedBox(height: compact ? 3 : 14),
-                                        _transport(player, song, isPlaying,
-                                            isCurrent, accent,
-                                            compact: compact),
-                                        SizedBox(height: compact ? 2 : 10),
-                                        // Landscape volume: same animated control as
-                                        // portrait — a slim chip opening the full
-                                        // volume sheet. The old inline slider was a
-                                        // second seek-bar lookalike and cost layout
-                                        // height this column doesn't have.
-                                        Center(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              _QuickAction(
-                                                icon: Icons.volume_up_rounded,
-                                                label: 'Volume',
-                                                onTap: () => showVolumeSheet(
-                                                    context, player),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              _QuickAction(
-                                                icon: Icons
-                                                    .queue_music_rounded,
-                                                label: 'Queue',
-                                                onTap: () => pushRisingOnce(
-                                                    context,
-                                                    const QueueScreen()),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              _QuickAction(
-                                                icon: Icons.bedtime_rounded,
-                                                label: player.sleepUntil !=
-                                                        null
-                                                    ? 'Sleep timer running'
-                                                    : 'Sleep timer',
-                                                onTap: () =>
-                                                    showSleepTimerSheet(
-                                                        context, player),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                        const SizedBox(height: 16),
+                                        const _HintLine(),
                                       ],
                                     ),
                             ),
@@ -592,28 +399,27 @@ class NowPlayingScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              // Right: the lyrics as a left-aligned column that starts near
-              // the centre of the screen, so the two halves read as one
-              // composition rather than two apps glued together.
+              // Right: the lyrics as a column that starts near the centre of
+              // the screen, so the two halves read as one composition.
+              // Left-aligned per the docs/02 alignment note; the pane falls
+              // back to the Up Next list when there is nothing to sing.
               Expanded(
                 flex: 5,
                 child: Stack(
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        // Top padding keeps the first lyric lines clear of the
-                        // header and its scrim, which previously cut through them.
-                        // (The pane's own darkening gradient was removed — it
-                        // lives full-screen now, see the layer above SafeArea.)
                         padding: EdgeInsets.only(
                             left: 28, right: 28, top: compact ? 12 : 28),
-                        // With no lyrics to show, the pane falls back to the
-                        // Up Next list — real content instead of a dark void
-                        // (the TV-width "empty half" report).
                         child: LyricsScreen(
                           initialSong: song,
                           embedded: true,
+                          // A landscape phone pane is a preview, not the
+                          // full desktop lyrics column: compact drops the
+                          // toolbar whose fixed rows cannot fit 360 dp.
+                          compact: compact,
                           embeddedFallback: const UpNextList(),
+                          textAlign: TextAlign.left,
                         ),
                       ),
                     ),
@@ -643,11 +449,18 @@ class NowPlayingScreen extends StatelessWidget {
     );
   }
 
-  // --- shared pieces --------------------------------------------------------
+}
 
-  Widget _ring(BuildContext context, PlayerController player, Song song,
-      double progress, List<Color> colors, String heroTag, double size,
-      {bool showProgress = true}) {
+// --- shared ring + transport builders (top-level: both layouts use them) --
+
+/// The ring plus its drag-to-seek gesture and per-frame progress. The
+  /// buffered arc comes straight off the controller (no interpolation
+  /// needed); the progress is interpolated per frame while playing
+  /// (SmoothPositionBuilder's ticker mutes when paused, so a still screen
+  /// costs nothing; reduce-motion keeps the plain 1 Hz value).
+  Widget _ring(PlayerController player, Song song, double progress,
+      List<Color> colors, String heroTag, double size,
+      {bool showProgress = true, double? knobSize}) {
     Widget buildRing(double p) => _ScrubbingRing(
           player: player,
           size: size,
@@ -656,12 +469,10 @@ class NowPlayingScreen extends StatelessWidget {
           colors: colors,
           heroTag: heroTag,
           showProgress: showProgress,
+          buffered: player.bufferedFraction,
+          knobSize: knobSize,
         );
 
-    // Per-frame interpolation while playing (the ring used to step at the
-    // ~1 Hz notify rate). SmoothPositionBuilder's ticker is muted whenever
-    // playback is paused, so a still screen costs nothing; reduce-motion (and
-    // therefore the Performance profile) keeps the plain 1 Hz value.
     if (!showProgress || reduceMotionEnabled) return buildRing(progress);
     return SmoothPositionBuilder(
       builder: (context, player, position, smoothProgress) =>
@@ -776,7 +587,13 @@ class NowPlayingScreen extends StatelessWidget {
 
   Widget _transport(PlayerController player, Song song, bool isPlaying,
       bool isCurrent, Color accent,
-      {bool compact = false, Widget? leading, Widget? trailing}) {
+      {bool compact = false,
+      Widget? leading,
+      Widget? trailing,
+      double? discSize,
+      double? flankDistance,
+      double? prevNextIconSize,
+      bool whiteDisc = false}) {
     return PlaybackControls(
       leading: leading,
       trailing: trailing,
@@ -784,6 +601,10 @@ class NowPlayingScreen extends StatelessWidget {
       isBuffering: isCurrent && player.isBuffering,
       accentColor: accent,
       compact: compact,
+      discSize: discSize,
+      flankDistance: flankDistance,
+      prevNextIconSize: prevNextIconSize,
+      whiteDisc: whiteDisc,
       onPlayPause: () async {
         if (isCurrent) {
           await player.togglePlayPause();
@@ -793,6 +614,245 @@ class NowPlayingScreen extends StatelessWidget {
       },
       onPrevious: player.previous,
       onNext: player.next,
+    );
+  }
+
+// --- shared builders (used by both layouts) -------------------------------
+
+/// mm:ss for the times row and the scrub bubble.
+String _formatDuration(Duration d) {
+  final minutes = d.inMinutes.remainder(60);
+  final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+/// Times row on the smooth per-frame clock while playing (the same source
+/// the ring uses); the ~1 Hz notify value stands in when paused or under
+/// reduce-motion.
+Widget _smoothTimes(PlayerController player, Duration position,
+    Duration total, {required bool live}) {
+  if (!live || reduceMotionEnabled) {
+    return _TimesRow(position: position, total: total);
+  }
+  return SmoothPositionBuilder(
+    builder: (context, p, pos, _) => _TimesRow(
+      position: pos,
+      total: p.duration > Duration.zero ? p.duration : total,
+    ),
+  );
+}
+
+/// Shuffle / repeat flanking the redesigned transport (docs/02): bare icons
+/// at white 60% when off; repeat turns brand violet when on and shuffle warms
+/// to full white, each with a dot so the ON state never reads as "dimmed".
+Widget _shuffleFlank(PlayerController player) => PlayerModeButton(
+      shuroIcon: ShuroGlyph.shuffle,
+      modeLabel: 'Shuffle',
+      active: player.shuffle,
+      accent: kBrandColor,
+      activeColor: Colors.white,
+      onTap: player.toggleShuffle,
+      plain: true,
+      size: 22,
+    );
+
+Widget _repeatFlank(PlayerController player) => PlayerModeButton(
+      materialIcon: player.repeatMode == PlayerRepeatMode.one
+          ? Icons.repeat_one_rounded
+          : Icons.repeat_rounded,
+      modeLabel: switch (player.repeatMode) {
+        PlayerRepeatMode.off => 'Repeat off',
+        PlayerRepeatMode.all => 'Repeat all',
+        PlayerRepeatMode.one => 'Repeat one',
+      },
+      active: player.repeatMode != PlayerRepeatMode.off,
+      badge: player.repeatMode == PlayerRepeatMode.one ? '1' : null,
+      accent: kBrandColor,
+      activeColor: kBrandColor,
+      onTap: player.cycleRepeatMode,
+      plain: true,
+      size: 22,
+    );
+
+/// The phone (portrait) Now Playing: header, the page-tab pill (Now Playing |
+/// Lyrics | Queue) and the segment body (docs/02 mobile board). The Now
+/// Playing segment is the dimension-proof column - ring, times, metadata,
+/// transport, action row - inside the same scroll fallback; the Lyrics
+/// segment hosts the lyrics inline with the full-screen bar kept at its
+/// foot.
+class _PhoneNowPlaying extends StatefulWidget {
+  final Song song;
+  final Color accent;
+  final List<Color> colors;
+  final double progress;
+  final Duration position;
+  final Duration total;
+  final bool isPlaying;
+  final bool isCurrent;
+  final bool isFav;
+  final AppState appState;
+  final PlayerController player;
+  final BoxConstraints constraints;
+
+  const _PhoneNowPlaying({
+    required this.song,
+    required this.accent,
+    required this.colors,
+    required this.progress,
+    required this.position,
+    required this.total,
+    required this.isPlaying,
+    required this.isCurrent,
+    required this.isFav,
+    required this.appState,
+    required this.player,
+    required this.constraints,
+  });
+
+  @override
+  State<_PhoneNowPlaying> createState() => _PhoneNowPlayingState();
+}
+
+class _PhoneNowPlayingState extends State<_PhoneNowPlaying> {
+  /// 0 = Now Playing, 1 = Lyrics. Queue is a launcher for the queue screen
+  /// (it keeps its own toolbar), so it never becomes the selected segment.
+  int _tab = 0;
+
+  Widget _nowPlayingSegment(double ringSize) {
+    final w = widget;
+    return LayoutBuilder(
+      builder: (context, viewport) => _RingAwareScroll(
+        // Stable storage identity: the scroll offset survives every rebuild
+        // (the player notifies ~1x/s while playing).
+        scrollKey: const PageStorageKey('npv_portrait'),
+        // Real scrolling: the column stretches to the viewport on tall
+        // phones (spaceBetween separates the groups) and SCROLLS on small
+        // ones instead of drawing an overflow.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: viewport.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ring(w.player, w.song, w.progress, w.colors,
+                        'artwork_${w.song.id}', ringSize,
+                        knobSize: NpvMetrics.knobMobile),
+                    const SizedBox(height: 12),
+                    _smoothTimes(w.player, w.position, w.total,
+                        live: w.isCurrent &&
+                            w.player.loadedSongId == w.song.id),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: _MetaBlock(
+                        song: w.song,
+                        appState: w.appState,
+                        titleSize: 26,
+                        metaSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _transport(
+                      w.player,
+                      w.song,
+                      w.isPlaying,
+                      w.isCurrent,
+                      w.accent,
+                      discSize: NpvMetrics.playDiscMobile,
+                      flankDistance: 2 * 54,
+                      prevNextIconSize: 31,
+                      whiteDisc: true,
+                      leading: _shuffleFlank(w.player),
+                      trailing: _repeatFlank(w.player),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 12),
+                child: _NpvActionRow(
+                  desktop: false,
+                  song: w.song,
+                  player: w.player,
+                  appState: w.appState,
+                  isFav: w.isFav,
+                  accent: w.accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lyricsSegment() {
+    final w = widget;
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: LyricsScreen(initialSong: w.song, embedded: true),
+          ),
+        ),
+        // Keeps the full lyrics screen (sync offset, appearance, editor)
+        // one tap away from the inline view.
+        _LyricsBar(
+            onTap: () => openLyricsScreen(context, w.song),
+            accent: w.accent),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget;
+    // Ring (docs/02 mobile): the design proportion - 44% of height, capped
+    // at 340, column width ~ screen - 60, so 330 on a 390-wide phone -
+    // giving way to the segment chrome on short viewports. The scroll
+    // fallback above catches anything the estimate misses.
+    final ringCap = math.min(w.constraints.maxWidth - 60, 340.0);
+    var ringSize = NpvMetrics.ring(
+        height: w.constraints.maxHeight, colWidth: ringCap, desktop: false);
+    final headroom = w.constraints.maxHeight - _kPhoneBodyChrome;
+    if (ringSize > headroom) {
+      ringSize = headroom.clamp(160.0, ringSize).toDouble();
+    }
+
+    return Column(
+      children: [
+        _Header(
+          song: w.song,
+          accent: w.accent,
+          albumName: w.appState.albumById(w.song.albumId)?.title,
+          onMore: () => showSongActionsSheet(context, w.song),
+          sleepActive: w.player.sleepUntil != null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: _PageTabs(
+            selected: _tab,
+            onSelect: (i) {
+              if (i == 2) {
+                // The queue keeps its own screen (save-as-playlist and the
+                // rest of its toolbar), so the segment launches the route.
+                pushRisingOnce(context, const QueueScreen());
+              } else {
+                setState(() => _tab = i);
+              }
+            },
+          ),
+        ),
+        Expanded(
+          child:
+              _tab == 1 ? _lyricsSegment() : _nowPlayingSegment(ringSize),
+        ),
+      ],
     );
   }
 }
@@ -829,6 +889,9 @@ class _RingAwareScroll extends StatelessWidget {
 /// The ring with its drag-to-seek gesture AND the scrubbing state: while a
 /// finger is down on the ring, the knob grows and its glow strengthens (see
 /// ProgressRingPainter.scrubbing) so the seek control visibly answers touch.
+/// A time bubble rides the knob's radial line while dragging (and, for mouse
+/// users, while hovering), and drags tick a haptic at every 10% boundary
+/// (docs/02 interactions).
 class _ScrubbingRing extends StatefulWidget {
   final PlayerController player;
   final double size;
@@ -838,6 +901,12 @@ class _ScrubbingRing extends StatefulWidget {
   final String heroTag;
   final bool showProgress;
 
+  /// Buffered fraction (0..1) for the painter's white arc; null hides it.
+  final double? buffered;
+
+  /// Knob diameter override - NpvMetrics.knobDesktop / knobMobile.
+  final double? knobSize;
+
   const _ScrubbingRing({
     required this.player,
     required this.size,
@@ -846,6 +915,8 @@ class _ScrubbingRing extends StatefulWidget {
     required this.colors,
     required this.heroTag,
     this.showProgress = true,
+    this.buffered,
+    this.knobSize,
   });
 
   @override
@@ -856,11 +927,17 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
   bool _scrubbing = false;
 
   /// Drag preview: while the finger moves, only this local value changes and
-  /// the ring repaints. The engine is seeked ONCE, on release. The old code
-  /// seeked on every pan update — a 6-second drag produced 26 seeks and 26
-  /// re-buffers (seen in a real diagnostics export), which is why scrubbing
-  /// felt laggy and sometimes stuck.
+  /// the ring repaints. The engine is seeked ONCE, on release - a drag used
+  /// to seek on every pan update, which re-buffered the stream dozens of
+  /// times per scrub and made it feel laggy.
   double? _preview;
+
+  /// Mouse hover position (desktop): shows the bubble with the time a click
+  /// would seek to, before anything is committed.
+  Offset? _hover;
+
+  /// Last 10%-bucket a haptic fired for (tick per boundary crossing).
+  int _lastTickBucket = -1;
 
   @override
   void dispose() {
@@ -875,15 +952,26 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
     final dx = localPosition.dx - center.dx;
     final dy = localPosition.dy - center.dy;
     final theta = math.atan2(dy, dx);
-    var delta = theta - math.pi / 2;
+    // The painter starts at 12 o'clock (-pi/2) and sweeps clockwise, so the
+    // angle-to-fraction conversion undoes exactly that rotation.
+    var delta = theta + math.pi / 2;
     while (delta < 0) {
       delta += 2 * math.pi;
     }
     return (delta / (2 * math.pi)).clamp(0.0, 1.0);
   }
 
-  void _updatePreview(Offset localPosition) {
-    setState(() => _preview = _progressAt(localPosition));
+  void _updatePreview(Offset localPosition, {bool withHaptic = false}) {
+    final next = _progressAt(localPosition);
+    if (withHaptic) {
+      // One tick each time the scrub crosses a 10% boundary (docs/02).
+      final bucket = (next * 10).floor();
+      if (bucket != _lastTickBucket) {
+        _lastTickBucket = bucket;
+        HapticFeedback.selectionClick();
+      }
+    }
+    setState(() => _preview = next);
   }
 
   void _commitSeek() {
@@ -897,45 +985,127 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
     });
   }
 
+  Duration get _totalDuration => widget.player.duration > Duration.zero
+      ? widget.player.duration
+      : widget.song.duration;
+
+  /// The scrub bubble (docs/02): 56x26 pill at 85% surface colour on a white
+  /// 20% hairline, sitting OUTSIDE the ring on the knob's radial line. It is
+  /// clamped into the ring's own box - around 3/6/9 o'clock that flips it to
+  /// hug the ring instead of poking past the layout, so it never leaves the
+  /// screen. 120 ms fade in and out.
+  Widget _buildBubble(double? bubbleProgress) {
+    const bubbleWidth = 56.0, bubbleHeight = 26.0;
+    final shown = bubbleProgress ?? 0.0;
+    final angle = -math.pi / 2 + 2 * math.pi * shown;
+    final radial = Offset(math.cos(angle), math.sin(angle));
+    final knobRadius = (widget.knobSize ?? 18) / 2;
+    final center = Offset(widget.size / 2, widget.size / 2) +
+        radial * (widget.size / 2 + knobRadius + 34);
+    final left = (center.dx - bubbleWidth / 2)
+        .clamp(0.0, math.max(0.0, widget.size - bubbleWidth))
+            .toDouble();
+    final top = (center.dy - bubbleHeight / 2)
+        .clamp(0.0, math.max(0.0, widget.size - bubbleHeight))
+            .toDouble();
+    return Positioned(
+      left: left,
+      top: top,
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: bubbleProgress == null ? 0 : 1,
+          child: Container(
+            width: bubbleWidth,
+            height: bubbleHeight,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: kSurfaceColor.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(13),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.20)),
+            ),
+            child: Text(
+              _formatDuration(_totalDuration * shown),
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) {
-        _ringTouched.value = true;
-        setState(() => _scrubbing = true);
-      },
-      onPointerUp: (_) {
-        _ringTouched.value = false;
-        if (_preview != null) _commitSeek();
-        setState(() => _scrubbing = false);
-      },
-      onPointerCancel: (_) {
-        _ringTouched.value = false;
-        if (_preview != null) _commitSeek();
-        setState(() => _scrubbing = false);
-      },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (details) => _updatePreview(details.localPosition),
-        onPanUpdate: (details) => _updatePreview(details.localPosition),
-        onTapUp: (details) {
-          _updatePreview(details.localPosition);
-          _commitSeek();
+    final bubbleProgress =
+        _preview ?? (_hover != null ? _progressAt(_hover!) : null);
+    return MouseRegion(
+      opaque: false,
+      onEnter: (e) => setState(() => _hover = e.localPosition),
+      onHover: (e) => setState(() => _hover = e.localPosition),
+      onExit: (_) => setState(() => _hover = null),
+      child: Listener(
+        onPointerDown: (_) {
+          _ringTouched.value = true;
+          _lastTickBucket = -1;
+          setState(() => _scrubbing = true);
         },
-        child: ArtworkRing(
-          song: widget.song,
-          progress: _preview ?? widget.progress,
-          colors: widget.colors,
-          size: widget.size,
-          heroTag: widget.heroTag,
-          showProgress: widget.showProgress,
-          scrubbing: _scrubbing,
+        onPointerUp: (_) {
+          _ringTouched.value = false;
+          if (_preview != null) _commitSeek();
+          setState(() => _scrubbing = false);
+        },
+        onPointerCancel: (_) {
+          _ringTouched.value = false;
+          if (_preview != null) _commitSeek();
+          setState(() => _scrubbing = false);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (details) =>
+              _updatePreview(details.localPosition, withHaptic: true),
+          onPanUpdate: (details) =>
+              _updatePreview(details.localPosition, withHaptic: true),
+          onTapUp: (details) {
+            _updatePreview(details.localPosition);
+            _commitSeek();
+          },
+          child: SizedBox(
+            width: widget.size,
+            height: widget.size,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ArtworkRing(
+                  song: widget.song,
+                  progress: _preview ?? widget.progress,
+                  colors: widget.colors,
+                  size: widget.size,
+                  heroTag: widget.heroTag,
+                  showProgress: widget.showProgress,
+                  scrubbing: _scrubbing,
+                  buffered: widget.buffered,
+                  knobSize: widget.knobSize,
+                ),
+                _buildBubble(bubbleProgress),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
+/// Docs/02 header: a round 40 px collapse button (white 10% circle,
+/// chevron-down), the "PLAYING FROM ALBUM / <name>" eyebrow centred, and the
+/// output chip + audio-info + more on the right (desktop). Phones carry the
+/// output chip in the bottom action row instead, so their header stays
+/// close | playing-from | more.
 class _Header extends StatelessWidget {
   final Song song;
   final Color accent;
@@ -944,7 +1114,14 @@ class _Header extends StatelessWidget {
   final VoidCallback? onAudioInfo;
   final bool sleepActive;
 
-  /// Tighter icon buttons for short windows (48 → 40 dp each).
+  /// Album name for the eyebrow; null (local file, placeholder track, server
+  /// offline) falls back to the generic "PLAYING NOW" label.
+  final String? albumName;
+
+  /// Show the audio-output chip (desktop header only).
+  final bool showOutputChip;
+
+  /// Tighter icon buttons for short windows (48 -> 40 dp each).
   final bool dense;
 
   const _Header({
@@ -953,6 +1130,8 @@ class _Header extends StatelessWidget {
     required this.onMore,
     this.onAudioInfo,
     this.sleepActive = false,
+    this.albumName,
+    this.showOutputChip = false,
     this.dense = false,
   });
 
@@ -960,47 +1139,71 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final density = dense ? VisualDensity.compact : VisualDensity.standard;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
           Semantics(
             button: true,
             label: 'Close Now Playing',
-            child: IconButton(
-              visualDensity: density,
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white, size: 18),
-              tooltip: 'Close',
-            ),
+            child:
+                _RoundCollapseButton(onPressed: () => Navigator.of(context).maybePop()),
           ),
           Expanded(
             child: Center(
-              child: Text('PLAYING NOW',
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: const Color(0xB3FFFFFF),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
-                      letterSpacing: 2.0)),
+              child: albumName == null
+                  ? Text('PLAYING NOW',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: const Color(0xB3FFFFFF),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                          letterSpacing: 2.0))
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('PLAYING FROM ALBUM',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kMuted2,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                                letterSpacing: 1.5)),
+                        const SizedBox(height: 2),
+                        Text(albumName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13)),
+                      ],
+                    ),
             ),
           ),
-          // (No favourite here: the heart lives in its sweet spot under the
-          // artist — a second one in the header was duplicate clutter.)
-          if (sleepActive)
-            Icon(Icons.bedtime_rounded, color: accent, size: 18),
-          if (onAudioInfo != null)
-            IconButton(
-              visualDensity: density,
-              onPressed: onAudioInfo,
-              icon:
-                  const Icon(Icons.info_outline_rounded, color: Colors.white70),
-              tooltip: 'Audio information',
-            ),
-          IconButton(
-            visualDensity: density,
-            onPressed: onMore,
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-            tooltip: 'More options',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showOutputChip) ...[
+                const _OutputChip(),
+                const SizedBox(width: 8),
+              ],
+              // (No favourite here: the heart lives in the action row under
+              // the transport - a second one in the header was clutter.)
+              if (sleepActive)
+                Icon(Icons.bedtime_rounded, color: accent, size: 18),
+              if (onAudioInfo != null)
+                IconButton(
+                  visualDensity: density,
+                  onPressed: onAudioInfo,
+                  icon: const Icon(Icons.info_outline_rounded,
+                      color: Colors.white70),
+                  tooltip: 'Audio information',
+                ),
+              IconButton(
+                visualDensity: density,
+                onPressed: onMore,
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+                tooltip: 'More options',
+              ),
+            ],
           ),
         ],
       ),
@@ -1008,26 +1211,67 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _TimesRow extends StatelessWidget {
-  final Duration position;
-  final Duration total;
-  final String Function(Duration) format;
+/// Round 40 px collapse control (docs/02): white 10% circle on a hairline
+/// with a chevron-down - the screen folds back into the mini player.
+class _RoundCollapseButton extends StatelessWidget {
+  final VoidCallback onPressed;
 
-  const _TimesRow(
-      {required this.position, required this.total, required this.format});
+  const _RoundCollapseButton({required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onPressed,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.10),
+          border: Border.all(color: kHairline),
+        ),
+        child: const Center(
+          child: Icon(Icons.keyboard_arrow_down_rounded,
+              color: Colors.white, size: 22),
+        ),
+      ),
+    );
+  }
+}
+
+/// "1:26 · -2:44" (docs/02): elapsed, then NEGATIVE remaining, 13 px with
+/// tabular figures so the digits don't jitter as the position ticks. The
+/// optional [format] keeps the compact landscape cluster's existing call.
+class _TimesRow extends StatelessWidget {
+  final Duration position;
+  final Duration total;
+  final String Function(Duration)? format;
+
+  const _TimesRow({required this.position, required this.total, this.format});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = format ?? _formatDuration;
+    final remaining = total - position;
+    final left = remaining < Duration.zero ? Duration.zero : remaining;
     final style = GoogleFonts.getFont(currentFontFamily,
         color: Colors.white,
-        fontSize: 11,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        fontFeatures: const [FontFeature.tabularFigures()],
         shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)]);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(format(position), style: style),
-        const SizedBox(width: 24),
-        Text(format(total), style: style),
+        Text(fmt(position), style: style),
+        const SizedBox(width: 8),
+        Text('·',
+            style: style.copyWith(
+                color: kMuted3, fontFeatures: const [])),
+        const SizedBox(width: 8),
+        Text('-${fmt(left)}', style: style.copyWith(color: kMutedTextColor)),
       ],
     );
   }
@@ -1111,50 +1355,211 @@ class _ProgressLine extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  final VoidCallback onQueue;
-  final VoidCallback onAudioInfo;
-  final VoidCallback onSleep;
-  final VoidCallback onVolume;
-  final DateTime? sleepActiveUntil;
+/// Now Playing | Lyrics | Queue pill (docs/02 mobile): 270x36, glass fill on
+/// a hairline border, radius 999, the active segment a white 12% pill.
+/// Queue keeps its own screen (its toolbar has save-as-playlist and more),
+/// so that segment launches the route rather than swapping the body.
+class _PageTabs extends StatelessWidget {
+  final int selected;
+  final ValueChanged<int> onSelect;
 
-  const _QuickActions({
-    required this.onQueue,
-    required this.onAudioInfo,
-    required this.onSleep,
-    required this.onVolume,
-    this.sleepActiveUntil,
+  const _PageTabs({required this.selected, required this.onSelect});
+
+  static const _labels = ['Now Playing', 'Lyrics', 'Queue'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 270,
+      height: 36,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: kGlass,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: kHairline),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < _labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onSelect(i),
+                behavior: HitTestBehavior.opaque,
+                child: Semantics(
+                  button: true,
+                  selected: selected == i,
+                  label: _labels[i],
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    curve: ShuroMotion.std,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: selected == i
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _labels[i],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: selected == i ? Colors.white : kMuted2,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The quality chip label from the audio-info data source (docs/02):
+/// "FLAC · 24-bit / 96 kHz · Lossless" for a tagged lossless file,
+/// "MP3 · 320 kbps" for a lossy one. Null = hide the chip (the server
+/// reported nothing technical about the file) - never a guess.
+String? qualityChipLabel(Song song) {
+  final info = song.audioInfo;
+  final parts = <String>[];
+  if (info.hasFormat) parts.add(info.format!.toUpperCase());
+  if (info.hasBitDepth && info.hasSampleRate) {
+    parts.add('${info.bitDepthLabel} / ${info.sampleRateLabel}');
+  } else if (info.hasBitrate) {
+    parts.add('${info.bitrateKbps} kbps');
+  }
+  // Mirrors AudioInfo's own lossless set (see audio_info.dart).
+  const lossless = {'FLAC', 'ALAC', 'WAV', 'AIFF', 'APE', 'WV'};
+  if (info.hasFormat && lossless.contains(info.format!.toUpperCase())) {
+    parts.add('Lossless');
+  }
+  if (parts.isEmpty) return null;
+  return parts.join(' · ');
+}
+
+/// Green pill on a 14% green fill (docs/02): source quality at a glance.
+class _QualityChip extends StatelessWidget {
+  final String label;
+
+  const _QualityChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: kGreen.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.getFont(currentFontFamily,
+            color: kGreen,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2),
+      ),
+    );
+  }
+}
+
+/// Title + "Artist · Album · Year" + quality chip (docs/02 metadata block):
+/// the artist is #F9A8D4 (kPinkPale) w600, the album/year muted. The whole
+/// block swaps as one animated unit when the track changes.
+class _MetaBlock extends StatelessWidget {
+  final Song song;
+  final AppState appState;
+
+  /// 30 desktop / 26 mobile (docs/02).
+  final double titleSize;
+
+  /// 16 desktop / 15 mobile.
+  final double metaSize;
+
+  const _MetaBlock({
+    required this.song,
+    required this.appState,
+    required this.titleSize,
+    required this.metaSize,
   });
 
   @override
   Widget build(BuildContext context) {
-    final sleepActive = sleepActiveUntil != null;
-    // FittedBox: three actions + gaps never overflow a narrow screen (or the
-    // test renderer's wider fallback glyphs) — the row scales down only when
-    // it would otherwise clip.
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _QuickAction(
-              icon: Icons.queue_music_rounded, label: 'Queue', onTap: onQueue),
-          const SizedBox(width: 36),
-          _QuickAction(
-            icon: Icons.bedtime_rounded,
-            label: sleepActive
-                ? 'Sleep · ${formatSleepCountdown(sleepActiveUntil!.difference(DateTime.now()))}'
-                : 'Sleep',
-            onTap: onSleep,
+    final album = appState.albumById(song.albumId);
+    final albumTitle = album?.title;
+    // Year 0 is the model's "unknown" - omit it rather than show "· 0".
+    final year = (album?.year ?? 0) > 0 ? album!.year.toString() : null;
+    final quality = qualityChipLabel(song);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 360),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        // Incoming: a small rise + fade; outgoing: fade only, so the swap
+        // never reads as a lurch.
+        if (animation.status == AnimationStatus.reverse) {
+          return FadeTransition(opacity: animation, child: child);
+        }
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position:
+                Tween<Offset>(begin: const Offset(0, 0.10), end: Offset.zero)
+                    .animate(animation),
+            child: child,
           ),
-          const SizedBox(width: 36),
-          _QuickAction(
-              icon: Icons.volume_up_rounded, label: 'Volume', onTap: onVolume),
-          const SizedBox(width: 36),
-          _QuickAction(
-              icon: Icons.info_outline_rounded,
-              label: 'Audio info',
-              onTap: onAudioInfo),
+        );
+      },
+      child: Column(
+        key: ValueKey(song.id),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            song.title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white,
+                fontSize: titleSize,
+                height: 1.25,
+                fontWeight: FontWeight.w800,
+                shadows: const [
+                  Shadow(color: Color(0x66000000), blurRadius: 8)
+                ]),
+          ),
+          const SizedBox(height: 4),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: song.artist,
+                  style: TextStyle(
+                      color: kPinkPale, fontWeight: FontWeight.w600),
+                ),
+                if (albumTitle != null && albumTitle.trim().isNotEmpty)
+                  TextSpan(text: ' · $albumTitle'),
+                if (year != null) TextSpan(text: ' · $year'),
+              ],
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kStatusText,
+                fontSize: metaSize,
+                fontWeight: FontWeight.w500,
+                shadows: const [
+                  Shadow(color: Color(0x66000000), blurRadius: 6)
+                ]),
+          ),
+          if (quality != null) ...[
+            const SizedBox(height: 8),
+            _QualityChip(label: quality),
+          ],
         ],
       ),
     );
@@ -1200,106 +1605,6 @@ class _LyricsBar extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Title + artist + shuffle/repeat, animated as a single block when the track
-/// changes. Uses the shared [TrackInfoRow] so the layout stays identical to the
-/// rest of the app — only the swap is animated.
-class _TrackTitleBlock extends StatelessWidget {
-  final Song song;
-  final Color accent;
-  final Duration duration;
-  final bool shuffleOn;
-  final PlayerRepeatMode repeatMode;
-  final VoidCallback onShuffleToggle;
-  final VoidCallback onRepeatToggle;
-
-  /// Favourite sweet spot passthrough (see TrackInfoRow).
-  final bool? isFavorite;
-  final VoidCallback? onToggleFavorite;
-
-  /// Short-window sizing passthrough (see TrackInfoRow.dense).
-  final bool dense;
-
-  const _TrackTitleBlock({
-    required this.song,
-    required this.accent,
-    required this.duration,
-    required this.shuffleOn,
-    required this.repeatMode,
-    required this.onShuffleToggle,
-    required this.onRepeatToggle,
-    this.isFavorite,
-    this.onToggleFavorite,
-    this.dense = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: duration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        // Incoming (forward): a small rise + fade. Outgoing (reverse): fade
-        // only — the old block sliding *down* while the new one rose read as
-        // a lurch.
-        if (animation.status == AnimationStatus.reverse) {
-          return FadeTransition(opacity: animation, child: child);
-        }
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position:
-                Tween<Offset>(begin: const Offset(0, 0.10), end: Offset.zero)
-                    .animate(animation),
-            child: child,
-          ),
-        );
-      },
-      child: TrackInfoRow(
-        key: ValueKey(song.id),
-        song: song,
-        accent: accent,
-        shuffleOn: shuffleOn,
-        repeatMode: repeatMode,
-        onShuffleToggle: onShuffleToggle,
-        onRepeatToggle: onRepeatToggle,
-        isFavorite: isFavorite,
-        onToggleFavorite: onToggleFavorite,
-        dense: dense,
-      ),
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _QuickAction(
-      {required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white70, size: 20),
-            const SizedBox(height: 4),
-            Text(label,
-                style: GoogleFonts.getFont(currentFontFamily,
-                    color: Colors.white70, fontSize: 11)),
-          ],
         ),
       ),
     );
@@ -1827,28 +2132,360 @@ class _VolumeIconButtonState extends State<_VolumeIconButton> {
   }
 }
 
-/// "Playing from <device>" — the current audio output route, exactly what
-/// Apple Music/Spotify surface. Data comes from the Kotlin capability
-/// monitor (real device product names on the routes that report them).
-/// Honesty rules apply: the line is only shown when the route is actually
-/// KNOWN — unknown routes render nothing.
-class _PlayingFromLine extends StatefulWidget {
-  const _PlayingFromLine();
+/// The action row under the transport (docs/02): heart on a white 10%
+/// circle, add-to-playlist, the volume control (inline slider on desktop /
+/// output chip on mobile), sleep timer and queue. Mobile keeps volume and
+/// audio info reachable through a trailing overflow button - folded into a
+/// sheet, never removed.
+class _NpvActionRow extends StatelessWidget {
+  final bool desktop;
+  final Song song;
+  final PlayerController player;
+  final AppState appState;
+  final bool isFav;
+  final Color accent;
+
+  const _NpvActionRow({
+    required this.desktop,
+    required this.song,
+    required this.player,
+    required this.appState,
+    required this.isFav,
+    required this.accent,
+  });
 
   @override
-  State<_PlayingFromLine> createState() => _PlayingFromLineState();
+  Widget build(BuildContext context) {
+    final sleepArmed = player.sleepUntil != null;
+    // FittedBox: the row scales down rather than clipping on a narrow phone.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CircleAction(
+            tooltip: isFav ? 'Remove from favourites' : 'Add to favourites',
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              // AnimatedFavoriteIcon keeps its pop + semantics; the tight
+              // 40x40 box reins its default 48 px IconButton in.
+              child: AnimatedFavoriteIcon(
+                isFavorite: isFav,
+                activeColor: accent,
+                inactiveColor: Colors.white60,
+                size: 20,
+                onTap: () => Favorites.toggle(context, song.id),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          _CircleAction(
+            icon: Icons.playlist_add_rounded,
+            tooltip: 'Add to playlist',
+            onTap: () => showAddToPlaylistSheet(context, song),
+          ),
+          const SizedBox(width: 12),
+          if (desktop)
+            _InlineVolume(player: player)
+          else
+            _OutputChip(
+                width: 128, height: 36, defaultLabel: 'This phone'),
+          const SizedBox(width: 12),
+          _CircleAction(
+            icon: Icons.bedtime_rounded,
+            tooltip: sleepArmed
+                ? 'Sleep timer running · ${formatSleepCountdown(player.sleepUntil!.difference(DateTime.now()))}'
+                : 'Sleep timer',
+            color: sleepArmed ? kVioletLight : Colors.white70,
+            onTap: () => showSleepTimerSheet(context, player),
+          ),
+          const SizedBox(width: 12),
+          _CircleAction(
+            icon: Icons.queue_music_rounded,
+            tooltip: 'Queue',
+            onTap: () => pushRisingOnce(context, const QueueScreen()),
+          ),
+          if (!desktop) ...[
+            const SizedBox(width: 12),
+            _CircleAction(
+              icon: Icons.more_horiz_rounded,
+              tooltip: 'Volume and audio info',
+              onTap: () => _showPlaybackOverflowSheet(context, song, player),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
-class _PlayingFromLineState extends State<_PlayingFromLine> {
+/// Volume / audio info for the mobile action row: the two controls that no
+/// longer fit the redesigned row live behind one overflow button instead of
+/// disappearing.
+Future<void> _showPlaybackOverflowSheet(
+    BuildContext context, Song song, PlayerController player) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: kSurfaceColor,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.volume_up_rounded, color: kBrandColor),
+            title: Text('Volume',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white, fontSize: 13.5)),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              showVolumeSheet(context, player);
+            },
+          ),
+          ListTile(
+            leading:
+                const Icon(Icons.info_outline_rounded, color: kBrandColor),
+            title: Text('Audio info',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white, fontSize: 13.5)),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              showAudioInfoSheet(context, song);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 40 px circular action on a white 10% plate (docs/02 action row).
+class _CircleAction extends StatelessWidget {
+  final IconData? icon;
+
+  /// Custom content (the heart) instead of an icon.
+  final Widget? child;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final Color color;
+
+  const _CircleAction({
+    this.icon,
+    this.child,
+    required this.tooltip,
+    this.onTap,
+    this.color = Colors.white70,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.10),
+            border: Border.all(color: kHairline),
+          ),
+          child: Center(
+            child: child ?? Icon(icon, size: 20, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline volume for the desktop action row (docs/02): a 100-wide pill
+/// slider plus numeric value, backed by the SAME source the volume sheet
+/// uses - system media volume where the platform allows it, the player's own
+/// volume otherwise (desktop/web). Never a fake control.
+class _InlineVolume extends StatefulWidget {
+  final PlayerController player;
+
+  const _InlineVolume({required this.player});
+
+  @override
+  State<_InlineVolume> createState() => _InlineVolumeState();
+}
+
+class _InlineVolumeState extends State<_InlineVolume> {
+  double? _systemVolume;
+  StreamSubscription<double>? _sub;
+  bool _systemWorking = false;
+  late double _playerVolume = widget.player.playerVolume;
+
+  @override
+  void initState() {
+    super.initState();
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
+    if (kIsWeb || isDesktop) {
+      // Desktop controls Shuro's own output; system volume would change every
+      // other application (see the volume sheet for the long version).
+      return;
+    }
+    try {
+      VolumeController.instance.showSystemUI = false;
+      _sub = VolumeController.instance.addListener((v) {
+        if (mounted) {
+          setState(() {
+            _systemVolume = v;
+            _systemWorking = true;
+          });
+        }
+      });
+      VolumeController.instance.getVolume().then((v) {
+        if (mounted) {
+          setState(() {
+            _systemVolume = v;
+            _systemWorking = true;
+          });
+        }
+      }).catchError((_) {});
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sub?.cancel());
+    // Desktop (the only place this widget's system branch is skipped) never
+    // registered a global listener, so this only touches real listeners.
+    try {
+      unawaited(VolumeController.instance.removeListener());
+    } catch (_) {}
+    super.dispose();
+  }
+
+  bool get _useSystem => !kIsWeb && _systemWorking;
+
+  Future<void> _set(double v) async {
+    if (_useSystem) {
+      try {
+        await VolumeController.instance.setVolume(v);
+      } catch (_) {}
+    } else {
+      await context.read<PlaybackPrefs>().setAppVolume(v);
+    }
+  }
+
+  void _onDrag(double dx, double width) {
+    final value = (dx / width).clamp(0.0, 1.0);
+    setState(() => _playerVolume = value);
+    _set(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value =
+        (_useSystem ? (_systemVolume ?? 0.5) : _playerVolume).clamp(0.0, 1.0);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          value == 0
+              ? Icons.volume_off_rounded
+              : value < 0.5
+                  ? Icons.volume_down_rounded
+                  : Icons.volume_up_rounded,
+          size: 16,
+          color: Colors.white60,
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 100,
+          height: 32,
+          child: LayoutBuilder(
+            builder: (context, c) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
+              onHorizontalDragUpdate: (d) =>
+                  _onDrag(d.localPosition.dx, c.maxWidth),
+              // The fill edge IS the handle - no thumb (same control language
+              // as the volume sheet).
+              child: Center(
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: value,
+                      child: Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 34,
+          child: Text(
+            '${(value * 100).round()}%',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kStatusText,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The audio-output chip ("This computer" / "This phone" / the real device
+/// name): glass pill on a hairline border. It reads the same capability
+/// monitor the old "Playing from ..." line did - route changes repaint it
+/// live - under the same honesty rule: an unknown route falls back to the
+/// platform default label rather than a guess.
+class _OutputChip extends StatefulWidget {
+  /// Fixed pill width (mobile action row: 128). Null sizes to the label.
+  final double? width;
+  final double height;
+  final String defaultLabel;
+
+  const _OutputChip({
+    this.width,
+    this.height = 32,
+    this.defaultLabel = 'This computer',
+  });
+
+  @override
+  State<_OutputChip> createState() => _OutputChipState();
+}
+
+class _OutputChipState extends State<_OutputChip> {
   AudioCapabilityReport? _report;
 
   @override
   void initState() {
     super.initState();
     _report = sharedAudioCapabilityMonitor.last;
-    // Follow the monitor instead of reading once: a route change (headset
-    // plugged/unplugged, Bluetooth connected) now repaints this line live
-    // instead of waiting for the screen to be reopened (fixed 2026-10-18).
+    // Follow the monitor so a route change (headset plugged, Bluetooth
+    // connected) repaints the chip live.
     sharedAudioCapabilityMonitor.addListener(_onMonitorChanged);
     unawaited(sharedAudioCapabilityMonitor.recheck());
   }
@@ -1862,61 +2499,132 @@ class _PlayingFromLineState extends State<_PlayingFromLine> {
   void _onMonitorChanged() {
     if (!mounted) return;
     final latest = sharedAudioCapabilityMonitor.last;
-    // Keep showing the previous route while a re-check is in flight - only a
-    // genuinely fresh answer replaces it, so the label never flickers empty.
+    // Keep the previous route while a re-check is in flight - only a fresh
+    // answer replaces the label, so it never flickers empty.
     if (latest != null) setState(() => _report = latest);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isPhone = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    var label = widget.defaultLabel;
+    var icon =
+        isPhone ? Icons.smartphone_rounded : Icons.computer_rounded;
     final report = _report;
-    if (report == null || report.routeKind == RouteKind.unknown) {
-      return const SizedBox(height: 18);
+    if (report != null && report.routeKind != RouteKind.unknown) {
+      final name = (report.routeLabel ?? '').trim();
+      switch (report.routeKind) {
+        case RouteKind.builtIn:
+          break; // platform default label already set
+        case RouteKind.bluetooth:
+          label = name.isNotEmpty ? name : 'Bluetooth';
+          icon = Icons.bluetooth_audio_rounded;
+        case RouteKind.wired:
+          label = name.isNotEmpty ? name : 'Wired headphones';
+          icon = Icons.headset_rounded;
+        case RouteKind.usb:
+          label = name.isNotEmpty ? name : 'USB audio';
+          icon = Icons.usb_rounded;
+        case RouteKind.other:
+          label = name.isNotEmpty ? name : 'External output';
+          icon = Icons.speaker_rounded;
+        case RouteKind.unknown:
+          break;
+      }
     }
-    final label = report.routeLabel;
-    final kindText = switch (report.routeKind) {
-      RouteKind.bluetooth => 'Bluetooth',
-      RouteKind.wired => 'Wired headphones',
-      RouteKind.usb => 'USB audio',
-      RouteKind.builtIn => 'This device',
-      RouteKind.other || RouteKind.unknown => 'External output',
-    };
-    final deviceName =
-        (label != null && label.trim().isNotEmpty) ? label.trim() : null;
-    final text = deviceName != null && report.routeKind != RouteKind.builtIn
-        ? 'Playing from $deviceName'
-        : 'Playing from $kindText';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: kGlass,
+        borderRadius: BorderRadius.circular(widget.height / 2),
+        border: Border.all(color: kHairline),
+      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: widget.width != null
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.start,
+        mainAxisSize: widget.width != null ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          Icon(_iconFor(report.routeKind), size: 13, color: Colors.white70),
-          const SizedBox(width: 6),
+          Icon(icon, size: 14, color: kStatusText),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
-              text,
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white70,
-                  fontSize: 11,
-                  shadows: const [
-                    Shadow(color: Color(0x66000000), blurRadius: 6)
-                  ]),
+                  color: kStatusText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  IconData _iconFor(RouteKind kind) => switch (kind) {
-        RouteKind.bluetooth => Icons.bluetooth_audio_rounded,
-        RouteKind.wired => Icons.headset_rounded,
-        RouteKind.usb => Icons.usb_rounded,
-        RouteKind.builtIn => Icons.smartphone_rounded,
-        _ => Icons.speaker_rounded,
-      };
+/// Desktop keyboard/gesture hint (docs/02): 11 px, white 45%.
+class _HintLine extends StatelessWidget {
+  const _HintLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        'Drag the ring to seek · Space play · ← → ±5 s · L lyrics',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.getFont(currentFontFamily,
+            color: Colors.white.withValues(alpha: 0.45), fontSize: 11),
+      ),
+    );
+  }
+}
+
+/// Three soft mesh blobs behind the Now Playing content (docs/02 backdrop):
+/// pink / violet / cyan radial washes, each 0.5-0.7 of the screen, static.
+/// Pre-blurred gradients (no ImageFilter, no ticker) - one cheap paint per
+/// blob. Skipped entirely under reduce-motion.
+class _MeshBlobs extends StatelessWidget {
+  const _MeshBlobs();
+
+  @override
+  Widget build(BuildContext context) {
+    if (reduceMotionEnabled) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final big = math.max(constraints.maxWidth, constraints.maxHeight);
+        Widget blob(Color color, Alignment alignment, double fraction,
+                double alpha) =>
+            Align(
+              alignment: alignment,
+              child: Container(
+                width: big * fraction,
+                height: big * fraction,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [
+                    color.withValues(alpha: alpha),
+                    color.withValues(alpha: 0.0),
+                  ]),
+                ),
+              ),
+            );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Pink top-left, violet bottom-right, cyan lower-left - the
+            // left column (the player) keeps two of the three behind it.
+            blob(kAccentColor, const Alignment(-0.85, -0.85), 0.7, 0.14),
+            blob(kBrandColor, const Alignment(0.75, 0.8), 0.65, 0.12),
+            blob(kSecondaryColor, const Alignment(-0.8, 0.75), 0.55, 0.12),
+          ],
+        );
+      },
+    );
+  }
 }
