@@ -63,13 +63,13 @@ class DesktopTokens {
   static const double focusRingOffset = 2;
 
   // --- Type scale ---------------------------------------------------------
-  /// Page title 28/36 bold.
+  /// Page title — boards use 36/800 with tight tracking (e.g. "Library").
   static TextStyle pageTitle(TextStyle base) =>
-      base.copyWith(fontSize: 28, height: 36 / 28, fontWeight: FontWeight.w700);
+      base.copyWith(fontSize: 36, height: 44 / 36, fontWeight: FontWeight.w800, letterSpacing: -0.9);
 
-  /// Section heading 20/28 bold.
+  /// Section heading — boards use 24/ExtraBold for shelf titles.
   static TextStyle section(TextStyle base) =>
-      base.copyWith(fontSize: 20, height: 28 / 20, fontWeight: FontWeight.w700);
+      base.copyWith(fontSize: 24, height: 32 / 24, fontWeight: FontWeight.w800);
 
   /// Body 14/20.
   static TextStyle body(TextStyle base) =>
@@ -82,6 +82,32 @@ class DesktopTokens {
   /// Caption 12/16 — nothing in the desktop UI goes below this.
   static TextStyle caption(TextStyle base) =>
       base.copyWith(fontSize: 12, height: 16 / 12);
+}
+
+/// Now Playing geometry from the redesign (desktop >=1024 / mobile / mini).
+class NpvMetrics {
+  const NpvMetrics._();
+
+  /// Ring diameter: desktop 400 in a 1440x900 frame; mobile 330 on 390 wide.
+  /// Rule: ring = clamp(min(h*0.44, colWidth), 160, cap) with the cap raised
+  /// to 400 on desktop layouts, 340 on phones.
+  static double ring({required double height, required double colWidth, required bool desktop}) {
+    final cap = desktop ? 400.0 : 340.0;
+    return (height * 0.44).clamp(160.0, cap).clamp(0.0, colWidth.clamp(0.0, cap));
+  }
+
+  /// Inner artwork = 72% of the ring diameter.
+  static const artworkInRing = 0.72;
+
+  /// Ring stroke: 4 on the big rings, 3 on the 52px mini-player ring.
+  static const ringStroke = 4.0;
+  static const ringStrokeMini = 3.0;
+
+  /// Knob diameters: 20 desktop / 18 mobile / 9 mini.
+  static const knobDesktop = 20.0, knobMobile = 18.0, knobMini = 9.0;
+
+  /// Play disc: 76 desktop / 68 mobile.
+  static const playDiscDesktop = 76.0, playDiscMobile = 68.0;
 }
 
 /// Centres a page inside the window at the designed maximum width and keeps

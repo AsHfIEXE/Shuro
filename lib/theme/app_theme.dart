@@ -19,6 +19,42 @@ const kSecondaryColor = Color(0xFF00D4FF);
 const kAccentColor = Color(0xFFFF6B9D);
 const kBrandGradient = [kBrandColor, kSecondaryColor];
 
+// --- Redesign palette (shuro-ui-handoff/tokens/new_tokens.dart) ------------
+/// Sidebar surface — one step above the app background.
+const kSidebarColor = Color(0xFF0E131B);
+/// Raised card surface (account card, toolbar pills): #151B26.
+const kRaisedColor = Color(0xFF151B26);
+/// Muted text tones from the boards: #8B93A7 (labels) and #6F7890 (captions).
+const kNavText = Color(0xFFB4BBCB);
+const kMuted2 = Color(0xFF8B93A7);
+const kMuted3 = Color(0xFF6F7890);
+const kStatusText = Color(0xFF9AA3B5);
+/// Brand tints used across the redesign (violet + pink families).
+const kVioletLight = Color(0xFFA78BFA);
+const kVioletPale = Color(0xFFC4B5FD);
+const kPinkLight = Color(0xFFFF8FB8);
+const kPinkPale = Color(0xFFF9A8D4);
+/// Success green (quality chips, "Word-synced", completed downloads).
+const kGreen = Color(0xFF34D399);
+const kGreenLight = Color(0xFF6EE7B7);
+/// Hairline borders (white 7%) and glass fills (white 8%).
+final kHairline = Colors.white.withValues(alpha: 0.07);
+final kGlass = Colors.white.withValues(alpha: 0.08);
+
+/// Ring-scrub progress gradient (NPV, mini player ring) — fixed by design.
+const kRingProgress = [kPinkLight, kVioletLight];
+
+/// Motion curves + durations from the redesign motion pass.
+class ShuroMotion {
+  const ShuroMotion._();
+  /// std = cubic(.2,.8,.2,1)
+  static const std = Cubic(0.2, 0.8, 0.2, 1);
+  /// spring = cubic(.34,1.56,.64,1)
+  static const spring = Cubic(0.34, 1.56, 0.64, 1);
+  static const lineChange = Duration(milliseconds: 260);
+  static const autoscroll = Duration(milliseconds: 480);
+}
+
 /// Curated Google Fonts offered in Settings → Appearance → Font (body
 /// text). Inter is the brand's body face and the default; Sora — the
 /// brand's heading face — is also selectable if someone wants the whole
