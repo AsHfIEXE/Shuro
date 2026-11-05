@@ -10,6 +10,10 @@ import '../../theme/desktop_tokens.dart';
 import '../widgets/desktop_context_menu.dart';
 import 'artwork_thumb.dart';
 
+/// Raised card surface from the redesign boards (#111723) — the completed
+/// grid sits on the same surface as the Library table card.
+const Color _cardSurface = Color(0xFF111723);
+
 /// The downloaded library as cards: artwork plus title/artist metadata, an
 /// explicit selection mode for clearing chosen items, and a clear-all with
 /// confirmation. Playback stays one tap away; selection is long-press, the
@@ -138,10 +142,20 @@ class _DownloadCardsSectionState extends State<DownloadCardsSection> {
             ],
           ),
         ),
-        GridView.builder(
+        // Redesign: the completed grid sits inside the same raised card the
+        // other Downloads sections use.
+        Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          decoration: BoxDecoration(
+            color: _cardSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kHairline),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          padding: const EdgeInsets.all(12),
           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 320,
             mainAxisExtent: 92,
@@ -163,6 +177,7 @@ class _DownloadCardsSectionState extends State<DownloadCardsSection> {
               }
             },
             onLongPress: isDesktopPlatform ? null : () => _toggle(songs[i].id),
+          ),
           ),
         ),
       ],

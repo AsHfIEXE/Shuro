@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/song.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
 
@@ -110,7 +111,8 @@ class _DesktopSongTableState extends State<DesktopSongTable> {
     return Column(
       children: [
         _HeaderRow(column: _column, ascending: _ascending, onSort: _sortBy),
-        const Divider(height: 1, color: kDividerColor),
+        // Hairline (white 7%) under the header row, per the boards.
+        Divider(height: 1, color: kHairline),
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.only(bottom: 8),
@@ -124,71 +126,103 @@ class _DesktopSongTableState extends State<DesktopSongTable> {
                   onTap: () => widget.onPlaySong(song, sorted),
                   hoverColor: Colors.white.withValues(alpha: 0.045),
                   child: SizedBox(
-                    height: 44,
-                    child: Row(
+                    height: DesktopTokens.rowTable,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        SizedBox(
-                          width: _indexWidth,
-                          child: Center(
-                            child: Text(
-                              '${i + 1}',
-                              style: GoogleFonts.getFont(
-                                currentFontFamily,
-                                color: playing
-                                    ? kBrandColor
-                                    : kMutedTextColor,
-                                fontSize: 12,
-                              ),
+                        // Now-playing row (boards): a soft violet wash under
+                        // the row plus a 3 px brand bar on the left edge.
+                        // Hover still paints on top of the wash.
+                        if (playing)
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: kBrandColor.withValues(alpha: 0.10),
                             ),
                           ),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: Row(
-                            children: [
-                              // The doc's Table 4: the Title column carries a
-                              // 40 px cover — a music table without artwork
-                              // read as a text list (reported).
-                              ArtworkThumb(
-                                gradientColors: song.gradientColors,
-                                artwork: song.artwork,
-                                size: 40,
-                                radius: 6,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _cellText(
-                                  song.title,
-                                  color: playing ? kBrandColor : Colors.white,
-                                  weight: FontWeight.w600,
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: _indexWidth,
+                              child: Center(
+                                child: Text(
+                                  '${i + 1}',
+                                  style: GoogleFonts.getFont(
+                                    currentFontFamily,
+                                    color: playing
+                                        ? kVioletPale
+                                        : kStatusText,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            Expanded(
+                              flex: 4,
+                              child: Row(
+                                children: [
+                                  // The doc's Table 4: the Title column
+                                  // carries a 36 px cover — a music table
+                                  // without artwork reads as a text list
+                                  // (reported).
+                                  ArtworkThumb(
+                                    gradientColors: song.gradientColors,
+                                    artwork: song.artwork,
+                                    size: 36,
+                                    radius: 8,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _cellText(
+                                      song.title,
+                                      color: playing
+                                          ? kVioletPale
+                                          : kTextColor,
+                                      fontSize: 14,
+                                      weight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child:
+                                  _cellText(song.artist, color: kNavText),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: _cellText(widget.albumTitleOf(song),
+                                  color: kNavText),
+                            ),
+                            SizedBox(
+                              width: _durationWidth,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _formatDuration(song.duration),
+                                  style: GoogleFonts.getFont(
+                                    currentFontFamily,
+                                    color: kNavText,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          flex: 3,
-                          child: _cellText(song.artist, color: Colors.white70),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: _cellText(widget.albumTitleOf(song),
-                              color: Colors.white70),
-                        ),
-                        SizedBox(
-                          width: _durationWidth,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              _formatDuration(song.duration),
-                              style: GoogleFonts.getFont(
-                                currentFontFamily,
-                                color: kMutedTextColor,
-                                fontSize: 12,
+                        if (playing)
+                          Positioned(
+                            left: 0,
+                            top: 4,
+                            bottom: 4,
+                            child: Container(
+                              width: 3,
+                              decoration: BoxDecoration(
+                                color: kBrandColor,
+                                borderRadius: BorderRadius.circular(2),
                               ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -202,7 +236,9 @@ class _DesktopSongTableState extends State<DesktopSongTable> {
   }
 
   Widget _cellText(String text,
-      {required Color color, FontWeight weight = FontWeight.w400}) {
+      {required Color color,
+      FontWeight weight = FontWeight.w400,
+      double fontSize = 13}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Text(
@@ -212,7 +248,7 @@ class _DesktopSongTableState extends State<DesktopSongTable> {
         style: GoogleFonts.getFont(
           currentFontFamily,
           color: color,
-          fontSize: 12.5,
+          fontSize: fontSize,
           fontWeight: weight,
         ),
       ),
@@ -236,7 +272,8 @@ class _HeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 38,
+      // 44 px header row matching the data rows (DesktopTokens.rowTable).
+      height: DesktopTokens.rowTable,
       child: Row(
         children: [
           SizedBox(
@@ -364,10 +401,11 @@ class _HeaderButton extends StatelessWidget {
 
 TextStyle _headerLabelStyle(bool active) => GoogleFonts.getFont(
       currentFontFamily,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: active ? FontWeight.w700 : FontWeight.w600,
       letterSpacing: 0.7,
-      color: active ? kBrandColor : kMutedTextColor,
+      // Boards: inactive headers #8B93A7, the active column #C4B5FD.
+      color: active ? kVioletPale : kMuted2,
     );
 
 String _formatDuration(Duration value) {

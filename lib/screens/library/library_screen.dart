@@ -32,6 +32,18 @@ import '../playlist/playlist_detail_screen.dart';
 
 enum _SongSort { titleAz, artistAz, recentlyAdded }
 
+/// Short label for the desktop sort chip ("Sort: Title").
+extension _SongSortLabel on _SongSort {
+  String get label => switch (this) {
+        _SongSort.titleAz => 'Title',
+        _SongSort.artistAz => 'Artist',
+        _SongSort.recentlyAdded => 'Recently added',
+      };
+}
+
+/// Raised card surface for the desktop table card (boards: #111723).
+const Color _tableCardColor = Color(0xFF111723);
+
 /// Shared pull-to-refresh action for the Songs/Albums/Artists tabs —
 /// genuinely re-fetches the connected server's library (see
 /// AppState.refreshLibrary), same real refresh Home's pull-to-refresh uses.
@@ -120,25 +132,39 @@ class _LibraryScreenState extends State<LibraryScreen>
                 Tab(text: 'Songs'),
                 Tab(text: 'Albums'),
                 Tab(text: 'Artists'),
-                Tab(text: 'Genres'),
                 Tab(text: 'Playlists'),
-                Tab(text: 'Local'),
-                Tab(text: 'Downloads'),
+                Tab(text: 'Genres'),
+                Tab(text: 'Cached'),
+                Tab(text: 'Local files'),
               ],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _SongsTab(
-                      sort: _sort,
-                      onSortChanged: (s) => setState(() => _sort = s)),
-                  const _AlbumsTab(),
-                  const _ArtistsTab(),
-                  const _GenresTab(),
+                  // Songs/Albums/Artists cap at the table width like Genres
+                  // already did — extra window width becomes margin,
+                  // not stretched rows.
+                  DesktopContentFrame(
+                    maxWidth: DesktopTokens.contentTable,
+                    child: _SongsTab(
+                        sort: _sort,
+                        onSortChanged: (s) => setState(() => _sort = s)),
+                  ),
+                  DesktopContentFrame(
+                    maxWidth: DesktopTokens.contentTable,
+                    child: const _AlbumsTab(),
+                  ),
+                  DesktopContentFrame(
+                    maxWidth: DesktopTokens.contentTable,
+                    child: const _ArtistsTab(),
+                  ),
                   const _PlaylistsTab(),
-                  const _LocalTab(),
+                  const _GenresTab(),
+                  // "Cached" is the old Downloads tab under its redesign
+                  // label — downloaded songs, behaviour unchanged.
                   const DownloadCardsSection(),
+                  const _LocalTab(),
                 ],
               ),
             ),
@@ -149,15 +175,48 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 }
 
-class _SongsTab extends StatelessWidget {
+class _SongsTab extends StatefulWidget {
   final _SongSort sort;
   final ValueChanged<_SongSort> onSortChanged;
 
   const _SongsTab({required this.sort, required this.onSortChanged});
 
+  @override
+  State<_SongsTab> createState() => _SongsTabState();
+}
+
+class _SongsTabState extends State<_SongsTab> {
+  final TextEditingController _filter = TextEditingController();
+
+  @override
+  void dispose() {
+    _filter.dispose();
+    super.dispose();
+  }
+
+  /// The sort popup items, shared by the mobile trigger and the desktop
+  /// sort chip.
+  List<PopupMenuItem<_SongSort>> _sortMenuItems() => [
+        PopupMenuItem(
+            value: _SongSort.titleAz,
+            child: Text('Sort: Title A–Z',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white, fontSize: 13))),
+        PopupMenuItem(
+            value: _SongSort.artistAz,
+            child: Text('Sort: Artist A–Z',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white, fontSize: 13))),
+        PopupMenuItem(
+            value: _SongSort.recentlyAdded,
+            child: Text('Sort: Recently added',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white, fontSize: 13))),
+      ];
+
   List<Song> _sorted(BuildContext context) {
     final songs = List<Song>.of(context.watch<AppState>().catalogSongs);
-    switch (sort) {
+    switch (widget.sort) {
       case _SongSort.titleAz:
         songs.sort((a, b) => a.title.compareTo(b.title));
       case _SongSort.artistAz:
@@ -176,6 +235,7 @@ class _SongsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final player = context.read<PlayerController>();
+    final appState = context.watch<AppState>();
     final songs = _sorted(context);
     // Desktop builds get a sortable data-table list instead of the mobile
     // SongTile list — see DesktopSongTable. Everything below the toolbar
@@ -185,13 +245,11 @@ class _SongsTab extends StatelessWidget {
     // instead of an albumById lookup per row. Local songs whose albumId has
     // no server album get an em dash rather than an empty cell.
     final albumTitles = {
-      for (final album in context.watch<AppState>().catalogAlbums)
-        album.id: album.title
+      for (final album in appState.catalogAlbums) album.id: album.title
     };
     // First fetch in flight: skeleton rows in the shape of the list.
     if (songs.isEmpty &&
-        context.watch<AppState>().connectionStatus ==
-            ConnectionStatus.connecting) {
+        appState.connectionStatus == ConnectionStatus.connecting) {
       return const SongListSkeleton();
     }
     if (songs.isEmpty) {
@@ -199,67 +257,88 @@ class _SongsTab extends StatelessWidget {
         icon: Icons.library_music_rounded,
         title: 'No songs yet',
         subtitle:
-            'Connect a Navidrome server to see its catalog here, or add files from the Local tab.',
+            'Connect a Navidrome server to see its catalog here, or add files from the Local files tab.',
+      );
+    }
+    // Desktop-only filter field: case-insensitive substring match across
+    // title / artist / album.
+    final query = _filter.text.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? songs
+        : songs
+            .where((song) =>
+                song.title.toLowerCase().contains(query) ||
+                song.artist.toLowerCase().contains(query) ||
+                (albumTitles[song.albumId] ?? '')
+                    .toLowerCase()
+                    .contains(query))
+            .toList();
+    if (visible.isEmpty) {
+      return EmptyStateView(
+        icon: Icons.search_off_rounded,
+        title: 'No songs match',
+        subtitle:
+            'Nothing matches "${_filter.text.trim()}" · clear the filter to see all ${songs.length} songs.',
       );
     }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-          child: Row(
-            children: [
-              Text('${songs.length} songs',
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kMutedTextColor, fontSize: 12)),
-              const Spacer(),
-              // Play / shuffle the whole current list — the sort (the "filter")
-              // decides the play order, shuffle randomises it. Both queue the
-              // full list so next/previous keep working.
-              TextButton.icon(
-                onPressed: () => player.playSong(songs.first, queue: songs),
-                icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                label: const Text('Play all'),
-                style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 8)),
-              ),
-              const SizedBox(width: 4),
-              TextButton.icon(
-                onPressed: () {
-                  final shuffled = [...songs]..shuffle();
-                  player.playSong(shuffled.first, queue: shuffled);
-                },
-                icon: const Icon(Icons.shuffle_rounded, size: 18),
-                label: const Text('Shuffle'),
-                style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 8)),
-              ),
-              // Mobile keeps the sort popup; on desktop the table's column
-              // headers are the sort UI, and a second control fighting them
-              // would be ambiguous.
-              if (!desktop)
+        if (desktop)
+          _DesktopSongsToolbar(
+            controller: _filter,
+            onFilterChanged: () => setState(() {}),
+            visibleCount: visible.length,
+            totalCount: songs.length,
+            filtering: query.isNotEmpty,
+            sort: widget.sort,
+            onSortChanged: widget.onSortChanged,
+            sortMenuItems: _sortMenuItems(),
+            // Play / shuffle the whole current list — the sort and the
+            // filter decide the play order, shuffle randomises it. Both queue
+            // the full list so next/previous keep working.
+            onPlayAll: () => player.playSong(visible.first, queue: visible),
+            onShuffle: () {
+              final shuffled = [...visible]..shuffle();
+              player.playSong(shuffled.first, queue: shuffled);
+            },
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+            child: Row(
+              children: [
+                Text('${songs.length} songs',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 12)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () =>
+                      player.playSong(visible.first, queue: visible),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Play all'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8)),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: () {
+                    final shuffled = [...visible]..shuffle();
+                    player.playSong(shuffled.first, queue: shuffled);
+                  },
+                  icon: const Icon(Icons.shuffle_rounded, size: 18),
+                  label: const Text('Shuffle'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8)),
+                ),
+                // Mobile keeps the sort popup; desktop uses the sort chip
+                // in the toolbar plus the table's own column headers.
                 PopupMenuButton<_SongSort>(
                   color: kCardColor,
-                  initialValue: sort,
-                  onSelected: onSortChanged,
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                        value: _SongSort.titleAz,
-                        child: Text('Sort: Title A–Z',
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white, fontSize: 13))),
-                    PopupMenuItem(
-                        value: _SongSort.artistAz,
-                        child: Text('Sort: Artist A–Z',
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white, fontSize: 13))),
-                    PopupMenuItem(
-                        value: _SongSort.recentlyAdded,
-                        child: Text('Sort: Recently added',
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white, fontSize: 13))),
-                  ],
+                  initialValue: widget.sort,
+                  onSelected: widget.onSortChanged,
+                  itemBuilder: (context) => _sortMenuItems(),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -271,30 +350,241 @@ class _SongsTab extends StatelessWidget {
                     ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: RefreshIndicator(
             color: kBrandColor,
             backgroundColor: kCardColor,
             onRefresh: () => _refreshLibrary(context),
             child: desktop
-                ? DesktopSongTable(
-                    songs: songs,
-                    albumTitleOf: (song) => albumTitles[song.albumId] ?? '—',
-                    onPlaySong: (song, queue) =>
-                        player.playSong(song, queue: queue),
+                ? Container(
+                    // The board's table card: raised #111723 surface with a
+                    // hairline border; the table's 44 px header row lives
+                    // inside the clip.
+                    margin: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    decoration: BoxDecoration(
+                      color: _tableCardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: kHairline),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: DesktopSongTable(
+                      songs: visible,
+                      albumTitleOf: (song) =>
+                          albumTitles[song.albumId] ?? '—',
+                      onPlaySong: (song, queue) =>
+                          player.playSong(song, queue: queue),
+                    ),
                   )
                 : ListView.builder(
-                    itemCount: songs.length,
+                    itemCount: visible.length,
                     itemBuilder: (context, i) => SongTile(
-                        song: songs[i],
-                        onTap: () => player.playSong(songs[i], queue: songs)),
+                        song: visible[i],
+                        onTap: () =>
+                            player.playSong(visible[i], queue: visible)),
                   ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Desktop Songs toolbar (board "Library - Songs"): song count, the
+/// "Filter songs" field, the sort chip and the Play all / Shuffle pills,
+/// sitting right above the table card.
+class _DesktopSongsToolbar extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onFilterChanged;
+  final int visibleCount;
+  final int totalCount;
+  final bool filtering;
+  final _SongSort sort;
+  final ValueChanged<_SongSort> onSortChanged;
+  final List<PopupMenuItem<_SongSort>> sortMenuItems;
+  final VoidCallback onPlayAll;
+  final VoidCallback onShuffle;
+
+  const _DesktopSongsToolbar({
+    required this.controller,
+    required this.onFilterChanged,
+    required this.visibleCount,
+    required this.totalCount,
+    required this.filtering,
+    required this.sort,
+    required this.onSortChanged,
+    required this.sortMenuItems,
+    required this.onPlayAll,
+    required this.onShuffle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: LayoutBuilder(builder: (context, constraints) {
+        // The 260 px filter field drops out on narrow desktop columns so
+        // the pills can never overflow the row.
+        final showFilter = constraints.maxWidth >= 700;
+        return Row(
+          children: [
+            Flexible(
+              child: Text(
+                filtering
+                    ? '$visibleCount of $totalCount songs'
+                    : '$totalCount songs',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kStatusText, fontSize: 14),
+              ),
+            ),
+            if (showFilter) ...[
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 260,
+                height: 36,
+                child: TextField(
+                  controller: controller,
+                  onChanged: (_) => onFilterChanged(),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kTextColor, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Filter songs',
+                    hintStyle: GoogleFonts.getFont(currentFontFamily,
+                        color: kMuted2, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 16, color: kMuted2),
+                    prefixIconConstraints: const BoxConstraints(
+                        minWidth: 36, minHeight: 36),
+                    // Board affordance hint only - no shortcut is wired.
+                    suffixText: 'Ctrl F',
+                    suffixStyle: GoogleFonts.getFont(currentFontFamily,
+                        color: kMuted3, fontSize: 12),
+                    filled: true,
+                    fillColor: kRaisedColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: kGlass),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: kBrandColor),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 12),
+            const Spacer(),
+            PopupMenuButton<_SongSort>(
+              color: kCardColor,
+              initialValue: sort,
+              onSelected: onSortChanged,
+              position: PopupMenuPosition.under,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              itemBuilder: (context) => sortMenuItems,
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.only(left: 12, right: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Sort: ${sort.label}',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kTextColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded,
+                        size: 14, color: kMuted2),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _ToolbarPill(
+              label: 'Shuffle',
+              icon: Icons.shuffle_rounded,
+              onTap: onShuffle,
+              glass: true,
+            ),
+            const SizedBox(width: 8),
+            _ToolbarPill(
+              label: 'Play all',
+              icon: Icons.play_arrow_rounded,
+              onTap: onPlayAll,
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+/// h36 pill from the boards: violet filled for Play all, glass for Shuffle.
+class _ToolbarPill extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  /// Glass style (white 6% fill, white 14% border) instead of violet fill.
+  final bool glass;
+
+  const _ToolbarPill({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.glass = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = glass ? kTextColor : Colors.white;
+    return Semantics(
+      button: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: glass
+                ? Colors.white.withValues(alpha: 0.06)
+                : kBrandColor,
+            borderRadius: BorderRadius.circular(999),
+            border: glass
+                ? Border.all(color: Colors.white.withValues(alpha: 0.14))
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: foreground),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: foreground,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
