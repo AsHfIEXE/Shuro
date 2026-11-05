@@ -352,6 +352,32 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// True playback position — reads straight through to the audio engine.
   Duration get position => _audioPlayer.position;
 
+  /// How far ahead the engine has buffered the current track - feeds the
+  /// ring's white buffered arc (docs/02 layer 2).
+  Duration get bufferedPosition => _audioPlayer.bufferedPosition;
+
+  /// [bufferedPosition] as a fraction (0..1) of the real [duration], already
+  /// clamped so a VBR over-report can never draw a full ring by accident.
+  double get bufferedFraction {
+    final total = duration.inMilliseconds;
+    if (total <= 0) return 0;
+    final value = bufferedPosition.inMilliseconds / total;
+    if (value < 0) return 0;
+    if (value > 1) return 1;
+    return value;
+  }
+
+  /// Relative seek (keyboard arrows on Now Playing: +/-5 s). Clamped to the
+  /// track bounds; a no-op when nothing real is loaded.
+  Future<void> seekBy(Duration delta) async {
+    final total = duration;
+    if (total <= Duration.zero) return;
+    var target = position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > total) target = total;
+    await seekTo(target);
+  }
+
   /// The length of what's *actually* loaded: the engine's own decoded
   /// duration when it has one, falling back to the server's tagged
   /// duration so a track still shows a total time before its audio loads.
