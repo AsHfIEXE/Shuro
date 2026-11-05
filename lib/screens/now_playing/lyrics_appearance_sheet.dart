@@ -44,6 +44,8 @@ Future<void> showLyricsAppearanceSheet(BuildContext context) {
             const SizedBox(height: 6),
             const _AlignRow(),
             const SizedBox(height: 6),
+            const _SyncModeRow(),
+            const SizedBox(height: 6),
             const _GlowRow(),
           ],
         ),
@@ -108,6 +110,36 @@ class _AlignRow extends StatelessWidget {
           showSelectedIcon: false,
           onSelectionChanged: (set) =>
               appearance.setLyricsAlignCenter(set.first),
+        ),
+      ],
+    );
+  }
+}
+
+/// Word/line sync (roadmap #27's "Word by word" vs the calmer line mode):
+/// drives the same [AppearanceSettings.lyricsHighlight] the lyrics renderer
+/// reads, so the toggle is the renderer.
+class _SyncModeRow extends StatelessWidget {
+  const _SyncModeRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = context.watch<AppearanceSettings>();
+    return Row(
+      children: [
+        Expanded(
+          child: Text('Word / line sync',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white70, fontSize: 13)),
+        ),
+        SegmentedButton<LyricsHighlight>(
+          segments: const [
+            ButtonSegment(value: LyricsHighlight.word, label: Text('Word')),
+            ButtonSegment(value: LyricsHighlight.line, label: Text('Line')),
+          ],
+          selected: {appearance.lyricsHighlight},
+          showSelectedIcon: false,
+          onSelectionChanged: (set) => appearance.setLyricsHighlight(set.first),
         ),
       ],
     );

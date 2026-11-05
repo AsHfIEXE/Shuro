@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter, TileMode;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,12 +12,14 @@ import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
-import '../../widgets/artwork_thumb.dart';
+import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/shuro_icons.dart';
+import '../../widgets/smooth_position_builder.dart';
 import 'lyrics_edit_sheet.dart';
 import 'lyrics_appearance_sheet.dart';
 import '../../services/lrc_tools.dart';
@@ -148,6 +148,10 @@ class _LyricsScreenState extends State<LyricsScreen> {
 
   int _lastAutoScrolledLine = -1;
 
+  /// Desktop pane only: whether the tools pill's "Sync" button has expanded
+  /// the inline offset bar (the bar is hidden until asked for).
+  bool _showSyncPane = false;
+
   @override
   void initState() {
     super.initState();
@@ -191,8 +195,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
       if (track.hasTiming && line.start > Duration.zero) {
         final m = line.start.inMinutes.toString().padLeft(2, '0');
         final s = (line.start.inSeconds % 60).toString().padLeft(2, '0');
-        final cs =
-            ((line.start.inMilliseconds % 1000) ~/ 10).toString().padLeft(2, '0');
+        final cs = ((line.start.inMilliseconds % 1000) ~/ 10)
+            .toString()
+            .padLeft(2, '0');
         buffer.writeln('[$m:$s.$cs] ${line.plainText}');
       } else {
         buffer.writeln(line.plainText);
@@ -360,7 +365,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
       } else {
         position.animateTo(
           targetOffset,
-          duration: const Duration(milliseconds: 480),
+          duration: ShuroMotion.autoscroll,
           curve: Curves.easeOutCubic,
         );
       }
@@ -444,8 +449,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
       return _shell(
         accent: live.gradientColors.last,
         song: live,
-        child: const _Message(
-            icon: null, loading: true, message: 'Loading lyrics…'),
+        child: const _LoadingSkeleton(),
       );
     }
 
@@ -461,8 +465,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const _Message(
-                  icon: null, loading: true, message: 'Loading lyrics…');
+              return const _LoadingSkeleton();
             }
             final result = snapshot.data;
             if (result == null || !result.hasTrack) {
@@ -585,13 +588,17 @@ class _LyricsScreenState extends State<LyricsScreen> {
                       valueListenable: _currentLine,
                       builder: (context, currentIndex, _) {
                         final isCurrent = currentIndex == i;
+                        // Distance from the sung line drives the fade ladder
+                        // in the line view; before the first line the index
+                        // is -1, which simply reads as "further away".
+                        final distance = (i - currentIndex).abs();
                         _lineKeys.putIfAbsent(i, () => GlobalKey());
-                        final appearance =
-                            context.watch<AppearanceSettings>();
+                        final appearance = context.watch<AppearanceSettings>();
                         return _LyricsLineView(
                           key: _lineKeys[i],
                           line: track.lines[i],
                           isCurrent: isCurrent,
+                          distance: distance,
                           karaoke: karaoke && isCurrent,
                           position: _position,
                           accent: accent,
@@ -659,11 +666,30 @@ class _LyricsScreenState extends State<LyricsScreen> {
               accent: accent,
               onEditLyrics: _openLyricsEditor,
               onAppearance: () => showLyricsAppearanceSheet(context)),
+        // Desktop pane chrome (the redesign right column): LYRICS label,
+        // word-sync chip and a compact tools pill. The portrait preview
+        // (compact) stays chrome-less.
+        if (widget.embedded && !widget.compact)
+          _EmbeddedPaneHeader(
+              track: _track,
+              offsetMs: _offset.inMilliseconds,
+              onAppearance: () => showLyricsAppearanceSheet(context),
+              onToggleSync: () =>
+                  setState(() => _showSyncPane = !_showSyncPane),
+              onEdit: _song == null ? null : _openLyricsEditor),
+        if (widget.embedded && !widget.compact && _showSyncPane)
+          _SyncBar(
+              accent: accent,
+              offsetMs: _offset.inMilliseconds,
+              enabled: _track?.hasTiming ?? false),
         Expanded(child: child),
-        if (!widget.compact && !widget.embedded && _loadedView?.track != null)
+        // Attribution shows in the embedded pane too: the desktop lyrics
+        // column is a full lyrics surface, and "where did these words come
+        // from" is not a phone-only question.
+        if (!widget.compact && _loadedView?.track != null)
           _AttributionFooter(
               track: _loadedView!.track!, detail: _loadedView!.detail),
-        if (!widget.compact)
+        if (!widget.compact && !widget.embedded)
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
@@ -697,12 +723,20 @@ class _LyricsScreenState extends State<LyricsScreen> {
 
 // --- line rendering -------------------------------------------------------
 
-/// One lyric line. [isCurrent] adds the accent bar and colour; the karaoke
-/// fill is only built for the current line, so a frame's repaint cost is one
-/// line rather than the whole list.
-class _LyricsLineView extends StatelessWidget {
+/// One lyric line. [isCurrent] adds the violet cue, the w800 weight and the
+/// white/glow treatment; the karaoke fill is only built for the current
+/// line, so a frame's repaint cost is one line rather than the whole list.
+///
+/// Everything else fades by [distance] from the sung line - the redesign
+/// ladder (0.55 / 0.4 / 0.3) that replaced the old per-line blur, which
+/// cost a filter layer per line and read as smudge next to real text.
+class _LyricsLineView extends StatefulWidget {
   final LyricsLine line;
   final bool isCurrent;
+
+  /// |line index - sung index|, from the owner's line builder. A sung index
+  /// of -1 (before the first line) simply counts as distance.
+  final int distance;
   final bool karaoke;
   final bool dimmed;
   final ValueNotifier<Duration> position;
@@ -711,7 +745,7 @@ class _LyricsLineView extends StatelessWidget {
   final VoidCallback onTap;
 
   /// Appearance from Settings (roadmap #27): the same three knobs on every
-  /// platform — text size, whether the glow renders, and (via [textAlign],
+  /// platform - text size, whether the glow renders, and (via [textAlign],
   /// resolved by the owner) centre vs left.
   final double fontScale;
   final bool glow;
@@ -720,6 +754,7 @@ class _LyricsLineView extends StatelessWidget {
     super.key,
     required this.line,
     required this.isCurrent,
+    required this.distance,
     required this.karaoke,
     required this.position,
     required this.accent,
@@ -731,46 +766,66 @@ class _LyricsLineView extends StatelessWidget {
   });
 
   @override
+  State<_LyricsLineView> createState() => _LyricsLineViewState();
+}
+
+class _LyricsLineViewState extends State<_LyricsLineView> {
+  /// Desktop hover affordance (row highlight + timestamp). Touch platforms
+  /// never set it; see the guard at the end of [build].
+  bool _hovered = false;
+
+  /// Redesign fade ladder: sung line 1.0, +/-1 0.55, +/-2 0.4, further 0.3.
+  static double _ladderOpacity(int distance) {
+    if (distance <= 0) return 1.0;
+    if (distance == 1) return 0.55;
+    if (distance == 2) return 0.40;
+    return 0.30;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final line = widget.line;
+    final isCurrent = widget.isCurrent;
+    final textAlign = widget.textAlign;
     final baseStyle = GoogleFonts.getFont(
       currentFontFamily,
-      fontSize: 21 * fontScale,
+      fontSize: 21 * widget.fontScale,
       height: 1.5,
-      // Constant size and weight for every line: emphasis comes from colour and a
-      // paint-time scale, so switching lines never re-measures the list. Changing
-      // the font size per line (the original approach) reflowed every line's
-      // height and made the scroll animation judder.
-      fontWeight: FontWeight.w600,
+      // Constant size for every line: emphasis comes from colour, weight and
+      // a paint-time scale, so switching lines never re-measures the list.
+      // The fixed line `height` is what lets the sung line go w800 without
+      // reflowing the column (weight widens a line, it does not grow one).
+      fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
     );
 
-    final Widget content = karaoke
+    final Widget content = widget.karaoke
         ? _KaraokeFill(
             line: line,
-            position: position,
-            accent: accent,
+            position: widget.position,
+            accent: widget.accent,
             baseStyle: baseStyle,
             textAlign: textAlign)
         : AnimatedDefaultTextStyle(
-            // Line-by-line mode: the colour/glow change between states fades
-            // over 200 ms instead of snapping — the line-level counterpart of
-            // the continuous word fill.
+            // Line-by-line mode: the colour/weight/glow change between
+            // states fades over 200 ms instead of snapping - the
+            // line-level counterpart of the continuous word fill.
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
             style: baseStyle.copyWith(
-              // Opacity ladder: current white, upcoming 66%, past 46% — one
-              // system instead of assorted greys.
-              // Contrast ladder: current pure white, upcoming 78%, past 60%.
-              // The previous 66/46% left upcoming lines hard to read on the
-              // blurred backdrop (reported).
+              // Fade ladder by distance from the sung line (1.0 sung,
+              // 0.55 / 0.4 / 0.3 away); untimed lyrics stay at the old
+              // single dim tone.
               color: isCurrent
                   ? Colors.white
-                  : (dimmed
+                  : (widget.dimmed
                       ? const Color(0x9CFFFFFF)
-                      : const Color(0xC8FFFFFF)),
-              shadows: (isCurrent && glow)
+                      : Colors.white
+                          .withValues(alpha: _ladderOpacity(widget.distance))),
+              shadows: (isCurrent && widget.glow)
                   ? [
                       Shadow(
-                          color: accent.withValues(alpha: 0.35), blurRadius: 24)
+                          color: widget.accent.withValues(alpha: 0.35),
+                          blurRadius: 24)
                     ]
                   : null,
             ),
@@ -782,58 +837,26 @@ class _LyricsLineView extends StatelessWidget {
             ),
           );
 
-    // The owner's spec: the line being sung stays crisp; every other line
-    // BLURS. The extra inner padding gives the blur room to fade inside the
-    // filtered bounds — without it the filter clips at the line box and every
-    // blurred line gets sharp edges above and below (seen in landscape).
-    // On web the per-line ImageFiltered renders as black-box/smear artifacts
-    // on CanvasKit (and stacks one layer per line) — lines dim via opacity
-    // there instead, which reads almost identically.
-    final Widget painted = (!isCurrent && !dimmed)
-        ? (kIsWeb
-            ? Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-                child: Opacity(opacity: 0.42, child: content),
-              )
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ImageFiltered(
-                  // Subtle: 0.3 keeps surrounding lines readable while the
-                  // sung line stays clearly the focus (owner tune-down from
-                  // 0.8 — still reads as "defocused", not "blurred").
-                  imageFilter: ImageFilter.blur(
-                      sigmaX: 0.3, sigmaY: 0.3, tileMode: TileMode.decal),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 10, horizontal: 14),
-                    child: content,
-                  ),
-                ),
-              ))
-        : Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: content,
-          );
+    final Widget painted = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: content,
+    );
 
+    // The sung line carries the redesign cue: a 3 px brand-violet bar at the
+    // left edge when the column is left-aligned, a 22x3 violet underline
+    // under the centred text otherwise.
     final Widget cued = !isCurrent
         ? painted
         : textAlign == TextAlign.left
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // The caret: a clear positional anchor, so the eye lands on
-                  // the right line even when the same words repeat.
                   Container(
-                    margin: const EdgeInsets.only(top: 10, right: 10),
+                    margin: const EdgeInsets.only(top: 10, right: 8),
                     width: 3,
                     height: 24,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [accent, accent.withValues(alpha: 0.30)],
-                      ),
+                      color: kBrandColor,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -848,28 +871,64 @@ class _LyricsLineView extends StatelessWidget {
                     width: 22,
                     height: 3,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          accent.withValues(alpha: 0.95),
-                          accent.withValues(alpha: 0.30)
-                        ],
-                      ),
+                      color: kBrandColor,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ],
               );
 
-    return InkWell(
-      onTap: onTap,
+    final Widget tappable = InkWell(
+      onTap: widget.onTap,
       borderRadius: BorderRadius.circular(10),
       child: AnimatedScale(
-        // ×1.06 reads as focus; the old ×1.10 bounced.
+        // A 1.06 read as focus; the old 1.10 bounced.
         scale: isCurrent ? 1.06 : 1.0,
         alignment: Alignment.center,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
+        duration: ShuroMotion.lineChange,
+        curve: ShuroMotion.std,
         child: cued,
+      ),
+    );
+
+    // Hover is a pointer affordance: there is no hover to answer on touch,
+    // so those platforms keep the plain tappable line.
+    if (!isDesktopPlatform) return tappable;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        // A 5% white wash over the row answers "can I click this?" the
+        // moment the cursor lands; the trailing timestamp says when the
+        // line is sung. Clicking still seeks - the InkWell below owns that.
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: _hovered
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: tappable),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 120),
+              opacity: _hovered && !widget.dimmed ? 1.0 : 0.0,
+              child: ExcludeSemantics(
+                excluding: !(_hovered && !widget.dimmed),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 4),
+                  child: Text(
+                    _formatClock(line.start),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kStatusText, fontSize: 11),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -940,10 +999,12 @@ class _KaraokeFill extends StatelessWidget {
   }
 
   TextStyle _styleForCoverage(double coverage) {
-    const upcoming =
-        Color(0xFF999DA3); // cool grey, ≈4.5:1 against the sung white
-    // easeOut on coverage: quick to leave the grey, gentle settling into
-    // white — reads as motion rather than as a switch.
+    // Redesign: sung words white, upcoming words white at 55% - the same
+    // tone the +/-1 fade-ladder step uses, so the fill hands off cleanly
+    // to the next line.
+    // easeOut on coverage: quick to leave the dim tone, gentle settling
+    // into white - reads as motion rather than as a switch.
+    final upcoming = Colors.white.withValues(alpha: 0.55);
     final color = Color.lerp(
             upcoming, Colors.white, Curves.easeOut.transform(coverage)) ??
         Colors.white;
@@ -970,7 +1031,11 @@ class _Header extends StatelessWidget {
   final Color accent;
   final VoidCallback? onEditLyrics;
   final VoidCallback? onAppearance;
-  const _Header({required this.song, required this.accent, this.onEditLyrics, this.onAppearance});
+  const _Header(
+      {required this.song,
+      required this.accent,
+      this.onEditLyrics,
+      this.onAppearance});
 
   @override
   Widget build(BuildContext context) {
@@ -1030,6 +1095,123 @@ class _Header extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Chrome for the embedded desktop pane (Now Playing's right column):
+/// "LYRICS" label, a "Word-synced" chip when the track really carries word
+/// timing, and a compact tools pill - appearance, sync offset, edit. Built
+/// only when hosted as a pane (embedded and not compact); the portrait
+/// preview and the fullscreen lyrics screen keep their own chrome.
+class _EmbeddedPaneHeader extends StatelessWidget {
+  final LyricsTrack? track;
+  final int offsetMs;
+  final VoidCallback onAppearance;
+
+  /// Expands/collapses the inline [_SyncBar] under this header.
+  final VoidCallback onToggleSync;
+  final VoidCallback? onEdit;
+
+  const _EmbeddedPaneHeader({
+    required this.track,
+    required this.offsetMs,
+    required this.onAppearance,
+    required this.onToggleSync,
+    this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final offsetLabel = offsetMs == 0
+        ? '0.0'
+        : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 16, 4),
+      // FittedBox: at 740x360 the row measured 5.4 dp over; scale down
+      // gracefully instead of throwing.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+        children: [
+          Text('LYRICS',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kMuted2,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.4)),
+          if (track?.hasRealWordSync ?? false) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: kGreen.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('Word-synced',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kGreen,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+          const Spacer(),
+          // Tools pill: the redesign's compact controls for this column. No
+          // translate control - the feature does not exist, and a dead
+          // button is worse than no button.
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: kGlass,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: kHairline),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Lyrics appearance',
+                  onPressed: onAppearance,
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: const EdgeInsets.all(4),
+                  icon: Text('Aa',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                ),
+                TextButton(
+                  onPressed: onToggleSync,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: GoogleFonts.getFont(currentFontFamily,
+                        fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  child: Text('Sync ${offsetLabel}s'),
+                ),
+                IconButton(
+                  tooltip: 'Edit lyrics',
+                  onPressed: onEdit,
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.edit_rounded,
+                      size: 16, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ],
+        ),
       ),
     );
   }
@@ -1142,14 +1324,16 @@ class _AttributionFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Redesign footer copy: "Lyrics via <source>, Synced by <user>,
+    // Per-word timing" - only the fields the track actually has.
     final parts = <String>['Lyrics via ${track.source.label}'];
-    if (track.maker != null) parts.add('written by ${track.maker!.username}');
     if (track.uploader != null)
-      parts.add('added by ${track.uploader!.username}');
+      parts.add('Synced by ${track.uploader!.username}');
+    if (track.maker != null) parts.add('Written by ${track.maker!.username}');
     final precision = switch (track.type) {
-      LyricsSyncType.syllable => 'word-synced',
-      LyricsSyncType.line => 'line-synced · word timing estimated',
-      LyricsSyncType.static_ => 'not synced',
+      LyricsSyncType.syllable => 'Per-word timing',
+      LyricsSyncType.line => 'Line timing',
+      LyricsSyncType.static_ => 'Not synced',
     };
     parts.add(precision);
 
@@ -1161,7 +1345,7 @@ class _AttributionFooter extends StatelessWidget {
             parts.join(' · '),
             textAlign: TextAlign.center,
             style: GoogleFonts.getFont(currentFontFamily,
-                color: Colors.white60, fontSize: 11),
+                color: kStatusText, fontSize: 11),
           ),
           if (detail != null)
             Padding(
@@ -1181,20 +1365,131 @@ class _AttributionFooter extends StatelessWidget {
   }
 }
 
+/// Loading state per the redesign: shimmer skeleton lines standing in for
+/// the lyric column that is about to fill in. A private mini shimmer - a
+/// highlight band sweeping across rounded bars every 1.4 s - rather than a
+/// spinner, so the shape of the wait matches the shape of the content.
+class _LoadingSkeleton extends StatefulWidget {
+  const _LoadingSkeleton();
+
+  @override
+  State<_LoadingSkeleton> createState() => _LoadingSkeletonState();
+}
+
+class _LoadingSkeletonState extends State<_LoadingSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _sweep = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400))
+    ..repeat();
+
+  @override
+  void dispose() {
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Reduced motion: no decorative loops. The bars stay - they still say
+    // "lyrics are coming" - but they hold still.
+    if (reduceMotionEnabled) return const _SkeletonBars(sweepX: null);
+    return AnimatedBuilder(
+      animation: _sweep,
+      builder: (context, _) => _SkeletonBars(sweepX: _sweep.value),
+    );
+  }
+}
+
+/// The bars themselves. [sweepX] is the sweep's 0..1 phase, or null for the
+/// static reduced-motion version.
+class _SkeletonBars extends StatelessWidget {
+  final double? sweepX;
+  const _SkeletonBars({required this.sweepX});
+
+  // Varying widths (40-90%) so the column reads as lines of text, not a
+  // grid of blocks.
+  static const _widths = [0.9, 0.58, 0.82, 0.44, 0.72, 0.5, 0.86];
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading lyrics',
+      child: LayoutBuilder(builder: (context, constraints) {
+        // Short hosts (compact landscape panes) get fewer, thinner bars so
+        // the skeleton never overflows its viewport.
+        final maxH = constraints.maxHeight;
+        final compact = maxH.isFinite && maxH < 320;
+        final tight = maxH.isFinite && maxH < 240;
+        final widths =
+            tight ? _widths.take(3).toList() : (compact ? _widths.take(5).toList() : _widths);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(24, compact ? 16 : 32, 24, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final width in widths)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Align(
+                    child: FractionallySizedBox(
+                      widthFactor: width,
+                      child: _bar(compact ? 12 : 18),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _bar(double height) {
+    final bar = Container(
+      height: height,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: kCardColor.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+    );
+    final x = sweepX;
+    if (x == null) return bar;
+    // The sweep: a translucent white band translated across the bar over
+    // the 1.4 s cycle (fully off the left edge at 0, off the right at 1).
+    return ShaderMask(
+      blendMode: BlendMode.srcATop,
+      shaderCallback: (bounds) => LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: const [Colors.transparent, Colors.white24, Colors.transparent],
+        stops: const [0.3, 0.5, 0.7],
+        transform: _SweepShift(-1.0 + 3.0 * x),
+      ).createShader(bounds),
+      child: bar,
+    );
+  }
+}
+
+/// Shifts a gradient horizontally by [dx] bar-widths (see [_SkeletonBars]).
+class _SweepShift extends GradientTransform {
+  final double dx;
+  const _SweepShift(this.dx);
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(dx * bounds.width, 0, 0);
+}
+
 /// Loading / empty / error presentation for the lyrics body, on its black
 /// backdrop rather than the app's surface colour.
 class _Message extends StatelessWidget {
   final IconData? icon;
   final String message;
   final String? caption;
-  final bool loading;
   final VoidCallback? onRetry;
   const _Message(
-      {required this.icon,
-      required this.message,
-      this.caption,
-      this.loading = false,
-      this.onRetry});
+      {required this.icon, required this.message, this.caption, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1204,14 +1499,7 @@ class _Message extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (loading)
-              const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.4, color: Colors.white70))
-            else if (icon != null)
-              Icon(icon, color: Colors.white54, size: 32),
+            if (icon != null) Icon(icon, color: Colors.white54, size: 32),
             const SizedBox(height: 16),
             Text(message,
                 textAlign: TextAlign.center,
@@ -1260,18 +1548,33 @@ class MiniTransportBar extends StatelessWidget {
     final player = context.watch<PlayerController>();
     final isActive = player.currentSong?.id == song.id;
     final accent = accentColor ?? song.gradientColors.last;
+    // The clock reads the live player when this is the track playing, and
+    // the song's own tag otherwise ("1:26 / 3:24" next to the ring).
+    final elapsed = isActive ? player.position : Duration.zero;
+    final total = isActive ? player.duration : song.duration;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
       child: Row(
         children: [
-          Hero(
-            tag: 'artwork_${song.id}',
-            child: ArtworkThumb(
-                gradientColors: song.gradientColors,
-                artwork: song.artwork,
-                size: 40,
-                radius: 8),
+          // Redesign: the same 52 px ring-scrub artwork language as Now
+          // Playing (3 px stroke, 9 px knob - NpvMetrics), driven by the
+          // smooth position builder so the arc glides like the big ring.
+          // No hero: this screen sits above surfaces that already own an
+          // 'artwork_' hero tag, and a shared tag in one route throws.
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: SmoothPositionBuilder(
+              builder: (context, player, position, progress) => ArtworkRing(
+                song: song,
+                progress: player.currentSong?.id == song.id ? progress : 0,
+                colors: song.gradientColors,
+                size: 52,
+                strokeWidth: NpvMetrics.ringStrokeMini,
+                knobSize: NpvMetrics.knobMini,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1291,6 +1594,11 @@ class MiniTransportBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: Colors.white60, fontSize: 11)),
+                Text('${_formatClock(elapsed)} / ${_formatClock(total)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMuted2, fontSize: 11)),
               ],
             ),
           ),
@@ -1352,4 +1660,12 @@ class MiniTransportBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// m:ss clock ("1:12") for the mini transport time and the desktop hover
+/// timestamps on lyric lines.
+String _formatClock(Duration value) {
+  final minutes = value.inMinutes;
+  final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }
