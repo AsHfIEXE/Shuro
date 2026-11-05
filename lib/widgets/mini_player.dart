@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,20 +12,19 @@ import '../services/server_link.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../theme/desktop_tokens.dart';
 import 'animated_favorite_icon.dart';
-import 'artwork_thumb.dart';
+import 'artwork_ring.dart';
+import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
 import 'shuro_icons.dart';
 
 /// Persistent bar shown above the bottom nav on every main tab.
 ///
-/// What changed, and why (the previous version was reported as cramped and
-/// uninformative):
-///
-///  * **The progress bar is seekable.** It used to be a 2 px read-only
-///    indicator. It is now a real drag target with a comfortably tall hit area,
-///    so the most common action ("skip ahead a bit") no longer requires opening
-///    the full screen.
+/// Redesign (docs/01 mobile rules): a 64 px bar with a 44 px RING artwork
+/// (stroke 3, knob 9) that is itself the scrubber - drag or tap the ring to
+/// seek, angle to fraction, preview while dragging, one engine seek on
+/// release. The linear progress line is gone; the ring is the progress.
 ///  * **Queue is reachable from here.** A queue button on the right, because the
 ///    queue is the second most common thing to want mid-playback.
 ///  * **It uses the artwork's real palette**, not the per-ID placeholder colour,
@@ -64,8 +65,6 @@ class _MiniPlayerBar extends StatelessWidget {
     final isBuffering = isActive && player.isBuffering;
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= MiniPlayer._kWideBreakpoint;
-    // Landscape phones are ~360-410 dp tall: a leaner bar leaves room for content.
-    final short = MediaQuery.sizeOf(context).height < 480;
 
     return GestureDetector(
       onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
@@ -99,22 +98,15 @@ class _MiniPlayerBar extends StatelessWidget {
           // rounded block now (see ShuroNavBar.header), so its own edges would
           // draw mismatched corners against the bar's.
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: EdgeInsets.symmetric(
-                  horizontal: wide ? 20 : 12, vertical: short ? 3 : 8),
-              child: Row(
-                children: [
-                  Hero(
-                    tag: 'artwork_${song.id}',
-                    child: ArtworkThumb(
-                        gradientColors: song.gradientColors,
-                        artwork: song.artwork,
-                        size: wide ? 48 : (short ? 38 : 44),
-                        radius: 8),
-                  ),
+        child: SizedBox(
+          // 64 px mini player bar (docs/01): ring + title row, one line tall.
+          height: 64,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 12),
+            child: Row(
+              children: [
+                _RingScrubber(song: song, player: player, size: 44),
+                const SizedBox(width: 12),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -144,8 +136,8 @@ class _MiniPlayerBar extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  AnimatedFavoriteIcon(
+                const SizedBox(width: 8),
+                AnimatedFavoriteIcon(
                     isFavorite: isFav,
                     activeColor: song.gradientColors.last,
                     inactiveColor: Colors.white70,
@@ -178,142 +170,121 @@ class _MiniPlayerBar extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-            // The progress line is the bar's BASE EDGE — bottom, full-bleed —
-            // the classic mini-player read: content above, position below.
-            _SeekBar(player: player, song: song),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// The draggable progress bar. A thin line, but with a 20 px-tall hit area so it
-/// can actually be grabbed; drag anywhere on it to seek.
-class _SeekBar extends StatefulWidget {
-  final PlayerController player;
+/// The mini player's 44 px ring artwork + scrubber (docs/02, mini variant).
+///
+/// Same interaction contract as the big Now Playing ring: dragging (or
+/// tapping) anywhere on the ring sets a preview fraction from the touch
+/// angle - 12 o'clock start, clockwise - and exactly ONE engine seek fires
+/// on release. Haptic tick each crossed 10% boundary.
+class _RingScrubber extends StatefulWidget {
+  const _RingScrubber(
+      {required this.song, required this.player, required this.size});
+
   final Song song;
-
-  const _SeekBar({required this.player, required this.song});
-
-  @override
-  State<_SeekBar> createState() => _SeekBarState();
-}
-
-class _SeekBarState extends State<_SeekBar> {
-  /// Fraction being dragged, or null when not dragging. While non-null the
-  /// bar shows this instead of the live position and NO engine seek happens —
-  /// the seek fires once, on release. Seeking on every drag update re-buffered
-  /// the stream dozens of times per gesture.
-  double? _preview;
-
-  @override
-  Widget build(BuildContext context) {
-    final player = widget.player;
-    final song = widget.song;
-    final isActive = player.currentSong?.id == song.id;
-    // Live only when the engine has audio for THIS song loaded — during the
-    // load window the engine still reports the outgoing track's duration,
-    // which must not size this bar (audit finding F6-1).
-    final live = isActive && player.loadedSongId == song.id;
-    final total = live ? player.duration : song.duration;
-    final totalMs = total.inMilliseconds == 0 ? 1 : total.inMilliseconds;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double fractionAt(double dx) =>
-            (dx / constraints.maxWidth).clamp(0.0, 1.0);
-
-        Future<void> commit(double fraction) {
-          if (!isActive) return Future<void>.value();
-          return player
-              .seekTo(Duration(milliseconds: (totalMs * fraction).round()));
-        }
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (details) {
-            final target = fractionAt(details.localPosition.dx);
-            setState(() => _preview = target);
-            commit(target).whenComplete(() {
-              if (mounted && _preview == target)
-                setState(() => _preview = null);
-            });
-          },
-          onHorizontalDragStart: (details) =>
-              setState(() => _preview = fractionAt(details.localPosition.dx)),
-          onHorizontalDragUpdate: (details) =>
-              setState(() => _preview = fractionAt(details.localPosition.dx)),
-          onHorizontalDragEnd: (_) {
-            final target = _preview;
-            if (target == null) return;
-            // Hold the preview until the engine confirms, exactly like the
-            // ring: clearing first made the bar snap back then jump.
-            commit(target).whenComplete(() {
-              if (mounted && _preview == target)
-                setState(() => _preview = null);
-            });
-          },
-          onHorizontalDragCancel: () => setState(() => _preview = null),
-          child: SizedBox(
-            height: 20,
-            child: Align(
-              alignment: Alignment.center,
-              child: SmoothProgressBar(
-                player: player,
-                songId: song.id,
-                totalMs: totalMs,
-                accent: song.gradientColors.last,
-                previewFraction: _preview,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Only this 2 px line repaints per frame — it listens to the interpolated
-/// position stream directly instead of rebuilding the whole bar.
-class SmoothProgressBar extends StatelessWidget {
   final PlayerController player;
-  final String songId;
-  final int totalMs;
-  final Color accent;
+  final double size;
 
-  /// While dragging, the caller's preview fraction wins over the live stream
-  /// so the bar follows the finger without touching the engine.
-  final double? previewFraction;
+  @override
+  State<_RingScrubber> createState() => _RingScrubberState();
+}
 
-  const SmoothProgressBar(
-      {super.key,
-      required this.player,
-      required this.songId,
-      required this.totalMs,
-      required this.accent,
-      this.previewFraction});
+class _RingScrubberState extends State<_RingScrubber> {
+  double? _preview;
+  int _lastTickBucket = -1;
+
+  void _onPreview(double fraction) {
+    // Haptic tick each 10% of the ring swept through.
+    final bucket = (fraction * 10).floor();
+    if (bucket != _lastTickBucket) {
+      _lastTickBucket = bucket;
+      HapticFeedback.selectionClick();
+    }
+    setState(() => _preview = fraction);
+  }
+
+  Future<void> _commit(double fraction) {
+    final total = widget.player.duration.inMilliseconds;
+    if (total <= 0) return Future<void>.value();
+    return widget.player
+        .seekTo(Duration(milliseconds: (total * fraction).round()));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Duration>(
-      stream: player.smoothPositionStream,
-      builder: (context, snapshot) {
-        final isActive = player.currentSong?.id == songId;
-        final live = isActive && player.loadedSongId == songId;
-        final position =
-            live ? (snapshot.data ?? player.position) : Duration.zero;
-        final value = previewFraction ??
-            (position.inMilliseconds / totalMs).clamp(0.0, 1.0);
-        return LinearProgressIndicator(
-          value: value,
-          minHeight: 2,
-          backgroundColor: Colors.white12,
-          valueColor: AlwaysStoppedAnimation(accent),
-        );
-      },
-    );
+    final song = widget.song;
+    final player = widget.player;
+    final isActive = player.currentSong?.id == song.id;
+    final live = isActive && player.loadedSongId == song.id;
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final box = constraints.biggest;
+      final center = Offset(box.width / 2, box.height / 2);
+      double fractionAt(Offset position) {
+        final angle =
+            math.atan2(position.dy - center.dy, position.dx - center.dx);
+        // 12 o'clock start, clockwise - matches ProgressRingPainter.
+        return (((angle + math.pi / 2) / (2 * math.pi)) % 1.0 + 1.0) % 1.0;
+      }
+
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (details) {
+          final target = fractionAt(details.localPosition);
+          _onPreview(target);
+          _commit(target).whenComplete(() {
+            if (mounted) setState(() => _preview = null);
+          });
+        },
+        onPanStart: (details) => _onPreview(fractionAt(details.localPosition)),
+        onPanUpdate: (details) => _onPreview(fractionAt(details.localPosition)),
+        onPanEnd: (_) {
+          final target = _preview;
+          if (target == null) return;
+          // Hold the preview until the engine confirms - clearing first made
+          // the ring snap back then jump (same audit finding as the old bar).
+          _commit(target).whenComplete(() {
+            if (mounted && _preview == target) setState(() => _preview = null);
+          });
+        },
+        onPanCancel: () => setState(() => _preview = null),
+        child: SizedBox(
+          width: widget.size + 12,
+          height: widget.size + 12,
+          child: Center(
+            child: _preview != null || !live
+                ? ArtworkRing(
+                    song: song,
+                    progress: live ? _preview! : 0,
+                    buffered: live ? player.bufferedFraction : null,
+                    colors: song.gradientColors,
+                    size: widget.size,
+                    strokeWidth: NpvMetrics.ringStrokeMini,
+                    knobSize: NpvMetrics.knobMini,
+                    scrubbing: _preview != null,
+                  )
+                : SmoothPositionBuilder(
+                    builder: (context, player, position, progress) =>
+                        ArtworkRing(
+                      song: song,
+                      progress: progress,
+                      buffered: player.bufferedFraction,
+                      colors: song.gradientColors,
+                      size: widget.size,
+                      strokeWidth: NpvMetrics.ringStrokeMini,
+                      knobSize: NpvMetrics.knobMini,
+                    ),
+                  ),
+          ),
+        ),
+      );
+    });
   }
 }
 

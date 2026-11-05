@@ -58,50 +58,55 @@ class ShuroNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     // Full-width bottom bar: edge to edge, rounded top corners, and the mini
     // player merged into the same block — one surface, one set of corners.
-    return Container(
-      decoration: BoxDecoration(
-        color: kCardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: const Border(top: BorderSide(color: Color(0x14FFFFFF))),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 22,
-              offset: const Offset(0, -8))
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (header != null) header!,
-            SizedBox(
-              height: 74,
-              child: Row(
-                children: [
-                  for (var i = 0; i < destinations.length; i++)
-                    Expanded(
-                      child: _ShuroNavItem(
-                        destination: destinations[i],
-                        selected: currentIndex == i,
-                        showLabel: true,
-                        onTap: () => onTap(i),
-                      ),
-                    ),
-                ],
-              ),
+    // Redesign (docs/01 mobile rules): the mini player is its own 64 px bar
+    // stacked ABOVE the nav block - two surfaces - so the ring artwork gets
+    // the full bar height and the nav keeps its own shape.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (header != null) Material(color: kCardColor, child: header!),
+        Container(
+          decoration: BoxDecoration(
+            color: kCardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: const Border(top: BorderSide(color: Color(0x14FFFFFF))),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 22,
+                  offset: const Offset(0, -8))
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 74,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        Expanded(
+                          child: _ShuroNavItem(
+                            destination: destinations[i],
+                            selected: currentIndex == i,
+                            showLabel: true,
+                            onTap: () => onTap(i),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-/// The wide-screen companion: the same destinations, stacked, with the app mark
-/// on top. Fixed width on purpose — a rail that resizes with content is a rail
-/// that jitters.
 class ShuroRail extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;

@@ -16,13 +16,17 @@ import '../screens/now_playing/lyrics_screen.dart';
 import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/playlist/playlist_detail_screen.dart';
+import '../models/playlist.dart';
 import '../services/playback_prefs.dart';
 import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
 import 'app_logo.dart';
-import 'artwork_thumb.dart';
+import 'artwork_ring.dart';
+import 'playlist_collage_art.dart';
+import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
 import 'shuro_icons.dart';
 
@@ -271,7 +275,7 @@ class _DesktopShellState extends State<DesktopShell> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      _applyAutoCollapse(constraints.maxWidth + 240);
+                      _applyAutoCollapse(constraints.maxWidth);
                       final showInspector =
                           _lyricsOpen && constraints.maxWidth >= 1240;
                       return Row(
@@ -286,8 +290,10 @@ class _DesktopShellState extends State<DesktopShell> {
                             onSpoken: _openSpoken,
                             onDownloads: _openDownloads,
                             onSettings: _openSettings,
+                            onOpenPlaylist: (playlist) => _openContentPage(
+                                PlaylistDetailScreen(playlist: playlist)),
                           ),
-                          const VerticalDivider(width: 1, color: kDividerColor),
+                          VerticalDivider(width: 1, color: kHairline),
                           Expanded(
                             child: Column(
                               children: [
@@ -360,6 +366,7 @@ class _DesktopSidebar extends StatelessWidget {
   final VoidCallback onSpoken;
   final VoidCallback onDownloads;
   final VoidCallback onSettings;
+  final void Function(Playlist playlist) onOpenPlaylist;
 
   const _DesktopSidebar({
     required this.collapsed,
@@ -371,69 +378,76 @@ class _DesktopSidebar extends StatelessWidget {
     required this.onSpoken,
     required this.onDownloads,
     required this.onSettings,
+    required this.onOpenPlaylist,
   });
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
       width: collapsed
           ? DesktopTokens.sidebarCollapsed
           : DesktopTokens.sidebarExpanded,
-      decoration: const BoxDecoration(color: kCardColor),
+      // Board: sidebar surface #0E131B with a 7% white hairline on the right.
+      decoration: const BoxDecoration(color: kSidebarColor),
       child: SafeArea(
         right: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 12, 10),
-              child: Row(
-                mainAxisAlignment: collapsed
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.spaceBetween,
-                children: [
-                  Semantics(
-                    button: true,
-                    label: 'Toggle navigation size',
-                    child: InkResponse(
-                      onTap: onCollapse,
-                      radius: 28,
-                      child: AppLogo(size: collapsed ? 32 : 38),
-                    ),
-                  ),
-                  if (!collapsed)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(
-                        'Shuro',
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: Colors.white60,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 6, right: 6, bottom: 6),
+                child: Row(
+                  mainAxisAlignment: collapsed
+                      ? MainAxisAlignment.center
+                      : MainAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Toggle navigation size',
+                      child: InkResponse(
+                        onTap: onCollapse,
+                        radius: 28,
+                        child: const AppLogo(size: 34),
                       ),
                     ),
-                ],
-              ),
-            ),
-            if (!collapsed)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'YOUR MUSIC',
-                    style: GoogleFonts.getFont(
-                      currentFontFamily,
-                      fontSize: 10,
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white38,
-                    ),
-                  ),
+                    if (!collapsed) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Shuro',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kTextColor,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.28),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
+              // Account card (board: r14, #151B26, hairline, 36px gradient
+              // avatar, name 14/600, server line 12 muted). Tapping opens
+              // Settings, where accounts/servers are actually managed.
+              if (!collapsed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _AccountCard(appState: appState, onTap: onSettings),
+                ),
+              if (!collapsed)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _SidebarSectionLabel('YOUR MUSIC'),
+                  ),
+                ),
             for (var index = 0; index < tabs.length; index++)
               _RailItem(
                 icon: tabs[index].$1,
@@ -443,9 +457,8 @@ class _DesktopSidebar extends StatelessWidget {
                 onTap: () => onSelect(index),
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(
-                  collapsed ? 14 : 18, 18, collapsed ? 14 : 18, 12),
-              child: const Divider(height: 1, color: kDividerColor),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Container(height: 1, color: kHairline),
             ),
             _RailItem(
               // A shelf, not the Pulse sparkle: the two destinations were
@@ -467,7 +480,19 @@ class _DesktopSidebar extends StatelessWidget {
               collapsed: collapsed,
               onTap: onDownloads,
             ),
-            const Spacer(),
+            if (!collapsed) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(10, 14, 10, 4),
+                child: _SidebarPlaylistsHeader(),
+              ),
+              Expanded(
+                child: _SidebarPlaylists(
+                  appState: appState,
+                  onOpen: onOpenPlaylist,
+                ),
+              ),
+            ] else
+              const Spacer(),
             _RailItem(
               icon: collapsed
                   ? Icons.keyboard_double_arrow_right_rounded
@@ -485,9 +510,229 @@ class _DesktopSidebar extends StatelessWidget {
                 onTap: onSettings,
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Board "aside" account card: r14, #151B26, hairline, 36 px gradient
+/// avatar with the server user's initial, name 14/600 and a live server
+/// status line. Opens Settings, where accounts and servers are managed.
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.appState, required this.onTap});
+
+  final AppState appState;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final server = appState.activeServer;
+    final raw = server?.username.trim();
+    final displayName = (raw == null || raw.isEmpty) ? 'Listener' : raw;
+    final status = appState.hasServer
+        ? '${server!.name} \u00b7 connected'
+        : appState.isLocalOnly
+            ? 'Local files \u00b7 offline'
+            : 'No server';
+    return Semantics(
+      button: true,
+      label: 'Account and servers: $displayName, $status',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        hoverColor: Colors.white.withValues(alpha: 0.04),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: kRaisedColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kHairline),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [kAccentColor, kBrandColor]),
+                ),
+                child: Text(
+                  displayName.substring(0, 1).toUpperCase(),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kTextColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: kTextColor)),
+                    const SizedBox(height: 2),
+                    Text(status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            fontSize: 12, color: kStatusText)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "YOUR MUSIC" / "PLAYLISTS": 12/600, ls 1, #8B93A7.
+class _SidebarSectionLabel extends StatelessWidget {
+  const _SidebarSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: GoogleFonts.getFont(currentFontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1,
+          color: kMuted2),
+    );
+  }
+}
+
+/// PLAYLISTS header row with the 24x24 "new playlist" action.
+class _SidebarPlaylistsHeader extends StatelessWidget {
+  const _SidebarPlaylistsHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    return Row(
+      children: [
+        const Expanded(child: _SidebarSectionLabel('PLAYLISTS')),
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            tooltip: 'New playlist',
+            onPressed: () => _promptNewPlaylist(context, appState),
+            icon: const Icon(Icons.add_rounded, size: 18, color: kStatusText),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _promptNewPlaylist(BuildContext context, AppState appState) async {
+  final controller = TextEditingController();
+  final name = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: kCardColor,
+      title: Text('New playlist',
+          style: GoogleFonts.getFont(currentFontFamily,
+              fontSize: 16, fontWeight: FontWeight.w700)),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'Playlist name'),
+        onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
+  if (name == null || name.isEmpty) return;
+  appState.createPlaylist(name);
+}
+
+/// Quick-access playlist list (board: 36-high rows, 22x22 r6 swatch, 14/400
+/// #B4BBCB). Expanded sidebar only.
+class _SidebarPlaylists extends StatelessWidget {
+  const _SidebarPlaylists({required this.appState, required this.onOpen});
+
+  final AppState appState;
+  final void Function(Playlist playlist) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final playlists = appState.playlists;
+    if (playlists.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+        child: Text('Playlists you create appear here.',
+            style: GoogleFonts.getFont(
+                currentFontFamily, fontSize: 12, color: kMuted2)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: playlists.length,
+      itemBuilder: (context, index) {
+        final playlist = playlists[index];
+        return Tooltip(
+          message: playlist.name,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => onOpen(playlist),
+              borderRadius: BorderRadius.circular(10),
+              hoverColor: Colors.white.withValues(alpha: 0.06),
+              child: SizedBox(
+                height: 36,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: PlaylistCollageArt(playlist: playlist, radius: 6),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        playlist.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: kNavText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -509,10 +754,12 @@ class _RailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Colors.white : Colors.white60;
+    // Board: 40-high items, radius 10, icon 20, label 14; active = violet 18%
+    // fill + a 3x20 violet bar pinned to the left edge, white 14/600 label;
+    // inactive = #B4BBCB 14/500.
+    final color = selected ? Colors.white : kNavText;
     return Padding(
-      padding:
-          EdgeInsets.symmetric(horizontal: collapsed ? 10 : 12, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: collapsed ? 8 : 0, vertical: 2),
       child: Tooltip(
         message: collapsed ? label : '',
         child: Semantics(
@@ -521,51 +768,83 @@ class _RailItem extends StatelessWidget {
           label: label,
           child: Material(
             color: selected
-                ? kBrandColor.withValues(alpha: 0.16)
+                ? kBrandColor.withValues(alpha: 0.18)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               focusColor: kBrandColor.withValues(alpha: 0.3),
               hoverColor: Colors.white.withValues(alpha: 0.06),
               child: SizedBox(
-                height: 46,
-                child: Row(
-                  mainAxisAlignment: collapsed
-                      ? MainAxisAlignment.center
-                      : MainAxisAlignment.start,
+                height: 40,
+                child: Stack(
                   children: [
-                    SizedBox(
-                      width: collapsed ? null : 48,
-                      child: Icon(
-                        icon,
-                        size: 20,
-                        color: selected ? kBrandColor : color,
-                      ),
-                    ),
-                    if (!collapsed)
-                      Expanded(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(
-                            currentFontFamily,
-                            fontSize: 13,
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                            color: color,
+                    if (selected && !collapsed)
+                      const Positioned.fill(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: VerticalBar(),
                           ),
                         ),
                       ),
-                    if (!collapsed) const SizedBox(width: 12),
+                    Row(
+                      mainAxisAlignment: collapsed
+                          ? MainAxisAlignment.center
+                          : MainAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: collapsed ? null : 44,
+                          child: Icon(
+                            icon,
+                            size: 20,
+                            color: selected ? kBrandColor : color,
+                          ),
+                        ),
+                        if (!collapsed)
+                          Expanded(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.getFont(
+                                currentFontFamily,
+                                fontSize: 14,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        if (!collapsed) const SizedBox(width: 12),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The active item's 3x20 violet indicator bar (board: left 0, top/bottom 10).
+class VerticalBar extends StatelessWidget {
+  const VerticalBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 3,
+      height: 20,
+      decoration: BoxDecoration(
+        color: kBrandColor,
+        borderRadius: BorderRadius.circular(1.5),
       ),
     );
   }
@@ -836,30 +1115,9 @@ class _LyricsInspector extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: kCardColor,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
-            child: Row(
-              children: [
-                const Icon(Icons.lyrics_rounded, size: 19, color: kBrandColor),
-                const SizedBox(width: 8),
-                Text(
-                  'LYRICS',
-                  style: GoogleFonts.getFont(
-                    currentFontFamily,
-                    fontSize: 11,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(child: LyricsScreen(initialSong: song, embedded: true)),
-        ],
-      ),
+      // The embedded LyricsScreen renders its own LYRICS header + toolbar
+      // (redesign docs/02), so no second label is painted here.
+      child: LyricsScreen(initialSong: song, embedded: true),
     );
   }
 }
@@ -919,16 +1177,22 @@ class _PlayerDockState extends State<_PlayerDock> {
                       Semantics(
                         button: true,
                         label: 'Open now playing',
-                        child: InkWell(
-                          onTap: () => Navigator.of(context).push(
-                            drillDownRoute(NowPlayingScreen(initialSong: song)),
-                          ),
-                          borderRadius: BorderRadius.circular(11),
-                          child: ArtworkThumb(
-                            gradientColors: song.gradientColors,
-                            artwork: song.artwork,
-                            size: 56,
-                            radius: 11,
+                        child: SmoothPositionBuilder(
+                          builder: (context, player, position, progress) =>
+                              InkWell(
+                            onTap: () => Navigator.of(context).push(
+                              drillDownRoute(NowPlayingScreen(initialSong: song)),
+                            ),
+                            customBorder: const OvalBorder(),
+                            child: ArtworkRing(
+                              song: song,
+                              progress: progress,
+                              buffered: player.bufferedFraction,
+                              colors: song.gradientColors,
+                              size: 52,
+                              strokeWidth: NpvMetrics.ringStrokeMini,
+                              knobSize: NpvMetrics.knobMini,
+                            ),
                           ),
                         ),
                       ),
