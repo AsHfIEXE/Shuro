@@ -9,6 +9,24 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
+## [2.6.2] - 2026-11-06
+
+A11y + layout acceptance pass (the handoff's phase 7).
+
+- **Focus rings**: album/artist/playlist cards join focus traversal with the
+  spec 2px violet ring drawn 2px outside the card - paint-only, no layout
+  shift.
+- **Contrast**: the Now Playing keyboard-hint line raised from white 45%
+  (~4.3:1) to 55% (~5.5:1), meeting the >= 4.5:1 AA bar.
+- **Layout acceptance tests**: Home, Library, Search, Favorites and
+  Downloads are now pumped at 1440x900, 1024, 390x844 and 360 - the
+  handoff's exact acceptance sizes - failing on any overflow.
+- **Fixes the sweep caught**: Downloads storage headline ellipsizes instead
+  of overflowing the side card; the Home empty-state action row and the
+  Favorites tab pills wrap on narrow screens.
+
+---
+
 ## [2.6.1] - 2026-11-06
 
 Completes the redesign across every remaining surface, plus the motion pass.
