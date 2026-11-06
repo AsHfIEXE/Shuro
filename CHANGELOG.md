@@ -9,6 +9,27 @@ the current source tree (analyzer: 0 errors · tests: 113/113 passing).
 
 ---
 
+## [2.6.1] - 2026-11-06
+
+Completes the redesign across every remaining surface, plus the motion pass.
+
+- **Onboarding 1-5**: welcome (logo pop, mesh blobs), optional Navidrome step
+  with "I'll add it later", Audiobookshelf now-or-later, sound preset step
+  mapped to real settings, all-set summary.
+- **Settings**: board rail + rows, live signal-path card with pulsing violet
+  nodes and a lossless badge, server cards with status dots.
+- **Detail pages**: Genre/Album/Artist/Playlist headers with gradient washes,
+  Play/Shuffle pills, 44px staggered tables; Queue gets a now-playing ring
+  card and drag handles.
+- **Search/Favorites/Pulse/Books**: top-result card + filter chips, pill
+  tabs with heart pops, real-stat Pulse hero over drifting mesh blobs,
+  Books chips + continue-listening + latest episodes.
+- **Motion pass**: 240ms std fade+8px-rise page transitions, staggered
+  entrances (30ms/row, max 8), hover lift on cards, animated EQ bars on
+  playing rows, mesh-blob drifts - all standing down under reduced motion.
+
+---
+
 ## [2.6.0] - 2026-11-06
 
 The full UI/UX redesign (shuro-ui-handoff) lands - a visual and interaction
