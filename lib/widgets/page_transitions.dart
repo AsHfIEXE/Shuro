@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 /// Mirrors Settings → Appearance → Reduce animations. Read when a route is
 /// created, so it takes effect for the very next navigation.
 bool reduceMotionEnabled = false;
@@ -12,11 +14,12 @@ bool reduceMotionEnabled = false;
 /// nothing running once the transition finishes).
 PageRouteBuilder<T> risingRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
-    transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 320),
-    reverseTransitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 260),
+    // Motion pass (docs/03): std 240 ms fade + rise for every route.
+    transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 240),
+    reverseTransitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 200),
     pageBuilder: (context, animation, secondaryAnimation) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+      final curved = CurvedAnimation(parent: animation, curve: ShuroMotion.std, reverseCurve: ShuroMotion.std);
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
@@ -86,15 +89,16 @@ void pushDrillDownOnce(BuildContext context, Widget page) {
 
 Route<T> drillDownRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
-    transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 280),
-    reverseTransitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 240),
+    transitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 240),
+    reverseTransitionDuration: reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 200),
     pageBuilder: (context, animation, secondaryAnimation) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+      final curved = CurvedAnimation(parent: animation, curve: ShuroMotion.std, reverseCurve: ShuroMotion.std);
+      // docs/03: "Page transitions: std 240 ms fade + 8 px rise."
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0.08, 0), end: Offset.zero).animate(curved),
+          position: Tween<Offset>(begin: const Offset(0, 0.012), end: Offset.zero).animate(curved),
           child: child,
         ),
       );
