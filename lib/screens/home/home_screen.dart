@@ -934,8 +934,9 @@ class _GetStartedEmptyState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              runSpacing: 4,
               children: [
                 TextButton(
                   onPressed: appState.importingLocalFiles

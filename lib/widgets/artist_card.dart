@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/artist.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
+import 'focus_ring.dart';
 import 'artist_actions_sheet.dart';
 import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
@@ -21,7 +22,9 @@ class ArtistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ContextMenuRegion(
       items: artistContextMenuItems(context, artist),
-      child: GestureDetector(
+      child: FocusRing(
+        radius: BorderRadius.circular(14),
+        child: GestureDetector(
       onTap: onTap,
       // Hold-to-open is touch-only now; desktop right-clicks.
       onLongPress: isDesktopPlatform
@@ -51,6 +54,7 @@ class ArtistCard extends StatelessWidget {
           Text(artist.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
               style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
         ],
+        ),
       ),
     ),
     );
