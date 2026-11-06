@@ -12,7 +12,8 @@ import '../../theme/app_theme.dart';
 ///
 /// Sliders drive Android's own equalizer bands (real DSP before the mixer);
 /// values persist per band. On platforms without a system equalizer the sheet
-/// says so plainly — no dead controls.
+/// says so plainly — no dead controls. Restyled to the boards: violet
+/// sliders, green value chips, bands grouped in a raised card.
 Future<void> showEqualizerSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -106,7 +107,7 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                       Expanded(
                         child: Text('Equalizer',
                             style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white,
+                                color: kTextColor,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700)),
                       ),
@@ -115,7 +116,7 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                           onPressed: service.resetBands,
                           child: Text('Flat',
                               style: GoogleFonts.getFont(currentFontFamily,
-                                  color: kMutedTextColor, fontSize: 12.5)),
+                                  color: kVioletLight, fontSize: 12.5)),
                         ),
                     ],
                   ),
@@ -123,9 +124,9 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                   Text(
                     'Android system multi-band equalizer (AudioEffect), applied before the mixer.',
                     style: GoogleFonts.getFont(currentFontFamily,
-                        color: kMutedTextColor, fontSize: 12),
+                        color: kStatusText, fontSize: 12, height: 16 / 12),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   if (_loading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -145,43 +146,64 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
                       ),
                     )
                   else ...[
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Enabled',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white, fontSize: 13.5)),
-                      value: service.enabled,
-                      activeThumbColor: kBrandColor,
-                      onChanged: service.setEnabled,
-                    ),
-                    if (service.enabled)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          'While the equalizer is on, audio is processed by Android, so bit-perfect / direct USB output is not in use.',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: kMutedTextColor,
-                              fontSize: 11.5,
-                              height: 1.35),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kRaisedColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: kHairline),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SwitchListTile(
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              title: Text('Enabled',
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: kTextColor,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600)),
+                              value: service.enabled,
+                              activeThumbColor: kBrandColor,
+                              onChanged: service.setEnabled,
+                            ),
+                            if (service.enabled)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    left: 4, right: 4, bottom: 6),
+                                child: Text(
+                                  'While the equalizer is on, audio is processed by Android, so bit-perfect / direct USB output is not in use.',
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: kStatusText,
+                                      fontSize: 11.5,
+                                      height: 1.35),
+                                ),
+                              ),
+                            const SizedBox(height: 4),
+                            for (final band in params.bands)
+                              _BandSlider(
+                                label: _hz(band.centerFrequency),
+                                value: service
+                                    .gainOf(band.index)
+                                    .clamp(_minDb, _maxDb),
+                                min: _minDb,
+                                max: _maxDb,
+                                enabled: service.enabled,
+                                onChanged: (v) => service.setGain(band.index, v,
+                                    persist: false),
+                                onChangeEnd: (_) => service.commit(),
+                              ),
+                          ],
                         ),
                       ),
-                    const SizedBox(height: 4),
-                    for (final band in params.bands)
-                      _BandSlider(
-                        label: _hz(band.centerFrequency),
-                        value: service.gainOf(band.index).clamp(_minDb, _maxDb),
-                        min: _minDb,
-                        max: _maxDb,
-                        enabled: service.enabled,
-                        onChanged: (v) =>
-                            service.setGain(band.index, v, persist: false),
-                        onChangeEnd: (_) => service.commit(),
-                      ),
-                    const SizedBox(height: 6),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
                       'Range ${_minDb.toStringAsFixed(0)}…${_maxDb.toStringAsFixed(0)} dB · values persist per band.',
                       style: GoogleFonts.getFont(currentFontFamily,
-                          color: kMutedTextColor, fontSize: 11.5),
+                          color: kStatusText, fontSize: 11.5),
                     ),
                   ],
                 ],
@@ -225,7 +247,7 @@ class _BandSlider extends StatelessWidget {
           width: 58,
           child: Text(label,
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white70, fontSize: 12)),
+                  color: kNavText, fontSize: 12)),
         ),
         Expanded(
           child: SliderTheme(
@@ -245,12 +267,20 @@ class _BandSlider extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          width: 52,
-          child: Text('${value > 0 ? '+' : ''}${value.toStringAsFixed(1)} dB',
-              textAlign: TextAlign.right,
+        // Green value chip — the current gain, stated as a fact.
+        Container(
+          width: 56,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: kGreen.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text('${value > 0 ? '+' : ''}${value.toStringAsFixed(1)}',
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white54, fontSize: 11)),
+                  color: kGreenLight,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
         ),
       ],
     );

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../models/artist.dart';
 import '../../models/server_config.dart';
 import '../../models/song.dart';
 import '../../services/shuro_pulse.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/artwork_thumb.dart';
+import '../../widgets/motion.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/recent_song_card.dart';
 import '../../widgets/recommendation_feedback_button.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/shimmer_box.dart';
 import '../../widgets/state_views.dart';
+import '../artist/artist_detail_screen.dart';
 import 'build_with_shuro_screen.dart';
 import 'smart_playlists_screen.dart';
 
@@ -20,7 +24,9 @@ import 'smart_playlists_screen.dart';
 /// based recommendations rather than a Spotify-style tab added for its own
 /// sake. Every section here is backed by ShuroPulse running against this
 /// user's own favorites, listening history and library — nothing server-side,
-/// nothing fabricated.
+/// nothing fabricated. The stats hero and top-artists row are derived from
+/// the same signals: plays tracked, summed listening time and real play
+/// counts per artist.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
@@ -51,6 +57,25 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final deepCuts = ShuroPulse.deepCuts(appState, limit: 10);
     final becauseYouLike = ShuroPulse.becauseYouLike(appState, artistLimit: 3);
 
+    // Real listening stats: play counts come straight from the tracked
+    // history, listening time is the sum of those songs' durations. No
+    // time-window claims the data can't back (history has no timestamps).
+    final playsByArtist = <String, int>{};
+    var listened = Duration.zero;
+    for (final id in appState.listeningHistory) {
+      final song = appState.songById(id);
+      if (song == null) continue;
+      listened += song.duration;
+      playsByArtist[song.artistId] = (playsByArtist[song.artistId] ?? 0) + 1;
+    }
+    final topArtists = <({Artist artist, int plays})>[];
+    final rankedArtistIds = playsByArtist.keys.toList()
+      ..sort((a, b) => playsByArtist[b]!.compareTo(playsByArtist[a]!));
+    for (final id in rankedArtistIds.take(6)) {
+      final artist = appState.artistById(id);
+      if (artist != null) topArtists.add((artist: artist, plays: playsByArtist[id]!));
+    }
+
     return Scaffold(
       backgroundColor: kSurfaceColor,
       body: SafeArea(
@@ -70,36 +95,70 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   key: const ValueKey('content'),
                   slivers: [
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text('Shuro Pulse', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
-                            ),
-                            const Icon(Icons.auto_awesome_rounded, color: kBrandColor, size: 18),
-                          ],
+                      child: Entrance(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text('Shuro Pulse', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
+                              ),
+                              const Icon(Icons.auto_awesome_rounded, color: kBrandColor, size: 18),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 2, 20, 16),
-                        child: Text(
-                          'Built from your own library — not a stream of what everyone else is playing.',
-                          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                      child: Entrance(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 2, 20, 16),
+                          child: Text(
+                            'Built from your own library — not a stream of what everyone else is playing.',
+                            style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12),
+                          ),
                         ),
                       ),
                     ),
-                    SliverToBoxAdapter(child: _TonightsFlowCard(appState: appState, player: player)),
+                    if (appState.listeningHistory.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Entrance(
+                          delay: Entrance.stagger(1),
+                          child: _PulseStatsCard(
+                            plays: appState.listeningHistory.length,
+                            listened: listened,
+                            favorites: appState.favoriteSongIds.length,
+                            topArtist: topArtists.isEmpty ? null : topArtists.first,
+                          ),
+                        ),
+                      ),
+                    if (topArtists.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Entrance(
+                          delay: Entrance.stagger(2),
+                          child: _TopArtistsRow(artists: topArtists),
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: Entrance(
+                        delay: Entrance.stagger(3),
+                        child: _TonightsFlowCard(appState: appState, player: player),
+                      ),
+                    ),
                     const SliverToBoxAdapter(child: SizedBox(height: 20)),
-                    SliverToBoxAdapter(child: _EntryPointsRow()),
+                    SliverToBoxAdapter(
+                      child: Entrance(
+                        delay: Entrance.stagger(4),
+                        child: _EntryPointsRow(),
+                      ),
+                    ),
                     const SliverToBoxAdapter(child: SizedBox(height: 8)),
                     _DiscoverRail(
                       title: 'For You',
                       songs: forYou,
                       currentSongId: player.currentSong?.id,
                       onTapSong: (song) => player.playSong(song, queue: forYou),
+                      entranceDelay: Entrance.stagger(5),
                     ),
                     for (final row in becauseYouLike)
                       _BecauseYouLikeRow(
@@ -108,6 +167,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         songs: row.songs,
                         currentSongId: player.currentSong?.id,
                         onTapSong: (song) => player.playSong(song, queue: row.songs),
+                        entranceDelay: Entrance.stagger(6),
                       ),
                     _DiscoverRail(
                       title: 'Rediscover',
@@ -115,12 +175,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       currentSongId: player.currentSong?.id,
                       onTapSong: (song) => player.playSong(song, queue: rediscover),
                       emptySubtitle: 'Favorite a few songs and check back here.',
+                      entranceDelay: Entrance.stagger(7),
                     ),
                     _DiscoverRail(
                       title: 'Fresh From Your Library',
                       songs: freshSongs,
                       currentSongId: player.currentSong?.id,
                       onTapSong: (song) => player.playSong(song, queue: freshSongs),
+                      entranceDelay: Entrance.stagger(8),
                     ),
                     _DiscoverRail(
                       title: 'Deep Cuts',
@@ -128,11 +190,190 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       currentSongId: player.currentSong?.id,
                       onTapSong: (song) => player.playSong(song, queue: deepCuts),
                       emptySubtitle: 'Play a bit more and deep cuts will start showing up.',
+                      entranceDelay: Entrance.stagger(8),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   ],
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hero stat card over the motion pass's drifting mesh blobs. Every figure
+/// is real: plays tracked, summed listening time of those plays, favorites
+/// — computed in [DiscoverScreen]'s build from AppState's own signals.
+class _PulseStatsCard extends StatelessWidget {
+  const _PulseStatsCard({
+    required this.plays,
+    required this.listened,
+    required this.favorites,
+    this.topArtist,
+  });
+
+  final int plays;
+  final Duration listened;
+  final int favorites;
+  final ({Artist artist, int plays})? topArtist;
+
+  String get _listenedLabel {
+    final hours = listened.inHours;
+    final minutes = listened.inMinutes % 60;
+    if (hours > 0) return '$hours h ${minutes} m';
+    return '$minutes min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: kRaisedColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: kHairline),
+          ),
+          child: Stack(fit: StackFit.expand, children: [
+            const MeshBlobs(opacity: 0.13),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text('YOUR RECENT LISTENING',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kMuted2,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1)),
+                      ),
+                      if (topArtist != null)
+                        Flexible(
+                          child: Text('Most heard: ${topArtist!.artist.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: kVioletPale,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _Stat(value: '$plays', label: 'Plays tracked')),
+                      Expanded(child: _Stat(value: _listenedLabel, label: 'Listening time')),
+                      Expanded(child: _Stat(value: '$favorites', label: 'Favorites')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: headingFont(color: kTextColor, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+        const SizedBox(height: 4),
+        Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.getFont(currentFontFamily, color: kMuted2, fontSize: 11, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+/// Top artists by real play count from the listening history — avatars with
+/// their counts, tapping opens the artist page.
+class _TopArtistsRow extends StatelessWidget {
+  const _TopArtistsRow({required this.artists});
+
+  final List<({Artist artist, int plays})> artists;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('TOP ARTISTS',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kMuted2, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 124,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: artists.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (context, i) {
+                final entry = artists[i];
+                return SizedBox(
+                  width: 96,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => Navigator.of(context)
+                        .push(drillDownRoute(ArtistDetailScreen(artist: entry.artist))),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: ArtworkThumb(
+                              gradientColors: entry.artist.gradientColors,
+                              artwork: entry.artist.artwork,
+                              radius: 999,
+                              icon: Icons.person_rounded,
+                              iconSize: 30,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(entry.artist.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kTextColor, fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text('${entry.plays} ${entry.plays == 1 ? 'play' : 'plays'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kStatusText, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -256,6 +497,7 @@ class _DiscoverRail extends StatelessWidget {
   final String? currentSongId;
   final ValueChanged<Song> onTapSong;
   final String? emptySubtitle;
+  final Duration entranceDelay;
 
   const _DiscoverRail({
     required this.title,
@@ -263,31 +505,35 @@ class _DiscoverRail extends StatelessWidget {
     required this.currentSongId,
     required this.onTapSong,
     this.emptySubtitle,
+    this.entranceDelay = Duration.zero,
   });
 
   @override
   Widget build(BuildContext context) {
     if (songs.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
     return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title: title),
-          SizedBox(
-            height: 200,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: songs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (context, i) {
-                final song = songs[i];
-                return RecentSongCard(song: song, isPlaying: song.id == currentSongId, onTap: () => onTapSong(song));
-              },
+      child: Entrance(
+        delay: entranceDelay,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(title: title),
+            SizedBox(
+              height: 200,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: songs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
+                itemBuilder: (context, i) {
+                  final song = songs[i];
+                  return RecentSongCard(song: song, isPlaying: song.id == currentSongId, onTap: () => onTapSong(song));
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -299,6 +545,7 @@ class _BecauseYouLikeRow extends StatelessWidget {
   final List<Song> songs;
   final String? currentSongId;
   final ValueChanged<Song> onTapSong;
+  final Duration entranceDelay;
 
   const _BecauseYouLikeRow({
     required this.artistId,
@@ -306,44 +553,48 @@ class _BecauseYouLikeRow extends StatelessWidget {
     required this.songs,
     required this.currentSongId,
     required this.onTapSong,
+    this.entranceDelay = Duration.zero,
   });
 
   @override
   Widget build(BuildContext context) {
     if (songs.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
     return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text('Because you like $artistName',
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600)),
-                ),
-                RecommendationFeedbackButton(artistId: artistId, artistName: artistName),
-              ],
+      child: Entrance(
+        delay: entranceDelay,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text('Because you like $artistName',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: headingFont(color: kTextColor, fontSize: 18, fontWeight: FontWeight.w600)),
+                  ),
+                  RecommendationFeedbackButton(artistId: artistId, artistName: artistName),
+                ],
+              ),
             ),
-          ),
-          SizedBox(
-            height: 200,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: songs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 16),
-              itemBuilder: (context, i) {
-                final song = songs[i];
-                return RecentSongCard(song: song, isPlaying: song.id == currentSongId, onTap: () => onTapSong(song));
-              },
+            SizedBox(
+              height: 200,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: songs.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 16),
+                itemBuilder: (context, i) {
+                  final song = songs[i];
+                  return RecentSongCard(song: song, isPlaying: song.id == currentSongId, onTap: () => onTapSong(song));
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -360,6 +611,10 @@ class _DiscoverSkeleton extends StatelessWidget {
       children: [
         const ShimmerBox(width: 110, height: 20),
         const SizedBox(height: 16),
+        const ShimmerBox(width: double.infinity, height: 120, radius: 20),
+        const SizedBox(height: 20),
+        const ShimmerBox(width: 130, height: 16),
+        const SizedBox(height: 12),
         const ShimmerBox(width: double.infinity, height: 128, radius: 18),
         const SizedBox(height: 20),
         const ShimmerBox(width: 130, height: 16),

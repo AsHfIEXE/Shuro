@@ -7,6 +7,8 @@ import '../../services/library_health.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
+import '../../widgets/motion.dart' show Entrance;
 
 /// Read-only health report over the songs already loaded on this device.
 ///
@@ -39,11 +41,12 @@ class LibraryHealthScreen extends StatelessWidget {
                   ),
                   Text(
                     'Library health',
-                    style: headingFont(
+                    style: DesktopTokens.section(headingFont(
                       color: kTextColor,
                       fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    )),
                   ),
                 ],
               ),
@@ -54,7 +57,7 @@ class LibraryHealthScreen extends StatelessWidget {
                 'Checked on device from the ${report.totalSongs} tracks already '
                 'loaded. Nothing is uploaded and nothing is changed.',
                 style: GoogleFonts.getFont(currentFontFamily,
-                    color: kMutedTextColor, fontSize: 12, height: 1.45),
+                    color: kStatusText, fontSize: 12, height: 16 / 12),
               ),
             ),
             if (report.isEmpty)
@@ -80,9 +83,7 @@ class LibraryHealthScreen extends StatelessWidget {
                               'were found.',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.getFont(currentFontFamily,
-                          color: kMutedTextColor,
-                          fontSize: 12,
-                          height: 1.5),
+                          color: kMutedTextColor, fontSize: 12, height: 1.5),
                     ),
                   ],
                 ),
@@ -101,8 +102,14 @@ class LibraryHealthScreen extends StatelessWidget {
                       letterSpacing: 0.6),
                 ),
               ),
-              for (final issue in report.issues)
-                _IssueSection(issue: issue),
+              for (final (i, issue) in report.issues.indexed)
+                Entrance(
+                  delay: Entrance.stagger(i),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: _IssueSection(issue: issue),
+                  ),
+                ),
             ],
           ],
         ),
@@ -128,62 +135,67 @@ class _IssueSectionState extends State<_IssueSection> {
     final issue = widget.issue;
     final shown = _expanded ? issue.songs : issue.songs.take(3).toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  issue.title,
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kTextColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: kBrandColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('${issue.count}',
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: kRaisedColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kHairline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    issue.title,
                     style: GoogleFonts.getFont(currentFontFamily,
-                        color: kBrandColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-          child: Text(
-            issue.detail,
-            style: GoogleFonts.getFont(currentFontFamily,
-                color: kMutedTextColor, fontSize: 11.5, height: 1.4),
-          ),
-        ),
-        for (final song in shown)
-          _IssueRow(song: song, queue: issue.songs),
-        if (issue.count > 3)
-          Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: TextButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              child: Text(
-                _expanded ? 'Show fewer' : 'Show all ${issue.count}',
-                style: GoogleFonts.getFont(currentFontFamily,
-                    color: _expanded ? kMutedTextColor : kBrandColor,
-                    fontSize: 12),
-              ),
+                        color: kTextColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: kBrandColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('${issue.count}',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kVioletLight,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
             ),
-          ),
-      ],
+            const SizedBox(height: 4),
+            Text(
+              issue.detail,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kStatusText, fontSize: 12, height: 16 / 12),
+            ),
+            const SizedBox(height: 4),
+            for (final song in shown) _IssueRow(song: song, queue: issue.songs),
+            if (issue.count > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: TextButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(
+                    _expanded ? 'Show fewer' : 'Show all ${issue.count}',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: _expanded ? kStatusText : kVioletLight,
+                        fontSize: 12),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -198,9 +210,8 @@ class _IssueRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      leading: Icon(Icons.music_note_rounded,
-          size: 16, color: kMutedTextColor),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      leading: Icon(Icons.music_note_rounded, size: 16, color: kMutedTextColor),
       title: Text(song.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

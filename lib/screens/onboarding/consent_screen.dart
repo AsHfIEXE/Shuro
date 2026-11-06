@@ -1,4 +1,3 @@
-
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -176,7 +175,8 @@ class ConsentScreen extends StatelessWidget {
         context: context,
         backgroundColor: kCardColor,
         isScrollControlled: true,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
         builder: (sheetContext) => DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.85,
@@ -186,12 +186,18 @@ class ConsentScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                Text(title,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: 12),
                 Expanded(
                   child: SingleChildScrollView(
                     controller: controller,
-                    child: Text(body, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 13, height: 1.55)),
+                    child: Text(body,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white70, fontSize: 13, height: 1.55)),
                   ),
                 ),
               ],
@@ -216,33 +222,46 @@ class ConsentScreen extends StatelessWidget {
                   Text(
                     'Before you start',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'Shuro is a player for the music server you own, and for the '
                     'files on this device. It hosts no music itself.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13, height: 1.5),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 13, height: 1.5),
                   ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => showFull('Terms of Service', LegalTexts.terms),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: kDividerColor)),
+                          onPressed: () =>
+                              showFull('Terms of Service', LegalTexts.terms),
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: kDividerColor)),
                           icon: const Icon(Icons.gavel_rounded, size: 16),
-                          label: const Text('Terms', style: TextStyle(fontSize: 12.5)),
+                          label: const Text('Terms',
+                              style: TextStyle(fontSize: 12.5)),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => showFull('Privacy summary', LegalTexts.privacy),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: kDividerColor)),
-                          icon: const Icon(Icons.privacy_tip_outlined, size: 16),
-                          label: const Text('Privacy', style: TextStyle(fontSize: 12.5)),
+                          onPressed: () =>
+                              showFull('Privacy summary', LegalTexts.privacy),
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: kDividerColor)),
+                          icon:
+                              const Icon(Icons.privacy_tip_outlined, size: 16),
+                          label: const Text('Privacy',
+                              style: TextStyle(fontSize: 12.5)),
                         ),
                       ),
                     ],
@@ -263,7 +282,8 @@ class ConsentScreen extends StatelessWidget {
                       'you can view any time in Settings → About.\n\n'
                       'No advertising. No analytics. No tracking. Nothing about you is '
                       'sold or shared.',
-                      style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12, height: 1.5),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMutedTextColor, fontSize: 12, height: 1.5),
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -272,19 +292,22 @@ class ConsentScreen extends StatelessWidget {
                       backgroundColor: kBrandColor,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24)),
                     ),
                     onPressed: onAccepted,
                     child: Text(
                       'I agree — continue',
-                      style: GoogleFonts.getFont(currentFontFamily, fontSize: 14, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'By continuing you accept the Terms of Service and the Privacy summary above.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white24, fontSize: 10.5, height: 1.4),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white24, fontSize: 10.5, height: 1.4),
                   ),
                 ],
               ),

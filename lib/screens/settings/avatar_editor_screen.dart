@@ -26,7 +26,8 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
   Uint8List? _imageBytes;
   double _rotationDegrees = 0;
   bool _saving = false;
-  final TransformationController _transformationController = TransformationController();
+  final TransformationController _transformationController =
+      TransformationController();
   final GlobalKey _repaintKey = GlobalKey();
 
   Future<void> _pickImage() async {
@@ -44,7 +45,8 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
   }
 
   Future<void> _save() async {
-    final boundary = _repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    final boundary = _repaintKey.currentContext?.findRenderObject()
+        as RenderRepaintBoundary?;
     if (boundary == null) return;
     setState(() => _saving = true);
     try {
@@ -74,14 +76,24 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
       appBar: AppBar(
         backgroundColor: kSurfaceColor,
         elevation: 0,
-        title: Text('Profile photo', style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+        title: Text('Profile photo',
+            style: headingFont(
+                color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
         actions: [
           if (hasImage)
             TextButton(
               onPressed: _saving ? null : _save,
               child: _saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text('Save', style: GoogleFonts.getFont(currentFontFamily, color: kBrandColor, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Text('Save',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kBrandColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
             ),
           if (appState.userAvatarBytes != null)
             TextButton(
@@ -89,7 +101,9 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
                 context.read<AppState>().updateUserAvatar(null);
                 Navigator.of(context).pop();
               },
-              child: Text('Remove', style: GoogleFonts.getFont(currentFontFamily, color: Colors.redAccent, fontSize: 14)),
+              child: Text('Remove',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.redAccent, fontSize: 14)),
             ),
         ],
       ),
@@ -109,16 +123,29 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: kCardColor,
-            image: appState.userAvatarBytes != null ? DecorationImage(image: MemoryImage(appState.userAvatarBytes!), fit: BoxFit.cover) : null,
+            image: appState.userAvatarBytes != null
+                ? DecorationImage(
+                    image: MemoryImage(appState.userAvatarBytes!),
+                    fit: BoxFit.cover)
+                : null,
           ),
-          child: appState.userAvatarBytes == null ? const Icon(Icons.person_rounded, color: Colors.white24, size: 96) : null,
+          child: appState.userAvatarBytes == null
+              ? const Icon(Icons.person_rounded,
+                  color: Colors.white24, size: 96)
+              : null,
         ),
         const SizedBox(height: 28),
         ElevatedButton.icon(
           onPressed: _pickImage,
-          style: ElevatedButton.styleFrom(backgroundColor: kBrandColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24))),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: kBrandColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999))),
           icon: const Icon(Icons.photo_library_rounded, size: 18),
-          label: Text('Choose photo', style: GoogleFonts.getFont(currentFontFamily, fontSize: 14, fontWeight: FontWeight.w600)),
+          label: Text('Choose photo',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  fontSize: 14, fontWeight: FontWeight.w600)),
         ),
       ],
     );
@@ -131,7 +158,9 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
         Container(
           width: _previewSize,
           height: _previewSize,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kBrandColor, width: 2)),
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: kBrandColor, width: 2)),
           child: RepaintBoundary(
             key: _repaintKey,
             child: ClipOval(
@@ -141,19 +170,26 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
                 maxScale: 4,
                 child: Transform.rotate(
                   angle: _rotationDegrees * math.pi / 180,
-                  child: Image.memory(_imageBytes!, width: _previewSize, height: _previewSize, fit: BoxFit.cover),
+                  child: Image.memory(_imageBytes!,
+                      width: _previewSize,
+                      height: _previewSize,
+                      fit: BoxFit.cover),
                 ),
               ),
             ),
           ),
         ),
         const SizedBox(height: 12),
-        Text('Pinch to zoom · drag to reposition', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+        Text('Pinch to zoom · drag to reposition',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kStatusText, fontSize: 12)),
         const SizedBox(height: 24),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            IconButton(onPressed: () => _rotateBy(-90), icon: const Icon(Icons.rotate_left_rounded, color: Colors.white70)),
+            IconButton(
+                onPressed: () => _rotateBy(-90),
+                icon: const Icon(Icons.rotate_left_rounded, color: kNavText)),
             SizedBox(
               width: 180,
               child: Slider(
@@ -165,12 +201,16 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
                 onChanged: (v) => setState(() => _rotationDegrees = v),
               ),
             ),
-            IconButton(onPressed: () => _rotateBy(90), icon: const Icon(Icons.rotate_right_rounded, color: Colors.white70)),
+            IconButton(
+                onPressed: () => _rotateBy(90),
+                icon: const Icon(Icons.rotate_right_rounded, color: kNavText)),
           ],
         ),
         TextButton(
           onPressed: _pickImage,
-          child: Text('Choose a different photo', style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),
+          child: Text('Choose a different photo',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kVioletLight, fontSize: 13)),
         ),
       ],
     );

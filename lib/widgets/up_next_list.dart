@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +7,7 @@ import '../models/song.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'artwork_thumb.dart';
+import 'motion.dart';
 
 /// Real content for the wide Now-Playing pane when there are no lyrics: the
 /// next songs in the queue. Previously this half of the screen fell back to a
@@ -14,7 +16,9 @@ import 'artwork_thumb.dart';
 ///
 /// The list itself stays quiet: no cards, no chrome — rows of art + text that
 /// inherit the pane's backdrop, so it feels like part of the composition
-/// rather than a second app bolted on.
+/// rather than a second app bolted on. Redesign pass: board tokens
+/// (kStatusText captions), white-4.5% hover, a violet 14% wash + violet-pale
+/// title on the row that plays next, and the shared Entrance stagger.
 class UpNextList extends StatelessWidget {
   final int maxRows;
   const UpNextList({super.key, this.maxRows = 7});
@@ -29,7 +33,7 @@ class UpNextList extends StatelessWidget {
       next.add(queue[i]);
     }
     if (next.isEmpty) {
-      return _EmptyPane(
+      return const _EmptyPane(
         icon: Icons.done_all_rounded,
         title: 'End of queue',
         caption: 'Everything queued has played. Add more from the library.',
@@ -41,12 +45,12 @@ class UpNextList extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.queue_music_rounded, size: 15, color: Colors.white54),
+            Icon(Icons.queue_music_rounded, size: 15, color: kMuted2),
             const SizedBox(width: 8),
             Text(
               'UP NEXT',
               style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.4),
+                  color: kMuted2, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.4),
             ),
           ],
         ),
@@ -58,10 +62,14 @@ class UpNextList extends StatelessWidget {
             itemBuilder: (context, index) {
               final song = next[index];
               final isPlayingNext = index == 0;
-              return _UpNextRow(
-                song: song,
-                highlight: isPlayingNext,
-                onTap: () => player.playSong(song, queue: queue),
+              return Entrance(
+                delay: Entrance.stagger(index),
+                enabled: index < 12,
+                child: _UpNextRow(
+                  song: song,
+                  highlight: isPlayingNext,
+                  onTap: () => player.playSong(song, queue: queue),
+                ),
               );
             },
           ),
@@ -80,39 +88,43 @@ class _UpNextRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-        child: Row(
-          children: [
-            ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 38, radius: 7),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    song.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.getFont(currentFontFamily,
-                        color: highlight ? kTextColor : Colors.white70,
-                        fontSize: 13,
-                        fontWeight: highlight ? FontWeight.w600 : FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    song.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11),
-                  ),
-                ],
+    return Material(
+      color: highlight ? kBrandColor.withValues(alpha: 0.14) : Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        hoverColor: Colors.white.withValues(alpha: 0.045),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+          child: Row(
+            children: [
+              ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 38, radius: 7),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: highlight ? kVioletPale : kTextColor,
+                          fontSize: 13,
+                          fontWeight: highlight ? FontWeight.w600 : FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      song.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily, color: kStatusText, fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -134,15 +146,15 @@ class _EmptyPane extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 30, color: Colors.white24),
+            Icon(icon, size: 30, color: kMuted3),
             const SizedBox(height: 12),
             Text(title,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+                style: GoogleFonts.getFont(currentFontFamily, color: kNavText, fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             Text(caption,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.getFont(currentFontFamily, color: Colors.white38, fontSize: 11.5, height: 1.5)),
+                style: GoogleFonts.getFont(currentFontFamily, color: kMuted2, fontSize: 12, height: 1.5)),
           ],
         ),
       ),

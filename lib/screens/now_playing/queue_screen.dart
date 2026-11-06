@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/song.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/desktop_tokens.dart';
+import '../../widgets/artwork_ring.dart';
 import '../../widgets/artwork_thumb.dart';
+import '../../widgets/desktop_context_menu.dart';
+import '../../widgets/motion.dart';
+import '../../widgets/page_transitions.dart';
+import '../../widgets/shuro_icons.dart';
+import '../../widgets/smooth_position_builder.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
+import 'now_playing_screen.dart';
 
-/// "10. Queue" — current song, reorderable "Up next" list, remove/clear,
-/// and saving the queue as a new playlist.
+/// "10. Queue" / the Queue panel board — a NOW PLAYING card up top (52 px
+/// ring artwork with live progress, title/artist, prev / play / next
+/// transport), then the reorderable UP NEXT list with drag handles, hover
+/// rows and the violet wash on the current track.
+///
+/// Every action the old screen had is kept: save-the-queue-as-a-playlist,
+/// per-track "⋮" menus, remove-from-queue, clear queue (with its undo),
+/// drag/long-press reordering and the empty states.
 class QueueScreen extends StatelessWidget {
   const QueueScreen({super.key});
 
@@ -58,81 +73,24 @@ class QueueScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (player.currentSong != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                    child: Text('Now Playing',
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    leading: ArtworkThumb(
-                        gradientColors: player.currentSong!.gradientColors,
-                        artwork: player.currentSong!.artwork,
-                        size: 46,
-                        radius: 8),
-                    title: Text(player.currentSong!.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: player.currentSong!.gradientColors.last,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    subtitle: Text(player.currentSong!.artist,
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: kMutedTextColor, fontSize: 12)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // A real control rather than a status glyph: the icon shows
-                        // the action (pause while playing, play while paused) and
-                        // does it. It used to show a *pause* symbol precisely when
-                        // playback was already paused, which read as its opposite.
-                        IconButton(
-                          tooltip: player.isPlaying ? 'Pause' : 'Play',
-                          icon: player.isBuffering
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white70))
-                              : Icon(
-                                  player.isPlaying
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                  color:
-                                      player.currentSong!.gradientColors.last,
-                                  size: 22,
-                                ),
-                          onPressed: player.togglePlayPause,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.more_vert_rounded,
-                              color: kMutedTextColor, size: 20),
-                          // Guard at tap time: the row was built while a song
-                          // existed, but the queue can empty between build
-                          // and tap (audit finding F3-1).
-                          onPressed: () {
-                            final s = player.currentSong;
-                            if (s != null) showSongActionsSheet(context, s);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(color: kDividerColor, height: 24),
+                  Entrance(child: _NowPlayingCard(song: player.currentSong!)),
                 ],
-                if (upNext.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                    child: Text('Up Next',
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                  child: Row(
+                    children: [
+                      Text('Up next',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kTextColor,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 8),
+                      Text('${upNext.length} song${upNext.length == 1 ? '' : 's'}',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kStatusText, fontSize: 12)),
+                    ],
                   ),
+                ),
                 Expanded(
                   child: upNext.isEmpty
                       ? Padding(
@@ -155,51 +113,17 @@ class QueueScreen extends StatelessWidget {
                           itemBuilder: (context, i) {
                             final song = upNext[i];
                             final queueIndex = player.queueIndex + 1 + i;
-                            return ListTile(
-                              key: ValueKey('queue_${queueIndex}_${song.id}'),
-                              contentPadding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              leading: ArtworkThumb(
-                                  gradientColors: song.gradientColors,
-                                  artwork: song.artwork,
-                                  size: 44,
-                                  radius: 8),
-                              title: Text(song.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.getFont(currentFontFamily,
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500)),
-                              subtitle: Text(song.artist,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.getFont(currentFontFamily,
-                                      color: kMutedTextColor, fontSize: 12)),
-                              // A tap target rather than long-press: this row
-                              // already has a long-press-to-drag gesture from
-                              // ReorderableListView itself (no explicit drag
-                              // handle is wired up below — the handle icon is
-                              // decorative), so a second long-press listener
-                              // here would fight it in the gesture arena.
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.more_vert_rounded,
-                                        color: kMutedTextColor, size: 20),
-                                    onPressed: () =>
-                                        showSongActionsSheet(context, song),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.close_rounded,
-                                        color: kMutedTextColor, size: 18),
-                                    onPressed: () =>
-                                        player.removeFromQueue(queueIndex),
-                                  ),
-                                  const Icon(Icons.drag_handle_rounded,
-                                      color: kMutedTextColor),
-                                ],
+                            return Entrance(
+                              key: ValueKey(
+                                  'queue_${queueIndex}_${song.id}'),
+                              delay: Entrance.stagger(i),
+                              enabled: i < 12,
+                              child: _QueueRow(
+                                song: song,
+                                index: i,
+                                queue: queue,
+                                onRemove: () =>
+                                    player.removeFromQueue(queueIndex),
                               ),
                             );
                           },
@@ -231,6 +155,263 @@ class QueueScreen extends StatelessWidget {
                   ),
               ],
             ),
+    );
+  }
+}
+
+/// The board's NOW PLAYING card: 52 px ring artwork with live progress
+/// (the ring is the progress — stroke 3, knob 9), title/artist, and the
+/// prev / play / next transport. Tapping the ring opens Now Playing.
+class _NowPlayingCard extends StatelessWidget {
+  final Song song;
+  const _NowPlayingCard({required this.song});
+
+  @override
+  Widget build(BuildContext context) {
+    final player = context.watch<PlayerController>();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: kRaisedColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kHairline),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () =>
+                  pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
+              child: SmoothPositionBuilder(
+                builder: (context, player, position, progress) => ArtworkRing(
+                  song: song,
+                  progress: progress,
+                  buffered: player.bufferedFraction,
+                  colors: song.gradientColors,
+                  size: 52,
+                  strokeWidth: NpvMetrics.ringStrokeMini,
+                  knobSize: NpvMetrics.knobMini,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('NOW PLAYING',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMuted2,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.4)),
+                  const SizedBox(height: 2),
+                  Text(song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kTextColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  Text(song.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kStatusText, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Transport: prev / play-pause disc / next, matching the mini
+            // player's button vocabulary.
+            IconButton(
+              tooltip: 'Previous track',
+              icon: ShuroIcon(ShuroGlyph.previous, color: kTextColor, size: 24),
+              onPressed: player.previous,
+            ),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: kBrandColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: kBrandColor.withValues(alpha: 0.45),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                tooltip: player.isPlaying ? 'Pause' : 'Play',
+                onPressed: player.togglePlayPause,
+                icon: player.isBuffering
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Padding(
+                          padding: EdgeInsets.all(2),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        ),
+                      )
+                    : ShuroIcon(
+                        player.isPlaying
+                            ? ShuroGlyph.pause
+                            : ShuroGlyph.play,
+                        color: Colors.white,
+                        size: 24),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Next track',
+              icon: ShuroIcon(ShuroGlyph.next, color: kTextColor, size: 24),
+              onPressed: player.next,
+            ),
+            SizedBox(
+              width: 40,
+              child: Builder(
+                builder: (buttonContext) => IconButton(
+                  tooltip: 'More options',
+                  icon: Icon(Icons.more_vert_rounded,
+                      color: kMuted2, size: 20),
+                  // Guard at tap time: the row was built while a song
+                  // existed, but the queue can empty between build and tap.
+                  onPressed: () {
+                    final s = context.read<PlayerController>().currentSong;
+                    if (s == null) return;
+                    if (isDesktopPlatform) {
+                      showSongMenuAtAnchor(context, s, buttonContext);
+                    } else {
+                      showSongActionsSheet(context, s);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatDuration(Duration value) {
+  final minutes = value.inMinutes;
+  final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+/// One UP NEXT row: 48 px tall, hover wash on desktop, violet wash when
+/// this row's track is the current one (shuffle can make any row current),
+/// duration, "⋮" menu, remove and a drag handle that starts the reorder
+/// immediately (the list keeps long-press-to-drag on touch as well).
+class _QueueRow extends StatelessWidget {
+  final Song song;
+  final int index;
+  final List<Song> queue;
+  final VoidCallback onRemove;
+
+  const _QueueRow({
+    required this.song,
+    required this.index,
+    required this.queue,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final player = context.watch<PlayerController>();
+    final playing = player.currentSong?.id == song.id;
+
+    return ContextMenuRegion(
+      items: songContextMenuItems(context, song),
+      child: Material(
+        color: playing ? kBrandColor.withValues(alpha: 0.14) : Colors.transparent,
+        child: InkWell(
+          onTap: () => player.playSong(song, queue: queue),
+          hoverColor: Colors.white.withValues(alpha: 0.04),
+          child: SizedBox(
+            height: 48,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  ArtworkThumb(
+                    gradientColors: song.gradientColors,
+                    artwork: song.artwork,
+                    size: 40,
+                    radius: 8,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: playing ? kVioletPale : kTextColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                        Text(song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kStatusText, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(_formatDuration(song.duration),
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kStatusText, fontSize: 13)),
+                  SizedBox(
+                    width: 40,
+                    child: Builder(
+                      builder: (buttonContext) => IconButton(
+                        tooltip: 'More options',
+                        icon: Icon(Icons.more_vert_rounded,
+                            color: kMuted2, size: 20),
+                        onPressed: () {
+                          if (isDesktopPlatform) {
+                            showSongMenuAtAnchor(context, song, buttonContext);
+                          } else {
+                            showSongActionsSheet(context, song);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: IconButton(
+                      tooltip: 'Remove from queue',
+                      icon:
+                          Icon(Icons.close_rounded, color: kMuted2, size: 18),
+                      onPressed: onRemove,
+                    ),
+                  ),
+                  // The drag handle starts the reorder drag immediately on
+                  // press (desktop-friendly); long-press anywhere on the row
+                  // still drags on touch.
+                  ReorderableDragStartListener(
+                    index: index,
+                    child: SizedBox(
+                      width: 40,
+                      child: Icon(Icons.drag_handle_rounded,
+                          color: playing ? kVioletLight : kMuted2, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
