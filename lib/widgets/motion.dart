@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -258,22 +259,45 @@ class MeshBlobs extends StatefulWidget {
 
 class _MeshBlobsState extends State<MeshBlobs>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _drift = AnimationController(
-      vsync: this, duration: const Duration(seconds: 16))
-    ..repeat();
+  // Phones: static wash. Repainting three full-screen radial gradients every
+  // frame is what made low-end Android devices stutter on Pulse / artist /
+  // onboarding pages, for a 24 px drift nobody can see. No controller is even
+  // created there, so no ticker keeps requesting frames.
+  static bool get _phone =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  AnimationController? _drift;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_phone) {
+      _drift = AnimationController(
+          vsync: this, duration: const Duration(seconds: 16))
+        ..repeat();
+    }
+  }
 
   @override
   void dispose() {
-    _drift.dispose();
+    _drift?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (reduceMotionEnabled) return _paint(0);
-    return AnimatedBuilder(
-      animation: _drift,
-      builder: (context, _) => _paint(_drift.value),
+    final drift = _drift;
+    if (reduceMotionEnabled || drift == null) {
+      return RepaintBoundary(child: _paint(0));
+    }
+    // Own layer: the drift repaints only this backdrop, never the page above.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: drift,
+        builder: (context, _) => _paint(drift.value),
+      ),
     );
   }
 

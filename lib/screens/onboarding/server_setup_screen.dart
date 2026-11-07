@@ -123,7 +123,12 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
 
     Widget body;
     if (widget.inOnboarding) {
-      body = Stack(
+      // The other onboarding steps are Scaffolds. This one was a bare Stack,
+      // which left it with no Material ancestor: white background, yellow
+      // debug underlines under every Text, and the "No Material widget" crash.
+      body = Scaffold(
+        backgroundColor: kSurfaceColor,
+        body: Stack(
         children: [
           const OnboardingBlobs(),
           SafeArea(
@@ -158,7 +163,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
             ),
           ),
         ],
-      );
+      ));
     } else {
       body = Scaffold(
         backgroundColor: kSurfaceColor,

@@ -386,6 +386,7 @@ class HomeScreen extends StatelessWidget {
                         if (hasServer)
                           _SongRail(
                             title: 'Recently Played',
+                            eyebrow: 'JUMP BACK IN',
                             songs: recentlyPlayed,
                             currentSongId: player.currentSong?.id,
                             onTapSong: (song) => player.playOrToggle(song,
@@ -559,7 +560,7 @@ class _ContinueHero extends StatelessWidget {
     final wide = MediaQuery.sizeOf(context).width >= 800;
     final titleSize = wide ? 56.0 : 36.0;
     // The discs shrink on phone-width heroes instead of drowning the copy.
-    final discScale = wide ? 1.0 : 0.62;
+    final discScale = wide ? 1.0 : 0.5;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
@@ -590,8 +591,8 @@ class _ContinueHero extends StatelessWidget {
                       // The board's three rotated "albums", done as soft
                       // gradient discs (palette tokens only).
                       Positioned(
-                        top: wide ? 72 : 12,
-                        right: wide ? 96 : -56,
+                        top: wide ? 72 : -34,
+                        right: wide ? 96 : -52,
                         child: _HeroDisc(
                           size: 320 * discScale,
                           gradient: const LinearGradient(
@@ -602,8 +603,8 @@ class _ContinueHero extends StatelessWidget {
                         ),
                       ),
                       Positioned(
-                        bottom: wide ? 48 : 12,
-                        right: wide ? 320 : 24,
+                        bottom: wide ? 48 : -30,
+                        right: wide ? 320 : -20,
                         child: Transform.rotate(
                           angle: -0.09,
                           child: _HeroDisc(
@@ -616,10 +617,12 @@ class _ContinueHero extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Third disc is desktop-only: on a phone it sat under the
+                      // body copy and the buttons.
+                      if (wide)
                       Positioned(
-                        top: wide ? 264 : null,
-                        bottom: wide ? null : 64,
-                        right: wide ? 28 : -24,
+                        top: 264,
+                        right: 28,
                         child: Transform.rotate(
                           angle: 0.14,
                           child: _HeroDisc(
@@ -934,9 +937,8 @@ class _GetStartedEmptyState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Wrap(
-              alignment: WrapAlignment.center,
-              runSpacing: 4,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 TextButton(
                   onPressed: appState.importingLocalFiles
@@ -979,6 +981,7 @@ class _SongRail extends StatelessWidget {
   final String? currentSongId;
   final ValueChanged<Song> onTapSong;
   final bool showHeader;
+  final String? eyebrow;
   final VoidCallback? onSeeAll;
 
   /// Square cover size (168 on desktop windows, 150 on phones — see
@@ -991,6 +994,7 @@ class _SongRail extends StatelessWidget {
     required this.currentSongId,
     required this.onTapSong,
     this.showHeader = true,
+    this.eyebrow,
     this.onSeeAll,
     required this.coverWidth,
   });
@@ -1003,7 +1007,8 @@ class _SongRail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (showHeader) SectionHeader(title: title, onSeeAll: onSeeAll),
+          if (showHeader)
+            SectionHeader(title: title, eyebrow: eyebrow, onSeeAll: onSeeAll),
           // ShelfRow (phase 3): hover arrows step whole cards so a mouse
           // never needs shift-wheel, and no card stops half-cut.
           ShelfRow(

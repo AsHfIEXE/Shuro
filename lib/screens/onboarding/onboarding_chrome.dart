@@ -603,7 +603,9 @@ class OnboardingField extends StatelessWidget {
         ),
         SizedBox(
           height: 48,
-          child: TextField(
+          child: // No Material ancestor on the web welcome gate: TextField asserts
+          // without one.
+          Material(type: MaterialType.transparency, child: TextField(
             controller: controller,
             obscureText: obscure,
             keyboardType: keyboardType,
@@ -626,7 +628,7 @@ class OnboardingField extends StatelessWidget {
                 borderSide: const BorderSide(color: kVioletLight, width: 1.4),
               ),
             ),
-          ),
+          )),
         ),
         if (helper != null) ...[
           const SizedBox(height: 4),

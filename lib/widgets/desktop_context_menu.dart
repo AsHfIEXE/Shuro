@@ -11,6 +11,7 @@ import '../state/app_state.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'state_views.dart';
+import 'click_region.dart';
 
 /// Desktop right-click context menu for any surface.
 ///
@@ -27,7 +28,7 @@ class ContextMenuRegion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ClickRegion(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapUp: (details) {
         final overlay =

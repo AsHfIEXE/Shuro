@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import '../playback/audio_backend.dart';
 import '../playback/event_log.dart';
 import '../services/equalizer_service.dart';
 import '../models/download_state.dart';
@@ -67,7 +68,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // have a try/catch — without a handler here, that error would go to
     // the zone's uncaught-error handler instead of the user, leaving the
     // UI stuck showing "playing" over audio that's actually gone silent.
-    _positionSub = _audioPlayer.positionStream.listen((pos) {
+    _wireEngine();
+  }
+
+  /// Subscribes to the CURRENT [_audioPlayer]. Called once at construction and
+  /// again by [_rebuildEngine] after a wedged engine is replaced.
+  void _wireEngine() {
+    final player = _audioPlayer;
+    _positionSub = player.positionStream.listen((pos) {
       final sec = pos.inSeconds;
       if (sec != _lastNotifiedSecond) {
         _lastNotifiedSecond = sec;
@@ -77,12 +85,12 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       _checkCrossfade(pos);
     }, onError: _onPlaybackStreamError);
     // The native playlist's index changes are how notification skip buttons
-    // move the app forward: when the system notification (or a headset)
-    // skips, the engine's index moves and the app follows it here.
-    _currentIndexSub = _audioPlayer.currentIndexStream
+    // move the app forward.
+    _currentIndexSub = player.currentIndexStream
         .listen(_onNativeIndexChanged, onError: _onPlaybackStreamError);
-    _playerStateSub = _audioPlayer.playerStateStream
+    _playerStateSub = player.playerStateStream
         .listen(_onPlayerStateChanged, onError: _onPlaybackStreamError);
+    if (_smoothCtl.hasListener) _attachSmooth();
   }
 
   /// On Android the player is constructed with the system equalizer attached
@@ -99,7 +107,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     return AudioPlayer();
   }
 
-  final AudioPlayer _audioPlayer = _createPlayer();
+  AudioPlayer _audioPlayer = _createPlayer();
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<PlayerState>? _playerStateSub;
   StreamSubscription<int?>? _currentIndexSub;
@@ -206,12 +214,29 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// own stopwatch between platform updates, so a consumer reading [position] at
   /// any moment gets an up-to-date figure — this only controls how often a
   /// listener is told about it.
-  late final Stream<Duration> _smoothPositions =
-      _audioPlayer.createPositionStream(
-    steps: 20000,
-    minPeriod: const Duration(milliseconds: 16),
-    maxPeriod: const Duration(milliseconds: 120),
+  /// Smooth position feed for the ring and lyric karaoke. Owned by the
+  /// controller (not the engine) so it survives [_rebuildEngine]; it only
+  /// ticks while something listens.
+  late final StreamController<Duration> _smoothCtl =
+      StreamController<Duration>.broadcast(
+    onListen: _attachSmooth,
+    onCancel: () {
+      _smoothSub?.cancel();
+      _smoothSub = null;
+    },
   );
+  StreamSubscription<Duration>? _smoothSub;
+
+  void _attachSmooth() {
+    _smoothSub?.cancel();
+    _smoothSub = _audioPlayer
+        .createPositionStream(
+          steps: 20000,
+          minPeriod: const Duration(milliseconds: 16),
+          maxPeriod: const Duration(milliseconds: 120),
+        )
+        .listen(_smoothCtl.add, onError: (Object _) {});
+  }
 
   Song? _currentSong;
 
@@ -334,7 +359,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// Real-clock position updates (~30 fps while playing) for UI that needs
   /// to move smoothly — the lyrics karaoke fill and the progress ring.
   /// Everything else can keep listening to [notifyListeners]' ~1 Hz rate.
-  Stream<Duration> get smoothPositionStream => _smoothPositions;
+  Stream<Duration> get smoothPositionStream => _smoothCtl.stream;
 
   /// The most recent "couldn't play this" message (no source, network
   /// error, unsupported format, …), or null once it's been shown/cleared.
@@ -409,6 +434,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   // --- internals -------------------------------------------------------
 
   void _onPlayerStateChanged(PlayerState state) {
+    _engineEventsSinceLoad++;
     PlaybackEventLog.instance.add('engine.state', {
       'processing': state.processingState.name,
       'playing': state.playing,
@@ -647,13 +673,70 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     notifyListeners();
   }
 
+  // --- engine watchdog -------------------------------------------------------
+
+  Timer? _loadWatchdog;
+  int _engineEventsSinceLoad = 0;
+
+  /// A load that produced no engine event at all for 9 s means the platform
+  /// player is wedged (seen on Windows after sleep/long pauses and on Android
+  /// with a dead media session): every later skip would queue behind it and
+  /// the app looked frozen. Replace the engine and retry the load once.
+  void _onLoadStalled(int generation) {
+    if (generation != _loadGeneration || !_isLoading) return;
+    if (_engineEventsSinceLoad > 0) return; // engine is alive, just slow
+    PlaybackEventLog.instance.add('watchdog.rebuild', {'gen': generation});
+    final index = _queueIndex;
+    final wasPlaying = _isPlaying;
+    unawaited(() async {
+      await _rebuildEngine();
+      await _jumpTo(index, startPlaying: wasPlaying, recovering: true);
+    }());
+  }
+
+  Future<void> _rebuildEngine() async {
+    _positionSub?.cancel();
+    _playerStateSub?.cancel();
+    _currentIndexSub?.cancel();
+    _smoothSub?.cancel();
+    final old = _audioPlayer;
+    try {
+      await old.dispose().timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    _loadChain = Future<void>.value();
+    _nativeQueueActive = false;
+    _nativeSource = null;
+    _nativeQueueIds = null;
+    _loadedSongId = null;
+    _audioPlayer = _createPlayer();
+    _wireEngine();
+  }
+
+  /// Resolves the song's audio source, giving a server that is still
+  /// reconnecting after launch a few seconds before giving up ("no audio
+  /// source is available" on Resume right after start).
+  Future<String?> _resolveSourceWithRetry(Song song, int generation) async {
+    var source = audioSourceResolver?.call(song);
+    // No resolver wired (tests, resolver-less hosts): a null that will never
+    // change must not stall every load for the full back-off window.
+    if (audioSourceResolver == null) return source;
+    for (var i = 0; i < 12 && source == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (generation != _loadGeneration) return null;
+      source = audioSourceResolver?.call(song);
+    }
+    return source;
+  }
+
   /// Loads [index]'s song into the audio engine and (optionally) starts
   /// it. Always updates [_currentSong]/[_queueIndex] and notifies
   /// immediately — even before the audio itself has loaded — so the UI
   /// (title, artwork, controls) switches right away instead of waiting on
   /// the network.
   Future<void> _jumpTo(int index,
-      {required bool startPlaying, Duration? initialPosition}) async {
+      {required bool startPlaying,
+      Duration? initialPosition,
+      bool recovering = false}) async {
     if (_queue.isEmpty) return;
     final clamped = index.clamp(0, _queue.length - 1);
     _queueIndex = clamped;
@@ -676,7 +759,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (startPlaying) _isPlaying = true;
     notifyListeners();
 
-    final source = audioSourceResolver?.call(song);
+    final source = await _resolveSourceWithRetry(song, generation);
+    if (generation != _loadGeneration) return;
     if (source == null) {
       _isPlaying = false;
       _needsReload = true;
@@ -712,13 +796,26 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     final previousLoad = _loadChain;
     final settle = Completer<void>();
     _loadChain = settle.future;
+    _engineEventsSinceLoad = 0;
+    _loadWatchdog?.cancel();
+    if (!recovering && _watchdogMayRebuild) {
+      _loadWatchdog =
+          Timer(const Duration(seconds: 9), () => _onLoadStalled(generation));
+    }
 
     try {
-      await previousLoad;
+      // A previous load that never settles must not block every later one.
+      await previousLoad.timeout(const Duration(seconds: 8));
       if (generation == _loadGeneration) _isLoading = true;
     } catch (_) {
       // The previous load's own failure is already reported by its own call.
     }
+    // Don't touch the engine until the audio platform (media session or the
+    // plain fallback) has settled — see AudioBackend.
+    try {
+      await AudioBackend.ready.timeout(const Duration(seconds: 30));
+    } catch (_) {}
+    final loadWatch = Stopwatch()..start();
 
     try {
       // Native queue window: load the current song plus a margin around it
@@ -729,7 +826,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // keeps prev/next without ever mutating the live playlist. Small queues
       // load whole.
       var loadedNatively = false;
-      if (_queue.length > 1) {
+      if (_queue.length > 1 && _supportsNativeQueue) {
         try {
           final whole = _queue.length <= _kNativeWindowFullLimit;
           final windowStart = whole
@@ -777,8 +874,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
                   initialIndex: playheadNative,
                   initialPosition: startAt,
                 )
-                .timeout(const Duration(seconds: 20));
+                .timeout(const Duration(seconds: 12));
             loadedNatively = true;
+            PlaybackEventLog.instance.add('load.native.ok',
+                {'gen': generation, 'ms': loadWatch.elapsedMilliseconds});
             _nativeSource = native;
             // The native playlist's identity: only while the loaded id window
             // contains what's playing do native seeks and index changes map
@@ -791,8 +890,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
             _loadedSongId = null;
           }
           return;
-        } catch (_) {
+        } catch (e) {
           loadedNatively = false; // fall back to the single-song load
+          PlaybackEventLog.instance.add('load.native.fail', {
+            'gen': generation,
+            'ms': loadWatch.elapsedMilliseconds,
+            'err': _errorTag(e),
+          });
         }
       }
       _nativeQueueActive = loadedNatively;
@@ -814,6 +918,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       if (!loadedNatively) {
         await _loadSingle(source, tag, startAt)
             .timeout(const Duration(seconds: 20));
+        PlaybackEventLog.instance.add('load.single.ok',
+            {'gen': generation, 'ms': loadWatch.elapsedMilliseconds});
       }
     } on PlayerInterruptedException {
       // A newer load aborted this one on purpose (the user picked another
@@ -829,6 +935,12 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         return; // superseded — the newer load owns the UI now
       if (_isAbortArtifact(e))
         return; // the media element refused a load it was already replacing
+      PlaybackEventLog.instance.add('load.fail', {
+        'gen': generation,
+        'ms': loadWatch.elapsedMilliseconds,
+        'err': _errorTag(e),
+        'mediaSession': AudioBackend.hasMediaSession,
+      });
       _isLoading = false;
       _isPlaying = false;
       _needsReload = true;
@@ -838,6 +950,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       notifyListeners();
       return;
     } finally {
+      if (generation == _loadGeneration) _loadWatchdog?.cancel();
       settle.complete();
     }
     if (generation != _loadGeneration)
@@ -886,6 +999,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           'Couldn\'t play "${song.title}". Check your connection and try again.';
     }
     notifyListeners();
+  }
+
+  /// Short, URL-free description of an error for the diagnostics log.
+  static String _errorTag(Object e) {
+    final msg = e.toString().replaceAll(RegExp(r'https?://\S+'), '<url>');
+    final trimmed = msg.length > 90 ? msg.substring(0, 90) : msg;
+    return '${e.runtimeType}: ${trimmed.replaceAll('\n', ' ')}';
   }
 
   /// `play()` that treats an interrupted request as what it is — the media
@@ -953,11 +1073,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
 
     int? nextIndex;
-    if (_shuffle && _queue.length > 1) {
-      do {
-        nextIndex = _random.nextInt(_queue.length);
-      } while (nextIndex == _queueIndex);
-    } else if (_queueIndex < _queue.length - 1) {
+    // Shuffle already reordered the queue itself, so "next" is simply the next
+    // entry — picking a random index here made "Up next" lie and left
+    // "previous" with nowhere sensible to go.
+    if (_queueIndex < _queue.length - 1) {
       nextIndex = _queueIndex + 1;
     } else if (_repeatMode == PlayerRepeatMode.all) {
       nextIndex = 0;
@@ -1143,12 +1262,16 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // always in the queue (the chaos harness caught a version that dropped
       // it after a shuffle toggle, leaving playback pointed at a song that no
       // longer existed in the list).
-      final remaining = <Song>[
-        for (var i = 0; i < _queue.length; i++)
-          if (i != _queueIndex) _queue[i],
-      ]..shuffle(_random);
-      _queue = [if (current != null) current, ...remaining];
-      _queueIndex = 0;
+      if (_queue.isNotEmpty && current != null && _queueIndex < _queue.length) {
+        // Keep what already played BEFORE the current song (so "previous"
+        // still goes back) and shuffle only what comes after it.
+        final before = _queue.sublist(0, _queueIndex);
+        final after = _queue.sublist(_queueIndex + 1)..shuffle(_random);
+        _queue = [...before, current, ...after];
+      } else {
+        _queue = List<Song>.of(_queue)..shuffle(_random);
+        _queueIndex = 0;
+      }
     } else {
       final saved = _preShuffleQueue;
       final currentId = current?.id;
@@ -1180,6 +1303,20 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // no gap or restart.
     unawaited(_relayNativeWindow().whenComplete(_syncNativeModes));
   }
+
+  /// The mirrored native playlist: Android/iOS notification prev/next, and on
+  /// desktop the load path that was proven to start audio on Windows (the
+  /// single-track path never produced an engine event in the 2.6.2 test
+  /// logs). The app queue stays the source of truth either way.
+  static bool get _supportsNativeQueue => !kIsWeb;
+
+  /// Replacing the media_kit player while a load is in flight can take the
+  /// whole process down on Windows ("Lost connection to device"), so the
+  /// stall watchdog only rebuilds the engine on mobile.
+  static bool get _watchdogMayRebuild =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   int _relayGeneration = 0;
 
@@ -1287,16 +1424,21 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   Future<void> _syncNativeModes() async {
     if (!_nativeQueueActive) return;
     try {
-      await _audioPlayer.setLoopMode(switch (_repeatMode) {
-        PlayerRepeatMode.off => LoopMode.off,
-        PlayerRepeatMode.all => LoopMode.all,
-        PlayerRepeatMode.one => LoopMode.one,
-      });
-      // Engine shuffle stays OFF always. The app shuffles its own queue (so
-      // "Up next" shows the real order) and _relayNativeWindow lays the native
-      // playlist out in that order; turning the engine's shuffle on as well
-      // made it play its OWN random order, which disagreed with "Up next".
-      await _audioPlayer.setShuffleModeEnabled(false);
+      // Bounded: an unanswered platform call here would otherwise hold the
+      // load chain (and every later load) forever.
+      await Future.wait<void>([
+        _audioPlayer.setLoopMode(switch (_repeatMode) {
+          PlayerRepeatMode.off => LoopMode.off,
+          PlayerRepeatMode.all => LoopMode.all,
+          PlayerRepeatMode.one => LoopMode.one,
+        }),
+        // Engine shuffle stays OFF always. The app shuffles its own queue (so
+        // "Up next" shows the real order) and _relayNativeWindow lays the
+        // native playlist out in that order; turning the engine's shuffle on
+        // as well made it play its OWN random order, which disagreed with
+        // "Up next".
+        _audioPlayer.setShuffleModeEnabled(false),
+      ]).timeout(const Duration(seconds: 5));
     } catch (_) {
       // Single-load path in use; nothing to mirror.
     }
@@ -1339,6 +1481,10 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       return;
     }
     if (_queueIndex == 0) {
+      if (_repeatMode == PlayerRepeatMode.all && _queue.length > 1) {
+        await _jumpTo(_queue.length - 1, startPlaying: true);
+        return;
+      }
       if (loadedForCurrent) await seekTo(Duration.zero);
       return;
     }
@@ -1643,6 +1789,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   @override
   void dispose() {
+    _loadWatchdog?.cancel();
+    _smoothSub?.cancel();
     _positionSub?.cancel();
     _playerStateSub?.cancel();
     _currentIndexSub?.cancel();

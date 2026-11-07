@@ -20,6 +20,11 @@ class DesktopLifecycle with WindowListener, TrayListener {
 
   static final DesktopLifecycle instance = DesktopLifecycle._();
 
+  /// True once the native title bar has been hidden; the shell then draws its
+  /// own bar (drag area + minimise/maximise/close) so the window looks like a
+  /// Windows 11 app instead of a default frame around a web-style page.
+  static final ValueNotifier<bool> customChrome = ValueNotifier<bool>(false);
+
   bool _initialized = false;
   bool _quitting = false;
   bool _trayAvailable = false;
@@ -58,6 +63,7 @@ class DesktopLifecycle with WindowListener, TrayListener {
           center: savedBounds == null,
           backgroundColor: const Color(0xFF0B0F14),
           title: 'Shuro',
+          titleBarStyle: TitleBarStyle.hidden,
         ),
         () async {
           // WindowOptions has no position in window_manager 0.5.x — set it
@@ -74,7 +80,15 @@ class DesktopLifecycle with WindowListener, TrayListener {
           await windowManager.focus();
         },
       );
-      _trayAvailable = await _installTray();
+      customChrome.value = true;
+      debugPrint('[desktop] custom title bar on');
+      try {
+        _trayAvailable = await _installTray();
+        debugPrint('[desktop] tray ready');
+      } catch (error) {
+        _trayAvailable = false;
+        debugPrint('[desktop] tray unavailable: $error');
+      }
       // Do not hide the only window unless the user has a real, reachable
       // tray entry to bring it back. This matters on Linux shells without a
       // StatusNotifier host.
@@ -82,7 +96,13 @@ class DesktopLifecycle with WindowListener, TrayListener {
     } catch (error) {
       // A desktop compositor or tray host may decline these optional desktop
       // integrations.  The music player itself must still start and play.
-      debugPrint('Desktop lifecycle setup unavailable: $error');
+      debugPrint('[desktop] setup failed: $error');
+      // The native title bar may already be hidden by now; without our own
+      // bar the window could not be dragged, minimised or closed.
+      try {
+        await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      } catch (_) {}
+      customChrome.value = true;
     }
   }
 
@@ -127,9 +147,12 @@ class DesktopLifecycle with WindowListener, TrayListener {
     // the tray on every real install. Resolve the bundled asset absolutely
     // from the executable instead.
     final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final sep = Platform.pathSeparator;
+    final assets = '$exeDir${sep}data${sep}flutter_assets$sep';
     final iconPath = defaultTargetPlatform == TargetPlatform.windows
-        ? '$exeDir/data/flutter_assets/windows/runner/resources/app_icon.ico'
-        : '$exeDir/data/flutter_assets/_assets/icon_512.png';
+        ? '${assets}windows${sep}runner${sep}resources${sep}app_icon.ico'
+        : '${assets}_assets${sep}icon_512.png';
+    debugPrint('[desktop] tray icon $iconPath exists=${File(iconPath).existsSync()}');
     await trayManager.setIcon(iconPath);
     await trayManager.setToolTip('Shuro');
     await trayManager.setContextMenu(

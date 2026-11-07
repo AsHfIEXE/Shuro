@@ -12,12 +12,16 @@ import '../theme/desktop_tokens.dart';
 /// phones. "See all" is brand violet with a chevron.
 class SectionHeader extends StatelessWidget {
   final String title;
+
+  /// Small uppercase line above the title (the Home board's "JUMP BACK IN").
+  final String? eyebrow;
   final VoidCallback? onSeeAll;
   final EdgeInsetsGeometry padding;
 
   const SectionHeader({
     super.key,
     required this.title,
+    this.eyebrow,
     this.onSeeAll,
     this.padding = const EdgeInsets.fromLTRB(20, 0, 20, 12),
   });
@@ -37,11 +41,25 @@ class SectionHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: titleStyle,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (eyebrow != null) ...[
+                  Text(eyebrow!,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kStatusText,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.4)),
+                  const SizedBox(height: 4),
+                ],
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+              ],
             ),
           ),
           if (onSeeAll != null)

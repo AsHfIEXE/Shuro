@@ -17,6 +17,7 @@ import '../../widgets/smooth_position_builder.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
 import 'now_playing_screen.dart';
+import '../../widgets/click_region.dart';
 
 /// "10. Queue" / the Queue panel board — a NOW PLAYING card up top (52 px
 /// ring artwork with live progress, title/artist, prev / play / next
@@ -93,13 +94,17 @@ class QueueScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: upNext.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 24),
+                      ? Align(
+                          // Expanded gives tight width, so a bare Text sat at
+                          // x=0 against the screen edge.
+                          alignment: Alignment.topCenter,
+                          child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
                           child: Text('Nothing queued after this',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.getFont(currentFontFamily,
                                   color: kMutedTextColor, fontSize: 13)),
-                        )
+                        ))
                       : ReorderableListView.builder(
                           padding: const EdgeInsets.only(bottom: 24),
                           itemCount: upNext.length,
@@ -181,7 +186,7 @@ class _NowPlayingCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            GestureDetector(
+            ClickRegion(
               onTap: () =>
                   pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
               child: SmoothPositionBuilder(

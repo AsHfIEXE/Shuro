@@ -73,6 +73,7 @@ class AppState extends ChangeNotifier {
   static const _kFavAlbumsKey = 'fav_albums_v1';
   static const _kFavArtistsKey = 'fav_artists_v1';
   static const _kHistoryKey = 'listening_history_v1';
+  static const _kPlayLogKey = 'play_log_v1';
   static const _kAffinityKey = 'artist_affinity_v1';
   static const _kPlaylistsKey = 'playlists_v1';
   static const _kPlaylistCoversKey = 'playlist_covers_v1';
@@ -140,6 +141,7 @@ class AppState extends ChangeNotifier {
       favoriteArtistIds.addAll(persistence.getStringList(_kFavArtistsKey));
 
       listeningHistory.addAll(persistence.getStringList(_kHistoryKey));
+      playLog.addAll(persistence.getStringList(_kPlayLogKey));
       final affinityJson = persistence.getString(_kAffinityKey);
       if (affinityJson != null) {
         try {
@@ -508,6 +510,7 @@ class AppState extends ChangeNotifier {
     if (p == null) return;
     await Future.wait([
       p.setStringList(_kHistoryKey, listeningHistory),
+      p.setStringList(_kPlayLogKey, playLog),
       p.setString(_kAffinityKey, jsonEncode(artistAffinity)),
     ]);
   }
@@ -629,6 +632,7 @@ class AppState extends ChangeNotifier {
   // guessing the slower/capped one while connectivity_plus is still
   // starting up.
   bool _isOnWifi = true;
+  bool get isOnWifi => _isOnWifi;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   Future<void> _initConnectivity() async {
@@ -1196,6 +1200,28 @@ class AppState extends ChangeNotifier {
   final List<String> listeningHistory = [];
   static const int _listeningHistoryCap = 40;
 
+  /// Timestamped plays, oldest first, each `"<epochMs>|<songId>"`. Feeds the
+  /// Shuro Pulse period chips, day chart and streak. [listeningHistory] stays
+  /// the short recency list the recommendations use.
+  final List<String> playLog = [];
+  static const int _playLogCap = 4000;
+
+  /// Decoded [playLog]: (time, songId) pairs.
+  List<({DateTime at, String songId})> get plays {
+    final out = <({DateTime at, String songId})>[];
+    for (final raw in playLog) {
+      final bar = raw.indexOf('|');
+      if (bar <= 0) continue;
+      final ms = int.tryParse(raw.substring(0, bar));
+      if (ms == null) continue;
+      out.add((
+        at: DateTime.fromMillisecondsSinceEpoch(ms),
+        songId: raw.substring(bar + 1)
+      ));
+    }
+    return out;
+  }
+
   /// Session-only privacy switch. It is deliberately not serialized: every
   /// launch starts in the explicit, predictable non-private mode.
   bool privateListening = false;
@@ -1212,6 +1238,10 @@ class AppState extends ChangeNotifier {
 
   void recordPlay(String songId) {
     if (privateListening) return;
+    playLog.add('${DateTime.now().millisecondsSinceEpoch}|$songId');
+    if (playLog.length > _playLogCap) {
+      playLog.removeRange(0, playLog.length - _playLogCap);
+    }
     listeningHistory.remove(songId);
     listeningHistory.insert(0, songId);
     if (listeningHistory.length > _listeningHistoryCap) {

@@ -29,6 +29,7 @@ import '../../widgets/download_cards.dart';
 import 'personal_shelves_screen.dart';
 import '../playlist/create_playlist_screen.dart';
 import '../playlist/playlist_detail_screen.dart';
+import '../../widgets/click_region.dart';
 
 enum _SongSort { titleAz, artistAz, recentlyAdded }
 
@@ -750,7 +751,7 @@ class _GenresTab extends StatelessWidget {
         final gradient = _gradients[i % _gradients.length];
         return MouseRegion(
           cursor: SystemMouseCursors.click,
-          child: GestureDetector(
+          child: ClickRegion(
           onTap: () => Navigator.of(context)
               .push(drillDownRoute(_GenreSongsScreen(genre: genre))),
           child: Container(

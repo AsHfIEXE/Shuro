@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import 'command_palette.dart';
 import '../services/desktop_lifecycle.dart';
 
@@ -24,9 +25,7 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
 import 'app_logo.dart';
-import 'artwork_ring.dart';
 import 'playlist_collage_art.dart';
-import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
 import 'shuro_icons.dart';
 
@@ -81,16 +80,33 @@ class _DesktopShellState extends State<DesktopShell> {
     if (nav == null) return;
     final name = page.runtimeType.toString();
     if (_topPage == name) return; // already showing it — never stack copies
-    _topPage = name;
-    nav.push(drillDownRoute(page)).whenComplete(() => _topPage = null);
+    setState(() => _topPage = name);
+    nav.push(drillDownRoute(page)).whenComplete(() {
+      if (!mounted) return;
+      // Only clear it if no newer page replaced this one while it was open.
+      if (_topPage == name) setState(() => _topPage = null);
+    });
   }
+
+  /// Header title: the pushed page's own name while one is open (the header
+  /// used to keep saying "Favorites" above Settings), else the active tab.
+  String get _headerLabel => switch (_topPage) {
+        'SettingsScreen' => 'Settings',
+        'DownloadsScreen' => 'Downloads',
+        'PersonalShelvesScreen' => 'Personal shelves',
+        'SpokenLibraryScreen' => 'Books & podcasts',
+        'PlaylistDetailScreen' => 'Playlist',
+        'LyricsScreen' => 'Lyrics',
+        'QueueScreen' => 'Queue',
+        _ => _tabs[widget.currentIndex].$2,
+      };
 
   /// Sidebar and header navigation: switch the tab AND leave any pushed page
   /// (Settings, Books & podcasts, an album...). Clicking a destination while
   /// on a pushed page used to switch the tab underneath invisibly, so the
   /// click appeared dead.
   void _goToTab(int index) {
-    _topPage = null;
+    if (_topPage != null) setState(() => _topPage = null);
     _contentNav?.popUntil((route) => route.isFirst);
     widget.onSelectTab(index);
   }
@@ -272,6 +288,11 @@ class _DesktopShellState extends State<DesktopShell> {
             bottom: false,
             child: Column(
               children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: DesktopLifecycle.customChrome,
+                  builder: (context, custom, _) =>
+                      custom ? const _WindowTitleBar() : const SizedBox.shrink(),
+                ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -282,7 +303,10 @@ class _DesktopShellState extends State<DesktopShell> {
                         children: [
                           _DesktopSidebar(
                             collapsed: _sidebarCollapsed,
-                            currentIndex: widget.currentIndex,
+                            // A pushed page (Settings, Lyrics, Queue...)
+                            // owns the content area, so no tab is lit.
+                            currentIndex:
+                                _topPage == null ? widget.currentIndex : -1,
                             tabs: _tabs,
                             onCollapse: _toggleSidebar,
                             onSelect: _goToTab,
@@ -298,7 +322,7 @@ class _DesktopShellState extends State<DesktopShell> {
                             child: Column(
                               children: [
                                 _DesktopHeader(
-                                  label: _tabs[widget.currentIndex].$2,
+                                  label: _headerLabel,
                                   lyricsOpen: _lyricsOpen,
                                   sidebarCollapsed: _sidebarCollapsed,
                                   onSearch: () => _goToTab(2),
@@ -356,6 +380,164 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 }
 
+/// App-drawn title bar (Windows/Linux): drag to move, double-click to
+/// maximise, and minimise / maximise / close on the right. Close goes through
+/// the window manager so the hide-to-tray behaviour still applies.
+class _WindowTitleBar extends StatefulWidget {
+  const _WindowTitleBar();
+
+  @override
+  State<_WindowTitleBar> createState() => _WindowTitleBarState();
+}
+
+class _WindowTitleBarState extends State<_WindowTitleBar> with WindowListener {
+  bool _maximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    windowManager.isMaximized().then((v) {
+      if (mounted) setState(() => _maximized = v);
+    }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() => setState(() => _maximized = true);
+
+  @override
+  void onWindowUnmaximize() => setState(() => _maximized = false);
+
+  Future<void> _toggleMaximize() async {
+    try {
+      if (_maximized) {
+        await windowManager.unmaximize();
+      } else {
+        await windowManager.maximize();
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 36,
+      color: kSidebarColor,
+      child: Row(
+        children: [
+          Expanded(
+            // DragToMoveArea already handles drag-to-move and double-click
+            // to maximise; a second GestureDetector around it fought for
+            // the same pointer and could swallow the drag.
+            child: DragToMoveArea(
+              child: Container(
+                height: 36,
+                color: Colors.transparent,
+                padding: const EdgeInsets.only(left: 14),
+                child: Row(
+                  children: [
+                    const AppLogo(size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Shuro',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: kMuted2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _CaptionButton(
+            tooltip: 'Minimise',
+            icon: Icons.remove_rounded,
+            onPressed: () async {
+              try {
+                await windowManager.minimize();
+              } catch (_) {}
+            },
+          ),
+          _CaptionButton(
+            tooltip: _maximized ? 'Restore' : 'Maximise',
+            icon: _maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+            iconSize: _maximized ? 13 : 15,
+            onPressed: _toggleMaximize,
+          ),
+          _CaptionButton(
+            tooltip: 'Close',
+            icon: Icons.close_rounded,
+            hoverColor: const Color(0xFFE81123),
+            onPressed: () async {
+              try {
+                await windowManager.close();
+              } catch (_) {}
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CaptionButton extends StatefulWidget {
+  const _CaptionButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.iconSize = 16,
+    this.hoverColor,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final double iconSize;
+  final Color? hoverColor;
+  final VoidCallback onPressed;
+
+  @override
+  State<_CaptionButton> createState() => _CaptionButtonState();
+}
+
+class _CaptionButtonState extends State<_CaptionButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: MouseRegion(cursor: SystemMouseCursors.click, child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: Container(
+            width: 46,
+            height: 36,
+            alignment: Alignment.center,
+            color: _hover
+                ? (widget.hoverColor ?? Colors.white.withValues(alpha: 0.08))
+                : Colors.transparent,
+            child: Icon(widget.icon,
+                size: widget.iconSize,
+                color: _hover && widget.hoverColor != null
+                    ? Colors.white
+                    : kNavText),
+          ),
+        )),
+      ),
+    );
+  }
+}
+
 class _DesktopSidebar extends StatelessWidget {
   final bool collapsed;
   final int currentIndex;
@@ -398,6 +580,16 @@ class _DesktopSidebar extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
           child: Column(
             children: [
+              // Everything above the pinned Collapse/Settings pair scrolls
+              // when the window is short (it overflowed by 40 px at ~700 px
+              // tall, with the playlist list squeezed to nothing).
+              Expanded(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context)
+                      .copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
               Padding(
                 padding: const EdgeInsets.only(left: 6, right: 6, bottom: 6),
                 child: Row(
@@ -442,7 +634,7 @@ class _DesktopSidebar extends StatelessWidget {
                 ),
               if (!collapsed)
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
+                  padding: EdgeInsets.fromLTRB(12, 14, 10, 8),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: _SidebarSectionLabel('YOUR MUSIC'),
@@ -457,7 +649,7 @@ class _DesktopSidebar extends StatelessWidget {
                 onTap: () => onSelect(index),
               ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               child: Container(height: 1, color: kHairline),
             ),
             _RailItem(
@@ -482,17 +674,19 @@ class _DesktopSidebar extends StatelessWidget {
             ),
             if (!collapsed) ...[
               const Padding(
-                padding: EdgeInsets.fromLTRB(10, 14, 10, 4),
+                padding: EdgeInsets.fromLTRB(12, 18, 4, 8),
                 child: _SidebarPlaylistsHeader(),
               ),
-              Expanded(
-                child: _SidebarPlaylists(
-                  appState: appState,
-                  onOpen: onOpenPlaylist,
+              _SidebarPlaylists(
+                appState: appState,
+                onOpen: onOpenPlaylist,
+              ),
+            ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ] else
-              const Spacer(),
             _RailItem(
               icon: collapsed
                   ? Icons.keyboard_double_arrow_right_rounded
@@ -686,13 +880,16 @@ class _SidebarPlaylists extends StatelessWidget {
     final playlists = appState.playlists;
     if (playlists.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+        padding: const EdgeInsets.fromLTRB(12, 8, 10, 4),
         child: Text('Playlists you create appear here.',
             style: GoogleFonts.getFont(
                 currentFontFamily, fontSize: 12, color: kMuted2)),
       );
     }
     return ListView.builder(
+      // Sized to its rows: the sidebar scrolls as one unit (see the sidebar).
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: playlists.length,
       itemBuilder: (context, index) {
@@ -706,15 +903,19 @@ class _SidebarPlaylists extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               hoverColor: Colors.white.withValues(alpha: 0.06),
               child: SizedBox(
-                height: 36,
-                child: Row(
+                height: 38,
+                // 11 px in so the 22 px swatch shares its centre line with the
+                // 20 px nav icons above (both at 22 px from the item edge).
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 11, right: 8),
+                  child: Row(
                   children: [
                     SizedBox(
                       width: 22,
                       height: 22,
                       child: PlaylistCollageArt(playlist: playlist, radius: 6),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 11),
                     Expanded(
                       child: Text(
                         playlist.name,
@@ -727,6 +928,7 @@ class _SidebarPlaylists extends StatelessWidget {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
             ),
@@ -790,38 +992,58 @@ class _RailItem extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Row(
+                    // Positioned.fill: a bare Row in a Stack is top-aligned
+                    // (icon and label sat at the top of the 40 px row).
+                    Positioned.fill(
+                        child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       mainAxisAlignment: collapsed
                           ? MainAxisAlignment.center
                           : MainAxisAlignment.start,
                       children: [
                         SizedBox(
-                          width: collapsed ? null : 44,
-                          child: Icon(
-                            icon,
-                            size: 20,
-                            color: selected ? kBrandColor : color,
+                          width: collapsed ? 24 : 44,
+                          height: 40,
+                          child: Center(
+                            child: Icon(
+                              icon,
+                              size: 20,
+                              color: selected ? kBrandColor : color,
+                            ),
                           ),
                         ),
                         if (!collapsed)
                           Expanded(
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.getFont(
-                                currentFontFamily,
-                                fontSize: 14,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                                color: color,
+                            child: SizedBox(
+                              height: 40,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  // Even leading puts the glyphs on the same
+                                  // centre line as the 20 px icon.
+                                  textHeightBehavior: const TextHeightBehavior(
+                                    leadingDistribution:
+                                        TextLeadingDistribution.even,
+                                  ),
+                                  style: GoogleFonts.getFont(
+                                    currentFontFamily,
+                                    fontSize: 14,
+                                    height: 1.2,
+                                    fontWeight: selected
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: color,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         if (!collapsed) const SizedBox(width: 12),
                       ],
-                    ),
+                    )),
                   ],
                 ),
               ),
@@ -1139,6 +1361,30 @@ class _PlayerDock extends StatefulWidget {
   State<_PlayerDock> createState() => _PlayerDockState();
 }
 
+/// Gradient + note placeholder for the dock's square cover.
+class _DockArtFallback extends StatelessWidget {
+  const _DockArtFallback({required this.song});
+  final Song song;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: song.gradientColors.length > 1
+              ? song.gradientColors
+              : [kAccentColor, kBrandColor],
+        ),
+      ),
+      child: const Center(
+        child: Icon(Icons.music_note_rounded, color: Colors.white70, size: 24),
+      ),
+    );
+  }
+}
+
 class _PlayerDockState extends State<_PlayerDock> {
   @override
   Widget build(BuildContext context) {
@@ -1177,21 +1423,26 @@ class _PlayerDockState extends State<_PlayerDock> {
                       Semantics(
                         button: true,
                         label: 'Open now playing',
-                        child: SmoothPositionBuilder(
-                          builder: (context, player, position, progress) =>
-                              InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              drillDownRoute(NowPlayingScreen(initialSong: song)),
-                            ),
-                            customBorder: const OvalBorder(),
-                            child: ArtworkRing(
-                              song: song,
-                              progress: progress,
-                              buffered: player.bufferedFraction,
-                              colors: song.gradientColors,
-                              size: 52,
-                              strokeWidth: NpvMetrics.ringStrokeMini,
-                              knobSize: NpvMetrics.knobMini,
+                        child: InkWell(
+                          onTap: () => Navigator.of(context).push(
+                            drillDownRoute(NowPlayingScreen(initialSong: song)),
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          // Square cover (the ring + scrubbing live on Now
+                          // Playing; the dock's seek bar is the scrubber).
+                          child: SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: song.artwork != null
+                                  ? Image(
+                                      image: song.artwork!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _DockArtFallback(song: song),
+                                    )
+                                  : _DockArtFallback(song: song),
                             ),
                           ),
                         ),

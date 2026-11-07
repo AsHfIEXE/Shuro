@@ -24,6 +24,7 @@ import 'lyrics_edit_sheet.dart';
 import 'lyrics_appearance_sheet.dart';
 import '../../services/lrc_tools.dart';
 import '../../services/lyrics_prefetch.dart';
+import '../../widgets/click_region.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
 /// point: the screen follows [PlayerController.currentSong] from then on, so
@@ -152,6 +153,26 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// the inline offset bar (the bar is hidden until asked for).
   bool _showSyncPane = false;
 
+  /// Last appearance values seen, so a change to text size or alignment can
+  /// re-centre the sung line: wrapping changes every line's height, and the
+  /// old scroll offset would otherwise leave the current line off screen.
+  double? _seenScale;
+  bool? _seenCentre;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final a = Provider.of<AppearanceSettings>(context);
+    final changed = _seenScale != null &&
+        (_seenScale != a.lyricsFontScale || _seenCentre != a.lyricsAlignCenter);
+    _seenScale = a.lyricsFontScale;
+    _seenCentre = a.lyricsAlignCenter;
+    if (changed) {
+      _lastAutoScrolledLine = -1;
+      _autoScrollTo(_currentLine.value);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -206,6 +227,27 @@ class _LyricsScreenState extends State<LyricsScreen> {
     return buffer.toString();
   }
 
+  /// What the warm caches already know about [song], or null. Lets the first
+  /// frame show real lyrics (the prefetcher warms current + next) rather than
+  /// the skeleton, then the full lookup (which also honours saved edits)
+  /// settles on top.
+  _LyricsView? _peek(Song song) {
+    final embedded = EmbeddedLyricsCache.peek(song.id);
+    if (embedded != null && embedded.lines.isNotEmpty) {
+      return _LyricsView.found(embedded);
+    }
+    final album = _appState.albumById(song.albumId)?.title;
+    final hit = LyricsService.peek(
+        title: song.title,
+        artist: song.artist,
+        album: album,
+        duration: song.duration);
+    if (hit == null) return null;
+    return hit.isFound
+        ? _LyricsView.found(hit.track!)
+        : _LyricsView.miss(hit.failure, detail: hit.detail);
+  }
+
   void _startLoad(Song song) {
     final future = _load(song);
     _future = future;
@@ -236,12 +278,25 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// the same path: their tags (filled by the local tag enrichment) are real
   /// metadata, so a tagged import gets LRCLIB too, and an untagged one simply
   /// ends at the not-found state.
-  Future<_LyricsView> _load(Song song) async {
+  Future<_LyricsView> _load(Song song) {
+    // Never let the skeleton spin forever: a stalled server call or storage
+    // read turns into the "couldn't reach" state with a Retry button.
+    return _loadInner(song).timeout(
+      const Duration(seconds: 25),
+      onTimeout: () => _LyricsView.miss(LyricsFailureKind.network,
+          detail: 'The lyrics lookup timed out. Try again.'),
+    );
+  }
+
+  Future<_LyricsView> _loadInner(Song song) async {
     // A saved on-device edit always wins (roadmap #21): the user chose these
     // words, so neither the server's tags nor LRCLIB may override them.
     try {
-      final store = await _appState.lyricsEditStore();
-      final edited = await store.load(song.id);
+      final store = await _appState
+          .lyricsEditStore()
+          .timeout(const Duration(seconds: 4));
+      final edited =
+          await store.load(song.id).timeout(const Duration(seconds: 4));
       if (edited != null && edited.trim().isNotEmpty) {
         return _LyricsView.found(LrcTools.parse(edited));
       }
@@ -254,7 +309,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
       // (it warms the current and next song on every change), this is a hit
       // and the screen renders without waiting on the network at all.
       final embedded = await EmbeddedLyricsCache.fetch(
-          song.id, () => _appState.fetchEmbeddedLyrics(song));
+              song.id, () => _appState.fetchEmbeddedLyrics(song))
+          .timeout(const Duration(seconds: 8), onTimeout: () => null);
       if (embedded != null && embedded.lines.isNotEmpty) {
         return _LyricsView.found(embedded);
       }
@@ -441,16 +497,10 @@ class _LyricsScreenState extends State<LyricsScreen> {
       // lyrics) rather than showing this song's title over the last song's
       // words for a frame.
       _resetFor(live);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _song?.id != live.id) return;
-        _startLoad(live);
-        setState(() {});
-      });
-      return _shell(
-        accent: live.gradientColors.last,
-        song: live,
-        child: const _LoadingSkeleton(),
-      );
+      // Start the lookup right now (it only assigns _future; the setState
+      // happens when it lands) so a warmed cache paints on this very frame
+      // instead of after a skeleton round-trip.
+      _startLoad(live);
     }
 
     return ArtworkPaletteBuilder(
@@ -464,10 +514,13 @@ class _LyricsScreenState extends State<LyricsScreen> {
         child: FutureBuilder<_LyricsView>(
           future: _future,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
+            final done = snapshot.connectionState == ConnectionState.done;
+            // Until the full lookup settles, show whatever the warm caches
+            // already hold (never the previous song's data).
+            final result = done ? snapshot.data : _peek(live);
+            if (!done && result == null) {
               return const _LoadingSkeleton();
             }
-            final result = snapshot.data;
             if (result == null || !result.hasTrack) {
               final fallback =
                   widget.embedded && widget.embeddedFallback != null
@@ -501,15 +554,14 @@ class _LyricsScreenState extends State<LyricsScreen> {
       case LyricsFailureKind.instrumental:
         return _Message(
           icon: Icons.piano_rounded,
-          message: detail ?? 'This track is instrumental.',
-          caption: 'Nothing to display for a track with no lead vocals.',
+          message: 'Instrumental',
+          caption: 'This track has no words. Enjoy the music.',
         );
       case LyricsFailureKind.rateLimited:
         return _Message(
           icon: Icons.hourglass_bottom_rounded,
-          message: 'Lyrics lookup is temporarily rate-limited.',
-          caption: detail ??
-              'LRCLIB asked this app to slow down — try again in a minute.',
+          message: 'Lyrics lookup is paused',
+          caption: 'Too many requests. Showing saved lyrics where we have them.',
           onRetry: _retry,
         );
       case LyricsFailureKind.rejected:
@@ -529,9 +581,12 @@ class _LyricsScreenState extends State<LyricsScreen> {
       case LyricsFailureKind.notFound:
         return _Message(
           icon: Icons.search_off_rounded,
-          message: 'No lyrics found for this track.',
-          caption: detail ?? 'LRCLIB has no match for this title and artist.',
+          message: 'No lyrics for this song',
+          caption: 'Search again, import an .lrc file, or write your own.',
           onRetry: _retry,
+          retryLabel: 'Search again',
+          secondaryLabel: 'Add lyrics',
+          onSecondary: _openLyricsEditor,
         );
       case null:
         // Local import, or no track at all: [detail] explains which.
@@ -1129,35 +1184,49 @@ class _EmbeddedPaneHeader extends StatelessWidget {
         : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 16, 4),
-      // FittedBox: at 740x360 the row measured 5.4 dp over; scale down
-      // gracefully instead of throwing.
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
+      // The label group scales down when the pane is narrow; the tools pill
+      // stays pinned right with a real gap. (The old single FittedBox around
+      // the whole row made the Spacer collapse, so the pill sat on top of the
+      // "LYRICS" label.)
+      child: Row(
         children: [
-          Text('LYRICS',
-              style: GoogleFonts.getFont(currentFontFamily,
-                  color: kMuted2,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.4)),
-          if (track?.hasRealWordSync ?? false) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: kGreen.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('LYRICS',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMuted2,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.4)),
+                    if (track?.hasRealWordSync ?? false) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: kGreen.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text('Word-synced',
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kGreen,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              child: Text('Word-synced',
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kGreen,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700)),
             ),
-          ],
-          const Spacer(),
+          ),
+          const SizedBox(width: 12),
           // Tools pill: the redesign's compact controls for this column. No
           // translate control - the feature does not exist, and a dead
           // button is worse than no button.
@@ -1211,7 +1280,6 @@ class _EmbeddedPaneHeader extends StatelessWidget {
             ),
           ),
         ],
-        ),
       ),
     );
   }
@@ -1437,6 +1505,13 @@ class _SkeletonBars extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (!compact)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Looking for synced lyrics…',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white54, fontSize: 12)),
+                ),
             ],
           ),
         );
@@ -1488,11 +1563,23 @@ class _Message extends StatelessWidget {
   final String message;
   final String? caption;
   final VoidCallback? onRetry;
-  const _Message(
-      {required this.icon, required this.message, this.caption, this.onRetry});
+  final String retryLabel;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+  const _Message({
+    required this.icon,
+    required this.message,
+    this.caption,
+    this.onRetry,
+    this.retryLabel = 'Try again',
+    this.secondaryLabel,
+    this.onSecondary,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = GoogleFonts.getFont(currentFontFamily,
+        fontSize: 13, fontWeight: FontWeight.w600);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 36),
@@ -1515,16 +1602,30 @@ class _Message extends StatelessWidget {
                   style: GoogleFonts.getFont(currentFontFamily,
                       color: Colors.white60, fontSize: 12, height: 1.5)),
             ],
-            if (onRetry != null) ...[
+            if (onRetry != null || onSecondary != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: onRetry,
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: kDividerColor)),
-                child: Text('Try again',
-                    style: GoogleFonts.getFont(currentFontFamily,
-                        fontSize: 13, fontWeight: FontWeight.w600)),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  if (onRetry != null)
+                    OutlinedButton(
+                      onPressed: onRetry,
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: kDividerColor)),
+                      child: Text(retryLabel, style: labelStyle),
+                    ),
+                  if (onSecondary != null && secondaryLabel != null)
+                    FilledButton(
+                      onPressed: onSecondary,
+                      style: FilledButton.styleFrom(
+                          backgroundColor: kBrandColor,
+                          foregroundColor: Colors.white),
+                      child: Text(secondaryLabel!, style: labelStyle),
+                    ),
+                ],
               ),
             ],
           ],
@@ -1615,7 +1716,7 @@ class MiniTransportBar extends StatelessWidget {
           Semantics(
             button: true,
             label: isActive && player.isPlaying ? 'Pause' : 'Play',
-            child: GestureDetector(
+            child: ClickRegion(
               onTap: () => (isActive && player.currentSong?.id == song.id)
                   ? player.togglePlayPause()
                   : player.playSong(song),

@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/album.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
-import 'focus_ring.dart';
 import 'album_actions_sheet.dart';
 import 'desktop_context_menu.dart';
 import 'artwork_thumb.dart';
@@ -23,9 +22,7 @@ class AlbumCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ContextMenuRegion(
       items: albumContextMenuItems(context, album),
-      child: FocusRing(
-        radius: BorderRadius.circular(14),
-        child: Material(
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -72,7 +69,6 @@ class AlbumCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
       ),
     ),
     );

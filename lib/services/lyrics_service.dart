@@ -340,6 +340,16 @@ class LyricsService {
     return Duration(milliseconds: (seconds * 1000).round());
   }
 
+  /// The settled result for this track if one is already cached, else null.
+  /// Synchronous, so a screen can paint lyrics on its first frame.
+  static LyricsLookupResult? peek({
+    required String title,
+    required String artist,
+    String? album,
+    required Duration duration,
+  }) =>
+      _cache[_cacheKey(title: title, artist: artist, album: album, duration: duration)];
+
   static String _cacheKey({required String title, required String artist, String? album, required Duration duration}) =>
       '${title.toLowerCase()}|${artist.toLowerCase()}|${(album ?? '').toLowerCase()}|${duration.inSeconds}';
 

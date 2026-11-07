@@ -1,3 +1,42 @@
+## 2.6.2
+- Lyrics states match the board: No lyrics (Search again / Add lyrics), Instrumental, Lookup paused, and the 'Looking for synced lyrics…' loading caption.
+- Hand cursor over every custom tappable (new ClickRegion), title bar drag fixed (nested double-tap handler removed), custom title bar always shown on desktop, tray setup logged and no longer shares a failure with the title bar.
+- Lyrics paint on the first frame from the warm caches when the song changes (no skeleton round-trip).
+- Sidebar rail icon and label share one centre line.
+- Onboarding Sound step no longer throws an infinite-height layout error (preset cards now size to the tallest card).
+- Lyrics lookup can no longer sit on the loading skeleton forever: stalled lookups time out into a Retry state.
+- Desktop header reads Lyrics/Queue on those pages and no sidebar tab stays lit while a page is open over the content.
+
+- Shuro Pulse: fixed the layout crash (infinite height in the stats card) that left the tab blank. New board layout: Week/Month/Year/All-time chips, four stat cards with real deltas vs the previous period, listening time by day (bars grow in, hover tooltip), top artists with animated bars, and mixes. Backed by a new timestamped play log.
+- Windows playback: reverted desktop to the native-queue load path (the single-track path never started audio in test logs) and stopped the stall watchdog from disposing the media_kit player, which could kill the process.
+- Home: "JUMP BACK IN" eyebrow over Recently played. Onboarding server step now has a Scaffold (white background and yellow underlines on web).
+- Sidebar: icon and label in each row are now vertically centred (the Row was top-aligned inside the 40 px item).
+
+- Song cache (Settings → Cache): plays are kept on the device (with the next songs in the queue) so replays and skips start instantly; Wi-Fi-only toggle, size limit (256 MB–5 GB), used-space readout, clear button. Least recently played songs are evicted first. Downloads are untouched.
+- Lyrics: the landscape/desktop pane now follows the Left/Centre choice, and the sung line is re-centred when text size or alignment changes.
+- Settings (desktop): the Behaviour section no longer leaks into the page header (label spelling mismatch); header title shows the open page instead of the previous tab.
+
+- Queue: the empty "Nothing queued after this" message is centred instead of sitting on the screen edge.
+
+- Home (phone): hero discs are smaller and pushed to the corners so they no longer sit under the copy and buttons.
+
+- Onboarding: fixed the "No Material widget found" crash on the web welcome gate (text fields now sit in a transparent Material).
+
+- Playback: engine watchdog. A load that produces no engine event for 9 s (stuck platform player after sleep or a dead media session) now rebuilds the audio engine and retries once, so skip/prev/play never stay frozen.
+- Playback: shuffle keeps already-played songs before the current one (so Previous still goes back) and shuffles only what follows; "next" follows the shuffled queue instead of picking a random index. Previous at the start of a repeat-all queue wraps to the last song.
+- Playback: after launch, a server that is still reconnecting gets up to 6 s before "no audio source is available" is reported.
+- Desktop: plays one track at a time from the app queue (no mirrored native playlist).
+- Desktop: custom title bar (drag, double-click maximise, minimise/maximise/close with hide-to-tray); dock shows a square album cover instead of the ring.
+- Sidebar: consistent section label and playlist alignment/spacing; the sidebar now scrolls as one unit on short windows instead of overflowing.
+- Lyrics: tools pill no longer overlaps the LYRICS label; appearance sheet is a compact scrollable card with Reset to defaults.
+- Android: inline lyric preview restored on Now Playing.
+- Performance: the drifting mesh backdrop is static on phones (it repainted full-screen gradients every frame) and runs in its own repaint layer on desktop.
+
+- Playback: fixed loads that never start on Android when the media-session init fails or is slow. `JustAudioBackground.init` swaps the audio platform before it waits for the service, so the old "continue without media controls" path left a dead platform in place and every load hung with no engine state. New `AudioBackend` restores the plain engine on failure or after 25 s, and loads wait for it.
+- Playback: a stuck previous load no longer blocks later ones (8 s bound), native mode sync is bounded (5 s), native-queue load cap is 12 s before the single-song fallback.
+- Diagnostics: new events `load.native.ok/fail`, `load.single.ok`, `load.fail` (URL-free error tag, timing, media-session flag) and `backend.ready/fallback`.
+- Android: POST_NOTIFICATIONS declared.
+
 # Changelog
 
 All notable changes to **Shuro** — a Flutter music player for self-hosted
@@ -6,24 +45,6 @@ playback, synced lyrics, and real offline downloads.
 
 Format: Keep a Changelog. Everything below was built and verified together in
 the current source tree (analyzer: 0 errors · tests: 113/113 passing).
-
----
-
-## [2.6.2] - 2026-11-06
-
-A11y + layout acceptance pass (the handoff's phase 7).
-
-- **Focus rings**: album/artist/playlist cards join focus traversal with the
-  spec 2px violet ring drawn 2px outside the card - paint-only, no layout
-  shift.
-- **Contrast**: the Now Playing keyboard-hint line raised from white 45%
-  (~4.3:1) to 55% (~5.5:1), meeting the >= 4.5:1 AA bar.
-- **Layout acceptance tests**: Home, Library, Search, Favorites and
-  Downloads are now pumped at 1440x900, 1024, 390x844 and 360 - the
-  handoff's exact acceptance sizes - failing on any overflow.
-- **Fixes the sweep caught**: Downloads storage headline ellipsizes instead
-  of overflowing the side card; the Home empty-state action row and the
-  Favorites tab pills wrap on narrow screens.
 
 ---
 

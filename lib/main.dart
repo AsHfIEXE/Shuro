@@ -7,6 +7,7 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:provider/provider.dart';
 import 'app_info.dart';
+import 'playback/audio_backend.dart';
 import 'backend/subsonic_api.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/artist_artwork_service.dart';
@@ -113,29 +114,20 @@ Future<void> main() async {
   final bool hasMediaSession = !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
-  try {
-    if (hasMediaSession) {
-      await JustAudioBackground.init(
+  if (hasMediaSession) {
+    // AudioBackend restores the plain just_audio platform if the media
+    // session fails or never answers, so playback keeps working either way.
+    await AudioBackend.start(
+      initMediaSession: () => JustAudioBackground.init(
         androidNotificationChannelId: 'com.shuro.audio.channel',
         androidNotificationChannelName: 'Shuro playback',
-        // Shown in Android's notification settings under the channel, where the
-        // per-app look of the media notification is also controlled.
         androidNotificationChannelDescription:
             'Now playing information and playback controls.',
         androidNotificationOngoing: true,
         androidNotificationIcon: 'mipmap/ic_launcher',
         androidShowNotificationBadge: true,
-      ).timeout(const Duration(seconds: 8));
-    }
-  } on TimeoutException {
-    debugPrint(
-        'JustAudioBackground.init timed out — starting without system media controls; is an old audio service still running?');
-  } catch (error, stack) {
-    // Release builds get no logging that a user could act on, but the app still
-    // runs: in-app playback, the queue, lyrics and diagnostics are unaffected.
-    debugPrint(
-        'JustAudioBackground.init failed — continuing without system media controls: $error');
-    debugPrint('$stack');
+      ),
+    );
   }
   debugPrint('[boot] audio init done');
   debugPrint('[boot] runApp');

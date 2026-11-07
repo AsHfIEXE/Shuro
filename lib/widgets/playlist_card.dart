@@ -8,7 +8,6 @@ import '../services/shuro_pulse.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
-import 'focus_ring.dart';
 import 'playlist_actions_sheet.dart';
 import 'desktop_context_menu.dart';
 import 'playlist_collage_art.dart';
@@ -31,9 +30,7 @@ class PlaylistCard extends StatelessWidget {
         : playlist.songIds.length;
     return ContextMenuRegion(
       items: playlistContextMenuItems(context, playlist),
-      child: FocusRing(
-        radius: BorderRadius.circular(10),
-        child: ListTile(
+      child: ListTile(
       onTap: onTap,
       // Hold-to-open is touch-only now; desktop right-clicks.
       onLongPress: isDesktopPlatform
@@ -42,14 +39,13 @@ class PlaylistCard extends StatelessWidget {
               HapticFeedback.mediumImpact();
               showPlaylistActionsSheet(context, playlist);
             },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
-        leading: SizedBox(width: 48, height: 48, child: PlaylistCollageArt(playlist: playlist, radius: 8)),
-          title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-        subtitle: Text(playlist.smartPreset != null ? '$count songs · updates itself' : '$count songs',
-            style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
-      ),
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+      leading: SizedBox(width: 48, height: 48, child: PlaylistCollageArt(playlist: playlist, radius: 8)),
+      title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+      subtitle: Text(playlist.smartPreset != null ? '$count songs · updates itself' : '$count songs',
+          style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
+    ),
     );
   }
 }

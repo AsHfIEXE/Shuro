@@ -19,6 +19,7 @@ import '../../widgets/state_views.dart';
 import '../artist/artist_detail_screen.dart';
 import 'build_with_shuro_screen.dart';
 import 'smart_playlists_screen.dart';
+import '../../widgets/click_region.dart';
 
 /// "Discover" — the real-functionality tab from the design critique: library-
 /// based recommendations rather than a Spotify-style tab added for its own
@@ -101,7 +102,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text('Shuro Pulse', style: headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
+                                child: Text('Shuro Pulse',
+                                    style: MediaQuery.sizeOf(context).width >= 900
+                                        ? GoogleFonts.getFont(currentFontFamily,
+                                            color: kTextColor,
+                                            fontSize: 36,
+                                            height: 42 / 36,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.9)
+                                        : headingFont(color: kTextColor, fontSize: 22, fontWeight: FontWeight.w600)),
                               ),
                               const Icon(Icons.auto_awesome_rounded, color: kBrandColor, size: 18),
                             ],
@@ -236,8 +245,10 @@ class _PulseStatsCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: kHairline),
           ),
-          child: Stack(fit: StackFit.expand, children: [
-            const MeshBlobs(opacity: 0.13),
+          // The padded column sizes the stack; the blobs just fill behind it
+          // (StackFit.expand here threw "infinite height" inside the sliver).
+          child: Stack(children: [
+            const Positioned.fill(child: MeshBlobs(opacity: 0.13)),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -388,7 +399,7 @@ class _TonightsFlowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: GestureDetector(
+      child: ClickRegion(
         onTap: () {
           final flow = ShuroPulse.tonightsFlow(appState, length: 24);
           if (flow.isEmpty) return;
@@ -471,7 +482,7 @@ class _EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ClickRegion(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(14),

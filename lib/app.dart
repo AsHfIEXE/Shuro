@@ -15,6 +15,7 @@ import 'playback/audio_diagnostics.dart';
 import 'playback/event_log.dart';
 import 'playback/playback_engine.dart';
 import 'services/app_persistence.dart';
+import 'services/audio_cache.dart';
 import 'services/desktop_lifecycle.dart';
 import 'services/download_service.dart';
 import 'services/local_tag_enrichment.dart';
@@ -474,8 +475,49 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         // names cannot break playback.
         final remote = appState.audioSourceFor(song);
         if (remote == null) return null;
+        // A complete cached copy beats the network: instant start, no
+        // buffering on skip, and it keeps playing if the connection drops.
+        if (remote.startsWith('http')) {
+          final cached = AudioCache.instance.locate(
+              song.id, appState.effectiveStreamingQuality.name);
+          if (cached != null) return cached;
+        }
         return StreamProxy.wrap(remote);
       };
+
+      // Song cache: after each track change, quietly fill the cache with the
+      // next songs in the queue and the current one (Settings -> Cache).
+      unawaited(AudioCache.instance.init());
+      String? cachePlanFor;
+      Timer? cacheTimer;
+      player.addListener(() {
+        final current = player.currentSong;
+        if (current == null || current.id == cachePlanFor) return;
+        cachePlanFor = current.id;
+        cacheTimer?.cancel();
+        // Let playback start first; the cache fill must never compete with it.
+        cacheTimer = Timer(const Duration(seconds: 4), () {
+          final queue = player.queue;
+          final i = player.queueIndex;
+          final plan = <Song>[
+            if (i + 1 < queue.length) queue[i + 1],
+            current,
+            if (i + 2 < queue.length) queue[i + 2],
+          ];
+          final quality = appState.effectiveStreamingQuality;
+          for (final s in plan) {
+            if (s.isLocal || downloads.locate(s.id) != null) continue;
+            final remote = appState.audioSourceFor(s);
+            if (remote == null || !remote.startsWith('http')) continue;
+            unawaited(AudioCache.instance.prefetch(
+              songId: s.id,
+              qualityTag: quality.name,
+              url: StreamProxy.wrap(remote),
+              onWifi: appState.isOnWifi,
+            ));
+          }
+        });
+      });
 
       // Settings → Playback: fade between songs, replay gain, speed, skip
       // silence. Pushed to the player on change so effects are immediate;

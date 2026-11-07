@@ -11,10 +11,15 @@ import '../../theme/app_theme.dart';
 Future<void> showLyricsAppearanceSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
+    // On desktop a full-width sheet is a long way from the controls it
+    // changes; keep it a compact card.
+    constraints: const BoxConstraints(maxWidth: 460),
     backgroundColor: kSurfaceColor,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
     builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         child: Column(
@@ -47,11 +52,37 @@ Future<void> showLyricsAppearanceSheet(BuildContext context) {
             const _SyncModeRow(),
             const SizedBox(height: 6),
             const _GlowRow(),
+            const SizedBox(height: 10),
+            const _ResetRow(),
           ],
         ),
       ),
+      ),
     ),
   );
+}
+
+/// Puts every lyrics option back to its default in one tap.
+class _ResetRow extends StatelessWidget {
+  const _ResetRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = context.read<AppearanceSettings>();
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton.icon(
+        onPressed: () {
+          appearance.setLyricsFontScale(1.0);
+          appearance.setLyricsAlignCenter(true);
+          appearance.setLyricsHighlight(LyricsHighlight.word);
+          appearance.setLyricsGlow(true);
+        },
+        icon: const Icon(Icons.restart_alt_rounded, size: 16),
+        label: const Text('Reset to defaults'),
+      ),
+    );
+  }
 }
 
 class _FontScaleRow extends StatelessWidget {

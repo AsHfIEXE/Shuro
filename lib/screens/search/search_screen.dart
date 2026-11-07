@@ -23,6 +23,7 @@ import '../../widgets/state_views.dart';
 import '../album/album_detail_screen.dart';
 import '../artist/artist_detail_screen.dart';
 import '../playlist/playlist_detail_screen.dart';
+import '../../widgets/click_region.dart';
 
 /// "03. Search" (search-favorites board) — the large glass query field,
 /// filter chips with live counts, a TOP RESULT card when a strong match
@@ -443,7 +444,7 @@ class _ShowAllLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ClickRegion(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Semantics(
@@ -1005,7 +1006,7 @@ class _RecentSearches extends StatelessWidget {
               Text('Recent searches',
                   style: GoogleFonts.getFont(currentFontFamily,
                       color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-              GestureDetector(
+              ClickRegion(
                 onTap: onClear,
                 child: Text('Clear',
                     style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 13)),

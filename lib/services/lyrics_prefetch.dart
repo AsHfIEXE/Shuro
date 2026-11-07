@@ -29,6 +29,9 @@ class EmbeddedLyricsCache {
   /// from a cached null, which means "the server has none for this song".
   static bool isKnown(String songId) => _cache.containsKey(songId);
 
+  /// The cached embedded lyrics, or null (unknown, or known to be absent).
+  static LyricsTrack? peek(String songId) => _cache[songId];
+
   static void _remember(String songId, LyricsTrack? track) {
     _cache[songId] = track;
     if (_cache.length > _limit) {

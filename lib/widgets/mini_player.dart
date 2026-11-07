@@ -18,6 +18,7 @@ import 'artwork_ring.dart';
 import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
 import 'shuro_icons.dart';
+import 'click_region.dart';
 
 /// Persistent bar shown above the bottom nav on every main tab.
 ///
@@ -66,7 +67,7 @@ class _MiniPlayerBar extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= MiniPlayer._kWideBreakpoint;
 
-    return GestureDetector(
+    return ClickRegion(
       onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
       // NOTE: horizontal swipe-to-skip used to live here, but it competed
       // with the seek bar's own horizontal drag in the gesture arena — the
@@ -233,7 +234,7 @@ class _RingScrubberState extends State<_RingScrubber> {
         return (((angle + math.pi / 2) / (2 * math.pi)) % 1.0 + 1.0) % 1.0;
       }
 
-      return GestureDetector(
+      return ClickRegion(
         behavior: HitTestBehavior.opaque,
         onTapUp: (details) {
           final target = fractionAt(details.localPosition);

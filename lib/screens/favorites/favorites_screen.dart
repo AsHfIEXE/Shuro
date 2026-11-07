@@ -85,16 +85,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
+            child: Row(
               children: [
                 for (final (i, label) in const ['Songs', 'Albums', 'Artists'].indexed)
-                  _TabPill(
+                  Padding(
+                    padding: EdgeInsets.only(right: i == 2 ? 0 : 8),
+                    child: _TabPill(
                       label: label,
                       active: _tabController.index == i,
-                  onTap: () => _tabController.animateTo(i),
-                ),
+                      onTap: () => _tabController.animateTo(i),
+                    ),
+                  ),
               ],
             ),
           ),

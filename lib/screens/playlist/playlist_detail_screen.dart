@@ -17,6 +17,7 @@ import '../../widgets/playlist_collage_art.dart';
 import '../../widgets/sheet_scroll.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
+import '../../widgets/click_region.dart';
 
 /// "08. Playlists > Playlist detail" — redesigned per the Playlist detail
 /// board: a collage/cover + meta header with Play/Shuffle pills and the
@@ -405,7 +406,7 @@ class _PlaylistHeader extends StatelessWidget {
 
     Widget cover(double size) => Tooltip(
           message: 'Change playlist artwork',
-          child: GestureDetector(
+          child: ClickRegion(
             onTap: onChangeArtwork,
             child: Stack(
               clipBehavior: Clip.none,

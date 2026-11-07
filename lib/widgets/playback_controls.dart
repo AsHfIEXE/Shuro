@@ -5,6 +5,7 @@ import '../models/song.dart';
 import '../theme/app_theme.dart';
 import 'animated_favorite_icon.dart';
 import 'shuro_icons.dart';
+import 'click_region.dart';
 
 /// Track title + artist, flanked by shuffle/repeat — the "Música/Artista"
 /// row from the design. [accent] is passed in explicitly (the track's
@@ -325,7 +326,7 @@ class PlaybackControls extends StatelessWidget {
   /// disc.
   Widget _disc(double size, double iconSize) {
     final fg = whiteDisc ? kSurfaceColor : Colors.white;
-    return GestureDetector(
+    return ClickRegion(
       onTap: onPlayPause,
       child: Semantics(
         button: true,

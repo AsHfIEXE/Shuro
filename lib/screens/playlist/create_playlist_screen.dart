@@ -5,6 +5,7 @@ import '../../models/playlist.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/playlist_collage_art.dart';
+import '../../widgets/click_region.dart';
 
 /// A proper playlist-creation flow: name, and a cover that's either a
 /// user-picked photo or an auto-generated collage of the songs it starts
@@ -73,7 +74,7 @@ class _CreatePlaylistScreenState extends State<CreatePlaylistScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              GestureDetector(
+              ClickRegion(
                 onTap: _picking ? null : _choosePhoto,
                 child: Stack(
                   alignment: Alignment.center,

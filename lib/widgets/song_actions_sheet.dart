@@ -16,6 +16,7 @@ import 'artwork_thumb.dart';
 import 'build_from_this_sheet.dart';
 import 'shuro_icons.dart';
 import 'state_views.dart';
+import 'click_region.dart';
 
 /// The "⋮" menu every song gets, per the spec's "12. Context/action sheet".
 void showSongActionsSheet(BuildContext context, Song song) {
@@ -219,7 +220,7 @@ class _RatingRowState extends State<_RatingRow> {
       title: Row(
         children: [
           for (var i = 1; i <= 5; i++)
-            GestureDetector(
+            ClickRegion(
               onTap: () => _set(i),
               child: Padding(
                 padding: const EdgeInsets.only(right: 4),

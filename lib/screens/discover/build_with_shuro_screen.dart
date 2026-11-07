@@ -8,6 +8,7 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/artwork_thumb.dart';
 import '../../widgets/state_views.dart';
+import '../../widgets/click_region.dart';
 
 const _kPromptSuggestions = [
   'Something calm for studying',
@@ -98,7 +99,7 @@ class _BuildWithShuroScreenState extends State<BuildWithShuroScreen> {
                     runSpacing: 8,
                     children: [
                       for (final s in _kPromptSuggestions)
-                        GestureDetector(
+                        ClickRegion(
                           onTap: () => _build(s),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

@@ -119,7 +119,11 @@ class _SoundPresetScreenState extends State<SoundPresetScreen> {
                             ),
                             const SizedBox(height: 24),
                             if (cardsInRow)
-                              Row(
+                              // Stretch needs a bounded height; inside the
+                              // scroll view it is infinite, so measure the
+                              // tallest card instead.
+                              IntrinsicHeight(
+                                child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   for (var i = 0;
@@ -140,6 +144,7 @@ class _SoundPresetScreenState extends State<SoundPresetScreen> {
                                     ),
                                   ],
                                 ],
+                              ),
                               )
                             else
                               Column(

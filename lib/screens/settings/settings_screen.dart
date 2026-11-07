@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'library_health_screen.dart';
+import '../../services/audio_cache.dart';
 import '../../app_info.dart';
 import '../../models/download_state.dart';
 import '../../models/song.dart';
@@ -669,7 +670,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
 
-      _SectionLabel('BEHAVIOR',
+      _SectionLabel('BEHAVIOUR',
           key: _sectionKey('behavior'),
           highlighted: _highlighted == 'behavior',
           subtitle:
@@ -2200,62 +2201,170 @@ class _CacheSection extends StatefulWidget {
 }
 
 class _CacheSectionState extends State<_CacheSection> {
+  final AudioCache _songs = AudioCache.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _songs.addListener(_refresh);
+    unawaited(_songs.init());
+  }
+
+  @override
+  void dispose() {
+    _songs.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
   String _formatBytes(int bytes) {
     if (bytes <= 0) return '0 MB';
     final mb = bytes / (1024 * 1024);
     if (mb < 1) return '${(bytes / 1024).ceil()} KB';
+    if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(1)} GB';
     return '${mb.toStringAsFixed(mb < 10 ? 1 : 0)} MB';
   }
 
-  void _clear() {
+  String _limitLabel(int mb) => mb >= 1024 ? '${mb ~/ 1024} GB' : '$mb MB';
+
+  void _clearArtwork() {
     final cache = PaintingBinding.instance.imageCache;
     cache.clear();
     cache.clearLiveImages();
     setState(() {});
   }
 
+  Future<void> _confirm({
+    required String title,
+    required String body,
+    required VoidCallback onConfirm,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: kCardColor,
+        title: Text(title,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 16)),
+        content: Text(body,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kMutedTextColor, fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              onConfirm();
+              showSuccessSnackBar(context, 'Cleared');
+            },
+            child:
+                const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _pickLimit() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        backgroundColor: kCardColor,
+        title: Text('Song cache size',
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: Colors.white, fontSize: 16)),
+        children: [
+          for (final mb in AudioCache.limitChoicesMb)
+            RadioListTile<int>(
+              value: mb,
+              groupValue: _songs.limitMb,
+              activeColor: kBrandColor,
+              title: Text(_limitLabel(mb),
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kTextColor, fontSize: 14)),
+              onChanged: (v) {
+                if (v != null) unawaited(_songs.setLimitMb(v));
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cache = PaintingBinding.instance.imageCache;
-    return _SettingsGroupCard(
-      title: 'CACHE & STORAGE',
-      rows: [
-        _NavRow(
-            icon: Icons.image_rounded,
-            label: 'Artwork cache',
-            value: _formatBytes(cache.currentSizeBytes)),
-        _NavRow(
-          icon: Icons.cleaning_services_rounded,
-          label: 'Clear cache',
-          description: 'Cached artwork is re-fetched as needed.',
-          destructive: true,
-          onTap: () => showDialog(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              backgroundColor: kCardColor,
-              title: Text('Clear cache?',
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: Colors.white, fontSize: 16)),
-              content: Text(
-                  'Cached artwork will be re-fetched as needed. Downloaded songs are not affected.',
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kMutedTextColor, fontSize: 13)),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Cancel')),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    _clear();
-                    showSuccessSnackBar(context, 'Cleared');
-                  },
-                  child: const Text('Clear',
-                      style: TextStyle(color: Colors.redAccent)),
-                ),
-              ],
+    final art = PaintingBinding.instance.imageCache;
+    return Column(
+      children: [
+        _SettingsGroupCard(
+          title: 'SONG CACHE',
+          rows: [
+            _ToggleRow(
+              label: 'Cache songs as you listen',
+              description:
+                  'Keeps what you play and the next songs in the queue on this device, so replays start instantly and skips never wait.',
+              value: _songs.enabled,
+              onChanged: (v) => unawaited(_songs.setEnabled(v)),
             ),
-          ),
+            _ToggleRow(
+              label: 'Wi-Fi only',
+              description: 'Never use mobile data to fill the cache.',
+              value: _songs.wifiOnly,
+              onChanged: (v) => unawaited(_songs.setWifiOnly(v)),
+            ),
+            _NavRow(
+              icon: Icons.data_usage_rounded,
+              label: 'Cache size limit',
+              description:
+                  'The least recently played songs are removed first.',
+              value: _limitLabel(_songs.limitMb),
+              onTap: _pickLimit,
+            ),
+            _NavRow(
+                icon: Icons.library_music_rounded,
+                label: 'Songs on this device',
+                value:
+                    '${_formatBytes(_songs.usedBytes)} of ${_limitLabel(_songs.limitMb)}'),
+            _NavRow(
+              icon: Icons.delete_sweep_rounded,
+              label: 'Clear song cache',
+              description: 'Downloaded songs are not affected.',
+              destructive: true,
+              onTap: () => _confirm(
+                title: 'Clear song cache?',
+                body:
+                    'Cached songs will be fetched again the next time you play them. Downloads are not affected.',
+                onConfirm: () => unawaited(_songs.clear()),
+              ),
+            ),
+          ],
+        ),
+        _SettingsGroupCard(
+          title: 'ARTWORK',
+          rows: [
+            _NavRow(
+                icon: Icons.image_rounded,
+                label: 'Artwork cache',
+                value: _formatBytes(art.currentSizeBytes)),
+            _NavRow(
+              icon: Icons.cleaning_services_rounded,
+              label: 'Clear artwork cache',
+              description: 'Cached artwork is re-fetched as needed.',
+              destructive: true,
+              onTap: () => _confirm(
+                title: 'Clear artwork cache?',
+                body:
+                    'Cached artwork will be re-fetched as needed. Downloaded songs are not affected.',
+                onConfirm: _clearArtwork,
+              ),
+            ),
+          ],
         ),
       ],
     );

@@ -34,6 +34,7 @@ import '../../widgets/up_next_list.dart';
 import 'audio_info_sheet.dart';
 import 'lyrics_screen.dart';
 import 'queue_screen.dart';
+import '../../widgets/click_region.dart';
 
 /// At or above this width the screen switches from the phone stack to a
 /// two-pane layout (artwork beside the controls). 1024 also happens to be the
@@ -419,7 +420,6 @@ class NowPlayingScreen extends StatelessWidget {
                           // toolbar whose fixed rows cannot fit 360 dp.
                           compact: compact,
                           embeddedFallback: const UpNextList(),
-                          textAlign: TextAlign.left,
                         ),
                       ),
                     ),
@@ -772,6 +772,49 @@ class _PhoneNowPlayingState extends State<_PhoneNowPlaying> {
                   ],
                 ),
               ),
+              // Inline lyric preview (restored from the pre-redesign phone
+              // layout): the sung line plus the next ones in a small
+              // fade-masked box between the controls and the action row. It
+              // takes only what the ring leaves over and disappears on short
+              // screens, where the Lyrics tab is the place to read.
+              if (viewport.maxHeight - ringSize - 330 >= 100)
+                SizedBox(
+                  height: (viewport.maxHeight - ringSize - 330)
+                      .clamp(100.0, 190.0)
+                      .toDouble(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: ClipRect(
+                      child: ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0x00000000),
+                            Color(0xFF000000),
+                            Color(0xFF000000),
+                            Color(0x00000000)
+                          ],
+                          stops: [0.0, 0.22, 0.78, 1.0],
+                        ).createShader(bounds),
+                        blendMode: BlendMode.dstIn,
+                        child: ScrollConfiguration(
+                          // A passive glance: no scrollbar, and the list
+                          // absorbs its own drags so the page never nudges.
+                          behavior: ScrollConfiguration.of(context).copyWith(
+                            scrollbars: false,
+                            physics: const AlwaysScrollableScrollPhysics(
+                                parent: ClampingScrollPhysics()),
+                          ),
+                          child: LyricsScreen(
+                              initialSong: w.song,
+                              embedded: true,
+                              compact: true),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.only(top: 12, bottom: 12),
                 child: _NpvActionRow(
@@ -1064,7 +1107,7 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
           if (_preview != null) _commitSeek();
           setState(() => _scrubbing = false);
         },
-        child: GestureDetector(
+        child: ClickRegion(
           behavior: HitTestBehavior.opaque,
           onPanStart: (details) =>
               _updatePreview(details.localPosition, withHaptic: true),
@@ -1326,7 +1369,7 @@ class _ProgressLine extends StatelessWidget {
           // Draggable: a seek bar you can't grab is decoration. A taller hit
           // area (the Padding) keeps a 4 px line tappable without making the
           // line itself heavy.
-          GestureDetector(
+          ClickRegion(
             behavior: HitTestBehavior.opaque,
             onTapDown: (d) => _seekFrom(d.localPosition.dx, context),
             onHorizontalDragUpdate: (d) =>
@@ -1382,7 +1425,7 @@ class _PageTabs extends StatelessWidget {
         children: [
           for (var i = 0; i < _labels.length; i++)
             Expanded(
-              child: GestureDetector(
+              child: ClickRegion(
                 onTap: () => onSelect(i),
                 behavior: HitTestBehavior.opaque,
                 child: Semantics(
@@ -1576,7 +1619,7 @@ class _LyricsBar extends StatelessWidget {
     // A quiet pill instead of the old full-width grey slab: lyrics are one
     // action among several on this screen, so it gets a normal button's
     // footprint, a hairline border, and the track's accent on the icon.
-    return GestureDetector(
+    return ClickRegion(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
@@ -1953,7 +1996,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
           LayoutBuilder(
             builder: (context, c) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: GestureDetector(
+              child: ClickRegion(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
                 onHorizontalDragStart: (_) => setState(() => _dragging = true),
@@ -2110,7 +2153,7 @@ class _VolumeIconButtonState extends State<_VolumeIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ClickRegion(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
@@ -2404,7 +2447,7 @@ class _InlineVolumeState extends State<_InlineVolume> {
           width: 100,
           height: 32,
           child: LayoutBuilder(
-            builder: (context, c) => GestureDetector(
+            builder: (context, c) => ClickRegion(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) => _onDrag(d.localPosition.dx, c.maxWidth),
               onHorizontalDragUpdate: (d) =>
