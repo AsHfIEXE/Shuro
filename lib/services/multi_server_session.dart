@@ -118,12 +118,14 @@ class MultiServerSession {
 
   /// The stream URL for [song] from the server that owns it, in the quality
   /// the caller resolved. Null when that server isn't currently connected.
-  String? streamUrlFor(Song song, {required StreamingQuality quality}) {
+  String? streamUrlFor(Song song,
+      {required StreamingQuality quality, String? format}) {
     final serverId = MultiServerLibrary.serverIdOf(song.id);
     if (serverId == null) return null;
     final repository = _repos[serverId];
     if (repository == null) return null;
-    return repository.streamUrlFor(MultiServerLibrary.localizeSong(serverId, song), quality: quality);
+    return repository.streamUrlFor(MultiServerLibrary.localizeSong(serverId, song),
+        quality: quality, format: format);
   }
 
   /// Embedded lyrics for [song] from its own server. Null when that server is

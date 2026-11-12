@@ -210,9 +210,10 @@ class NavidromeMusicRepository extends MusicRepository {
   }
 
   @override
-  String? streamUrlFor(Song song, {StreamingQuality quality = StreamingQuality.original}) {
+  String? streamUrlFor(Song song,
+      {StreamingQuality quality = StreamingQuality.original, String? format}) {
     if (song.isLocal) return null;
-    return _client.streamUrl(song.id, quality: quality);
+    return _client.streamUrl(song.id, quality: quality, format: format);
   }
 
   @override

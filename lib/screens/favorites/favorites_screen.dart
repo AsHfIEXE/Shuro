@@ -109,12 +109,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
-      appBar: AppBar(
-        backgroundColor: kSurfaceColor,
-        elevation: 0,
-        title: Text('Favorites',
-            style: headingFont(color: kTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
-      ),
       body: Column(
         children: [
           Entrance(

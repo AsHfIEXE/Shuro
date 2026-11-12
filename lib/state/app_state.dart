@@ -104,6 +104,10 @@ class AppState extends ChangeNotifier {
           wifiQuality = _qualityFromName(map['wifiQuality']) ?? wifiQuality;
           mobileQuality =
               _qualityFromName(map['mobileQuality']) ?? mobileQuality;
+          preferOriginalOnWifi =
+              map['preferOriginalOnWifi'] as bool? ?? preferOriginalOnWifi;
+          transcodeFormat =
+              map['transcodeFormat'] as String? ?? transcodeFormat;
           downloadQuality =
               _qualityFromName(map['downloadQuality']) ?? downloadQuality;
           downloadWifiOnly =
@@ -502,6 +506,8 @@ class AppState extends ChangeNotifier {
     if (p == null) return;
     final map = {
       'wifiQuality': wifiQuality.name,
+    'preferOriginalOnWifi': preferOriginalOnWifi,
+    'transcodeFormat': transcodeFormat,
       'mobileQuality': mobileQuality.name,
       'downloadQuality': downloadQuality.name,
       'downloadWifiOnly': downloadWifiOnly,
@@ -707,8 +713,12 @@ class AppState extends ChangeNotifier {
   /// Which of [wifiQuality]/[mobileQuality] actually governs the next
   /// stream, resolved against the device's current connection type —
   /// see [audioSourceFor].
+  /// Board rule: prefer-original wins on Wi-Fi - the untouched file, no
+  /// cap, on any system whose engine can play it.
   StreamingQuality get effectiveStreamingQuality =>
-      _isOnWifi ? wifiQuality : mobileQuality;
+      (_isOnWifi && preferOriginalOnWifi)
+          ? StreamingQuality.original
+          : (_isOnWifi ? wifiQuality : mobileQuality);
 
   /// The live backend for whichever server is connected, and the one
   /// library fetch taken from it on connect (see [MusicRepository] for
@@ -1124,11 +1134,12 @@ class AppState extends ChangeNotifier {
   String? audioSourceFor(Song song) {
     if (song.localFilePath != null) return song.localFilePath;
     if (isMultiServer) {
-      final viaMulti =
-          _multi.streamUrlFor(song, quality: effectiveStreamingQuality);
+      final viaMulti = _multi.streamUrlFor(song,
+          quality: effectiveStreamingQuality, format: transcodeFormat);
       if (viaMulti != null) return viaMulti;
     }
-    return _repository?.streamUrlFor(song, quality: effectiveStreamingQuality);
+    return _repository?.streamUrlFor(song,
+        quality: effectiveStreamingQuality, format: transcodeFormat);
   }
 
   /// Original file source for an explicit offline action. Local files are
@@ -2092,6 +2103,16 @@ class AppState extends ChangeNotifier {
 
   // --- Playback / download settings --------------------------------------
   StreamingQuality wifiQuality = StreamingQuality.original;
+
+  /// True = trusted (Wi-Fi) networks always get the untouched file
+  /// (format=raw), ignoring the bitrate cap - the board's "pure hi-fi at
+  /// home" default. Mobile data still follows the mobile cap.
+  bool preferOriginalOnWifi = true;
+
+  /// Transcode target for CAPPED streams: '' = let the server pick its
+  /// default, else 'opus' | 'mp3' | 'aac' | 'flac'. Never applied to
+  /// original/raw streams - those are the file's own bytes by definition.
+  String transcodeFormat = '';
   StreamingQuality mobileQuality = StreamingQuality.high;
   // A separate setting from mobileQuality — Settings -> Downloads used to
   // read and write mobileQuality under a "Download quality" label, so
@@ -2259,6 +2280,19 @@ class AppState extends ChangeNotifier {
 
   void updateWifiQuality(StreamingQuality q) {
     wifiQuality = q;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void updatePreferOriginalOnWifi(bool value) {
+    preferOriginalOnWifi = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  /// '' = server default; 'opus' | 'mp3' | 'aac' | 'flac' for capped streams.
+  void updateTranscodeFormat(String value) {
+    transcodeFormat = value;
     notifyListeners();
     unawaited(_persistSettings());
   }

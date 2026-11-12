@@ -105,7 +105,8 @@ class NavidromeApiClient {
   /// decorative before this). Anything else sends `maxBitRate` and lets
   /// the server pick its own transcode format, same as the Subsonic
   /// reference clients do for a capped-quality stream.
-  String streamUrl(String songId, {StreamingQuality quality = StreamingQuality.original}) {
+  String streamUrl(String songId,
+    {StreamingQuality quality = StreamingQuality.original, String? format}) {
     final params = <String, String>{'id': songId};
     switch (quality) {
       case StreamingQuality.original:
@@ -116,6 +117,13 @@ class NavidromeApiClient {
         params['maxBitRate'] = '160';
       case StreamingQuality.low:
         params['maxBitRate'] = '96';
+    }
+    // Explicit transcode target for capped streams (server default when
+    // empty). Never combined with raw: original IS the file's own bytes.
+    if (quality != StreamingQuality.original &&
+        format != null &&
+        format.isNotEmpty) {
+      params['format'] = format;
     }
     return _buildUri('stream', params).toString();
   }

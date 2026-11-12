@@ -37,7 +37,8 @@ abstract class MusicRepository {
   /// device's current connection type) — [StreamingQuality.original]
   /// must mean genuinely untranscoded audio wherever the backend supports
   /// that, not just a label.
-  String? streamUrlFor(Song song, {StreamingQuality quality = StreamingQuality.original});
+  String? streamUrlFor(Song song,
+      {StreamingQuality quality = StreamingQuality.original, String? format});
 
   /// Releases any held resources (HTTP clients, sockets, etc). Safe to
   /// call multiple times.

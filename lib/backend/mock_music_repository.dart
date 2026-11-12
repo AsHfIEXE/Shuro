@@ -35,7 +35,9 @@ class MockMusicRepository extends MusicRepository {
   }
 
   @override
-  String? streamUrlFor(Song song, {StreamingQuality quality = StreamingQuality.original}) => null;
+  String? streamUrlFor(Song song,
+        {StreamingQuality quality = StreamingQuality.original, String? format}) =>
+    null;
 
   @override
   Future<LyricsTrack?> fetchEmbeddedLyrics(Song song) async => null;

@@ -932,10 +932,17 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
         ),
         _selectRow(
           label: 'Transcode format',
-          description: 'Used only when a cap is set and the server supports it.',
-          options: const [('opus', 'Opus'), ('mp3', 'MP3'), ('aac', 'AAC')],
-          value: e.transcodeFormat,
-          onChanged: (v) => e.update(() => e.transcodeFormat = v),
+          description:
+              'Used only when a cap is set. Empty = the server picks. Original streams are never transcoded.',
+          options: const [
+            ('', 'Server default'),
+            ('opus', 'Opus'),
+            ('mp3', 'MP3'),
+            ('aac', 'AAC'),
+            ('flac', 'FLAC'),
+          ],
+          value: app.transcodeFormat,
+          onChanged: (v) => app.updateTranscodeFormat(v),
         ),
         _switchRow(
           label: 'Different cap on mobile data',
@@ -958,8 +965,8 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
           label: 'Prefer original on Wi-Fi',
           description:
               'Always request the untouched file on trusted networks.',
-          value: e.preferOriginalOnWifi,
-          onChanged: (v) => e.update(() => e.preferOriginalOnWifi = v),
+          value: app.preferOriginalOnWifi,
+          onChanged: (v) => app.updatePreferOriginalOnWifi(v),
         ),
       ]),
     );

@@ -89,18 +89,7 @@ class _DesktopShellState extends State<DesktopShell> {
     });
   }
 
-  /// Header title: the pushed page's own name while one is open (the header
-  /// used to keep saying "Favorites" above Settings), else the active tab.
-  String get _headerLabel => switch (_topPage) {
-        'SettingsScreen' => 'Settings',
-        'DownloadsScreen' => 'Downloads',
-        'PersonalShelvesScreen' => 'Personal shelves',
-        'SpokenLibraryScreen' => 'Books & podcasts',
-        'PlaylistDetailScreen' => 'Playlist',
-        'LyricsScreen' => 'Lyrics',
-        'QueueScreen' => 'Queue',
-        _ => _tabs[widget.currentIndex].$2,
-      };
+
 
   /// Sidebar and header navigation: switch the tab AND leave any pushed page
   /// (Settings, Books & podcasts, an album...). Clicking a destination while
@@ -323,7 +312,6 @@ class _DesktopShellState extends State<DesktopShell> {
                             child: Column(
                               children: [
                                 _DesktopHeader(
-                                  label: _headerLabel,
                                   lyricsOpen: _lyricsOpen,
                                   sidebarCollapsed: _sidebarCollapsed,
                                   onSearch: () => _goToTab(2),
@@ -1074,7 +1062,6 @@ class VerticalBar extends StatelessWidget {
 }
 
 class _DesktopHeader extends StatelessWidget {
-  final String label;
   final bool lyricsOpen;
   final bool sidebarCollapsed;
   final VoidCallback onSearch;
@@ -1083,7 +1070,6 @@ class _DesktopHeader extends StatelessWidget {
   final VoidCallback onCollapseSidebar;
 
   const _DesktopHeader({
-    required this.label,
     required this.lyricsOpen,
     required this.sidebarCollapsed,
     required this.onSearch,
@@ -1199,14 +1185,8 @@ class _DesktopHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Row(
           children: [
-            Text(
-              label,
-              style: headingFont(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
+            // Boards give the top bar no page title - every screen paints
+            // its own title in content, so a second one here read as a dupe.
             const Spacer(),
             Semantics(
               button: true,
