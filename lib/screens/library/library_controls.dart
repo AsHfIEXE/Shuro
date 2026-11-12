@@ -239,8 +239,8 @@ class LibraryViewToggle extends StatelessWidget {
   }
 }
 
-/// Count + filter on the left, [trailing] controls on the right. Collapses to
-/// two rows below 760 px so nothing can overflow on phones or narrow windows.
+/// Count + filter on the left, [trailing] controls on the right. Collapses
+/// below 880 px; the controls stay flush right in both layouts.
 class LibraryToolbar extends StatelessWidget {
   final String countLabel;
   final TextEditingController filterController;
@@ -276,10 +276,13 @@ class LibraryToolbar extends StatelessWidget {
     return Padding(
       padding: padding,
       child: LayoutBuilder(builder: (context, constraints) {
-        if (constraints.maxWidth >= 760) {
+        // 880 keeps the widest tab's full row (count + 260 px filter +
+        // sort + toggle + two pills) safely clear of overflow; narrower
+        // columns fall through to the stacked layout below.
+        if (constraints.maxWidth >= 880) {
           return Row(
             children: [
-              Flexible(child: count),
+              count,
               const SizedBox(width: 24),
               LibraryFilterField(
                   controller: filterController,
@@ -290,18 +293,25 @@ class LibraryToolbar extends StatelessWidget {
             ],
           );
         }
+        // Narrow columns keep the desktop contract: count first, the
+        // filter full width, and the controls flush RIGHT - stacked-left
+        // buttons read as a mistake the moment a window is resized.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             count,
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: trailing),
             const SizedBox(height: 8),
             LibraryFilterField(
                 controller: filterController,
                 hint: filterHint,
                 onChanged: onFilterChanged,
                 width: null),
+            const SizedBox(height: 8),
+            Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: trailing),
           ],
         );
       }),

@@ -1417,11 +1417,17 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     unawaited(_relayNativeWindow().whenComplete(_syncNativeModes));
   }
 
-  /// The mirrored native playlist: Android/iOS notification prev/next, and on
-  /// desktop the load path that was proven to start audio on Windows (the
-  /// single-track path never produced an engine event in the 2.6.2 test
-  /// logs). The app queue stays the source of truth either way.
-  static bool get _supportsNativeQueue => !kIsWeb;
+  /// The mirrored native playlist: Android/iOS notification prev/next only.
+  /// just_audio_media_kit on the desktop rejects ConcatenatingAudioSource
+  /// ("ConcatenatingAudioSourceMessage is currently not supported"), so on
+  /// Windows/Linux the concat attempt just fails into the single-source
+  /// fallback - skip it and load the track directly (the 2.6.2 Windows
+  /// diagnostics show the single load starting audio in ~350 ms). The app
+  /// queue stays the source of truth either way.
+  static bool get _supportsNativeQueue =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Replacing the media_kit player while a load is in flight can take the
   /// whole process down on Windows ("Lost connection to device"), so the

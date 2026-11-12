@@ -335,7 +335,11 @@ class _LocalTabState extends State<LocalTab> {
         const SizedBox(height: 8),
         chips,
         const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [sort, addFiles]),
+        Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: [sort, addFiles]),
       ]);
     });
   }

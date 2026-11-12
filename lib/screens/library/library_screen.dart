@@ -15,6 +15,7 @@ import '../../widgets/song_tile.dart';
 import '../../widgets/state_views.dart';
 import '../downloads/downloads_screen.dart';
 import 'library_artists_albums_tabs.dart';
+import 'library_controls.dart';
 import 'library_cached_tab.dart';
 import 'library_genres_tab.dart';
 import 'library_local_tab.dart';
@@ -397,113 +398,60 @@ class _DesktopSongsToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: LayoutBuilder(builder: (context, constraints) {
-        // The 260 px filter field drops out on narrow desktop columns so
-        // the pills can never overflow the row.
-        final showFilter = constraints.maxWidth >= 700;
-        return Row(
-          children: [
-            Flexible(
-              child: Text(
-                filtering
-                    ? '$visibleCount of $totalCount songs'
-                    : '$totalCount songs',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.getFont(currentFontFamily,
-                    color: kStatusText, fontSize: 14),
-              ),
+    // Shared toolbar: flush-right controls at every width, the same 36 px
+    // band, and the filter drops to its own full-width row on narrow
+    // columns instead of disappearing.
+    return LibraryToolbar(
+      countLabel: filtering
+          ? '$visibleCount of $totalCount songs'
+          : '$totalCount songs',
+      filterController: controller,
+      filterHint: 'Filter songs',
+      onFilterChanged: onFilterChanged,
+      trailing: [
+        PopupMenuButton<_SongSort>(
+          color: kCardColor,
+          initialValue: sort,
+          onSelected: onSortChanged,
+          position: PopupMenuPosition.under,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          itemBuilder: (context) => sortMenuItems,
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.only(left: 12, right: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
-            if (showFilter) ...[
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 260,
-                height: 36,
-                child: TextField(
-                  controller: controller,
-                  onChanged: (_) => onFilterChanged(),
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kTextColor, fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'Filter songs',
-                    hintStyle: GoogleFonts.getFont(currentFontFamily,
-                        color: kMuted2, fontSize: 13),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        size: 16, color: kMuted2),
-                    prefixIconConstraints: const BoxConstraints(
-                        minWidth: 36, minHeight: 36),
-                    // Board affordance hint only - no shortcut is wired.
-                    suffixText: 'Ctrl F',
-                    suffixStyle: GoogleFonts.getFont(currentFontFamily,
-                        color: kMuted3, fontSize: 12),
-                    filled: true,
-                    fillColor: kRaisedColor,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: kGlass),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: kBrandColor),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(width: 12),
-            const Spacer(),
-            PopupMenuButton<_SongSort>(
-              color: kCardColor,
-              initialValue: sort,
-              onSelected: onSortChanged,
-              position: PopupMenuPosition.under,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              itemBuilder: (context) => sortMenuItems,
-              child: Container(
-                height: 36,
-                padding: const EdgeInsets.only(left: 12, right: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Sort: ${sort.label}',
-                        style: GoogleFonts.getFont(currentFontFamily,
-                            color: kTextColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down_rounded,
-                        size: 14, color: kMuted2),
-                  ],
-                ),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Sort: ${sort.label}',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kTextColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(width: 4),
+                const Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 14, color: kMuted2),
+              ],
             ),
-            const SizedBox(width: 8),
-            _ToolbarPill(
-              label: 'Shuffle',
-              icon: Icons.shuffle_rounded,
-              onTap: onShuffle,
-              glass: true,
-            ),
-            const SizedBox(width: 8),
-            _ToolbarPill(
-              label: 'Play all',
-              icon: Icons.play_arrow_rounded,
-              onTap: onPlayAll,
-            ),
-          ],
-        );
-      }),
+          ),
+        ),
+        _ToolbarPill(
+          label: 'Shuffle',
+          icon: Icons.shuffle_rounded,
+          onTap: onShuffle,
+          glass: true,
+        ),
+        _ToolbarPill(
+          label: 'Play all',
+          icon: Icons.play_arrow_rounded,
+          onTap: onPlayAll,
+        ),
+      ],
     );
   }
 }
