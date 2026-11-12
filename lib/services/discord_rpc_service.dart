@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show HttpClient, HttpException, Platform;
+import 'dart:math' as math;
 
 import 'package:dart_discord_presence/dart_discord_presence.dart';
 import 'package:flutter/foundation.dart';
 
 import 'app_persistence.dart';
+import '../models/song.dart';
 import '../state/player_controller.dart';
 
 /// Desktop Discord Rich Presence for Shuro.
@@ -51,6 +54,10 @@ class DiscordRpcService {
   static Uri? Function()? listenUrlResolver;
 
   static const String _projectUrl = 'https://github.com/AsHfIEXE/Shuro';
+  static const String _caaFront = 'https://coverartarchive.org/release-group';
+  // MusicBrainz requires a descriptive UA on anonymous calls.
+  static const String _userAgent =
+      'Shuro/2.6.2 ( https://github.com/AsHfIEXE/Shuro )';
 
   // ---- static registry: Settings needs live access without Provider ----
 
@@ -119,6 +126,15 @@ class DiscordRpcService {
   bool _running = false;
   String? _lastSignature;
 
+  /// song id -> publicly-fetchable cover URL (null = none found, use the
+  /// shuro_logo key). Absent = not resolved yet.
+  final Map<String, String?> _artCache = <String, String?>{};
+  final Set<String> _artInFlight = <String>{};
+
+  /// Waveform phase, advanced by the 10 s refresh tick so the state line
+  /// dances like a visualizer.
+  int _frame = 0;
+
   void _start(PlayerController player) {
     if (_running) return;
     _running = true;
@@ -127,11 +143,18 @@ class DiscordRpcService {
     // Heartbeat doubles as the reconnect path: if Discord launches after
     // Shuro did (or quit and came back), the next tick within 30 s picks the
     // connection up and re-pushes.
-    _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+    _heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!_connected) {
         unawaited(_connect());
         return;
       }
+      final player = _player;
+      if (player != null && player.isPlaying) {
+        _frame++; // next waveform frame...
+        _lastSignature = null; // ...which needs an actual push
+      }
+      // Re-push even mid-track: re-syncs Discord's progress bar with fresh
+      // timestamps, so the card never drifts or feels stale.
       _push();
     });
     unawaited(_connect());
@@ -176,7 +199,7 @@ class DiscordRpcService {
     // NOT in it: the bar advances client-side from the timestamps between
     // pushes, and seeks arrive through [onSeek].
     final sig =
-        '${song.id}|${player.isPlaying}|${player.queueIndex}|${player.queue.length}';
+        '${song.id}|${player.isPlaying}|${player.queueIndex}|${player.queue.length}|$_frame';
     if (sig == _lastSignature) return;
 
     final meta = player.metadataResolver?.call(song);
@@ -188,16 +211,20 @@ class DiscordRpcService {
     final queueLength = player.queue.length;
     final index = player.queueIndex < 0 ? 0 : player.queueIndex;
 
+    // The card goes out immediately with the logo, then upgrades to the real
+    // cover the moment a publicly-fetchable URL is resolved.
+    if (!_artCache.containsKey(song.id)) unawaited(_resolvePublicArt(song));
+
     _send(
       DiscordPresence(
         type: DiscordActivityType.listening, // "Listening to Shuro"
         details: song.title,
-        state: song.artist,
-        largeAsset: (meta?.artUri != null)
-            ? DiscordAsset.fromUrl(meta!.artUri!.toString(),
-                text: meta.albumTitle == null
+        state: '${song.artist} · ${_waveform(song)}',
+        largeAsset: (_artCache[song.id] != null)
+            ? DiscordAsset.fromUrl(_artCache[song.id]!,
+                text: meta?.albumTitle == null
                     ? song.artist
-                    : '${meta.albumTitle} · ${song.artist}')
+                    : '${meta!.albumTitle} · ${song.artist}')
             : DiscordAsset.fromKey('shuro_logo',
                 text: meta?.albumTitle ?? 'Shuro'),
         smallAsset: DiscordAsset.fromKey(
@@ -234,6 +261,133 @@ class DiscordRpcService {
     }
     buttons.add(const DiscordButton(label: 'Get Shuro', url: _projectUrl));
     return buttons;
+  }
+
+  /// A tiny per-track "spectrum": deterministic pseudo-bars from the song's
+  /// identity, phase-advanced by the 10 s tick so the state line moves like
+  /// a visualizer. Unicode blocks render in every Discord theme.
+  String _waveform(Song song) {
+    const bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    final seed = song.id.hashCode ^ song.title.length;
+    final out = StringBuffer();
+    for (var i = 0; i < 10; i++) {
+      final w1 = math.sin(i * 1.7 + _frame * 0.9 + seed * 0.001);
+      final w2 = math.sin(i * 0.53 + _frame * 0.35 + seed * 0.017);
+      var v = (w1 * 0.5 + w2 * 0.5 + 1.0) / 2.0;
+      if (v < 0) v = 0;
+      if (v > 1) v = 1;
+      out.write(bars[(v * 7.99).floor()]);
+    }
+    return out.toString();
+  }
+
+  /// Discord's servers build the presence card cloud-side, so a LAN or
+  /// localhost Navidrome URL can never render there. These hosts need the
+  /// public Cover Art Archive route instead.
+  bool _isPrivateHost(String host) {
+    final h = host.toLowerCase();
+    if (h == 'localhost' ||
+        h == '::1' ||
+        h.endsWith('.local') ||
+        h.endsWith('.lan') ||
+        h.endsWith('.home')) {
+      return true;
+    }
+    final parts = h.split('.');
+    if (parts.length == 4 && parts.every((p) => int.tryParse(p) != null)) {
+      final a = int.parse(parts[0]);
+      final b = int.parse(parts[1]);
+      if (a == 127 || a == 10 || a == 0) return true;
+      if (a == 169 && b == 254) return true;
+      if (a == 192 && b == 168) return true;
+      if (a == 172 && b >= 16 && b <= 31) return true;
+    }
+    return false;
+  }
+
+  /// Resolves the cover Discord should show for [song] and caches it (null
+  /// = keep the logo). Public server URLs go straight through; everything
+  /// else is looked up on MusicBrainz and served from the Cover Art Archive
+  /// — the same public database ListenBrainz wraps, no account needed. When
+  /// a cover lands, the card is re-pushed so it upgrades from the logo.
+  Future<void> _resolvePublicArt(Song song) async {
+    if (_artInFlight.contains(song.id)) return;
+    _artInFlight.add(song.id);
+    String? resolved;
+    var transient = false;
+    try {
+      final uri = _player?.metadataResolver?.call(song)?.artUri;
+      if (uri != null && uri.host.isNotEmpty && !_isPrivateHost(uri.host)) {
+        resolved = uri.toString();
+      } else {
+        resolved = await _lookupCoverArt(song);
+      }
+    } catch (_) {
+      // Network down, MB 503/429, timeout: not a verdict. Leave the song out
+      // of the cache so the next visit to it retries.
+      transient = true;
+      resolved = null;
+    }
+    if (transient) {
+      _artCache.remove(song.id);
+    } else {
+      _artCache[song.id] = resolved;
+    }
+    _artInFlight.remove(song.id);
+    if (_connected) {
+      _lastSignature = null;
+      _push();
+    }
+  }
+
+  /// title + artist -> MusicBrainz recording -> first release group whose
+  /// Cover Art Archive front image actually exists.
+  Future<String?> _lookupCoverArt(Song song) async {
+    final client = HttpClient();
+    client.userAgent = _userAgent;
+    client.connectionTimeout = const Duration(seconds: 5);
+    try {
+      final query = Uri.https('musicbrainz.org', '/ws/2/recording', {
+        'query': 'recording:"${song.title}" AND artist:"${song.artist}"',
+        'fmt': 'json',
+        'limit': '5',
+      });
+      final res =
+          await (await client.getUrl(query)).close().timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) {
+        // 503/429 = rate limiting, not "no art" — throw so the caller keeps
+        // the song out of the cache and retries later.
+        throw HttpException('musicbrainz ${res.statusCode}');
+      }
+      final body = await res.transform(utf8.decoder).join();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final recordings = data['recordings'];
+      if (recordings is! List) return null;
+      for (final rec in recordings) {
+        if (rec is! Map<String, dynamic>) continue;
+        final releases = rec['releases'];
+        if (releases is! List) continue;
+        for (final rel in releases) {
+          final rg = rel is Map<String, dynamic> ? rel['release-group'] : null;
+          final id = rg is Map<String, dynamic> ? rg['id'] : null;
+          if (id is! String || id.isEmpty) continue;
+          final caa = Uri.parse('$_caaFront/$id/front-500');
+          try {
+            final head =
+                await (await client.headUrl(caa)).close().timeout(const Duration(seconds: 6));
+            final code = head.statusCode;
+            if (code >= 200 && code < 400) return caa.toString();
+          } catch (_) {
+            // no art for this release — try the next one
+          }
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close();
+    }
   }
 
   void _send(DiscordPresence? presence, String signature) {
