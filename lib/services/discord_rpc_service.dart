@@ -129,7 +129,30 @@ class DiscordRpcService {
   /// song id -> publicly-fetchable cover URL (null = none found, use the
   /// shuro_logo key). Absent = not resolved yet.
   final Map<String, String?> _artCache = <String, String?>{};
-  final Set<String> _artInFlight = <String>{};
+
+  // ---- smart artwork fetcher ----
+  // MusicBrainz allows ~1 request per second sustained; burst past that and
+  // it answers 503. A skip-heavy session could easily do worse, so every
+  // lookup goes through one serialized queue that:
+  //   • spaces requests >= 1.2 s apart,
+  //   • backs off exponentially (30 s doubling to 5 min) when MusicBrainz
+  //     rate-limits or the network errors, retrying the same pair after,
+  //   • gives up on a pair only after 4 failed attempts — and then records
+  //     the miss for the session so it never hammers again,
+  //   • dedupes identical artist+title pairs (same song, two queues),
+  //   • prefetches the next queue item so covers are ready on auto-advance.
+  /// artist|title -> cover URL (null = definitive miss for this session).
+  final Map<String, String?> _pairCache = <String, String?>{};
+  /// artist|title -> song ids waiting on that pair's result.
+  final Map<String, List<String>> _pairWaiters = <String, List<String>>{};
+  /// artist|title -> the job (first-seen song + attempt count).
+  final Map<String, _ArtJob> _pairJobs = <String, _ArtJob>{};
+  /// pair keys in lookup order.
+  final List<String> _pairQueue = <String>[];
+  DateTime _lastMbRequest = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _mbCooldownUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  Duration _mbBackoff = Duration.zero;
+  bool _drainingArt = false;
 
   /// Waveform phase, advanced by the 10 s refresh tick so the state line
   /// dances like a visualizer.
@@ -212,8 +235,19 @@ class DiscordRpcService {
     final index = player.queueIndex < 0 ? 0 : player.queueIndex;
 
     // The card goes out immediately with the logo, then upgrades to the real
-    // cover the moment a publicly-fetchable URL is resolved.
-    if (!_artCache.containsKey(song.id)) unawaited(_resolvePublicArt(song));
+    // cover once the fetcher resolves a publicly-fetchable URL.
+    if (!_artCache.containsKey(song.id)) _resolvePublicArt(song);
+    // Prefetch the next queue item so covers are ready on auto-advance.
+    if (player.isPlaying && queueLength > 1) {
+      final nextIndex = index + 1;
+      if (nextIndex < queueLength) {
+        final nextSong = player.queue[nextIndex];
+        if (!_artCache.containsKey(nextSong.id) &&
+            !_pairCache.containsKey(_pairKeyOf(nextSong))) {
+          _resolvePublicArt(nextSong);
+        }
+      }
+    }
 
     _send(
       DiscordPresence(
@@ -305,40 +339,132 @@ class DiscordRpcService {
     return false;
   }
 
-  /// Resolves the cover Discord should show for [song] and caches it (null
-  /// = keep the logo). Public server URLs go straight through; everything
-  /// else is looked up on MusicBrainz and served from the Cover Art Archive
-  /// — the same public database ListenBrainz wraps, no account needed. When
-  /// a cover lands, the card is re-pushed so it upgrades from the logo.
-  Future<void> _resolvePublicArt(Song song) async {
-    if (_artInFlight.contains(song.id)) return;
-    _artInFlight.add(song.id);
-    String? resolved;
-    var transient = false;
+  /// Resolves the cover Discord should show for [song]. Public server URLs
+  /// go straight through; everything else is queued for a MusicBrainz →
+  /// Cover Art Archive lookup (the same public database ListenBrainz wraps,
+  /// no account needed). When a cover lands, the card is re-pushed so it
+  /// upgrades from the logo.
+  void _resolvePublicArt(Song song) {
+    // A cover URL that Discord's servers can actually fetch: use it as-is.
+    final uri = _player?.metadataResolver?.call(song)?.artUri;
+    if (uri != null && uri.host.isNotEmpty && !_isPrivateHost(uri.host)) {
+      _artCache[song.id] = uri.toString();
+      _nudge();
+      return;
+    }
+    final key = _pairKeyOf(song);
+    final cached = _pairCache[key];
+    if (_pairCache.containsKey(key)) {
+      _artCache[song.id] = cached;
+      _nudge();
+      return;
+    }
+    final waiters = _pairWaiters[key];
+    if (waiters != null) {
+      if (!waiters.contains(song.id)) waiters.add(song.id);
+      return; // this pair is already queued; the drain loop distributes it
+    }
+    _pairWaiters[key] = <String>[song.id];
+    _pairJobs[key] = _ArtJob(pairKey: key, song: song);
+    _pairQueue.add(key);
+    unawaited(_drainArtQueue());
+  }
+
+  /// One long-lived consumer for the lookup queue. Waits out rate-limit
+  /// cooldowns and spacing, retries the same pair on transient failures,
+  /// and moves on to newer tracks while an old pair cools down.
+  Future<void> _drainArtQueue() async {
+    if (_drainingArt) return;
+    _drainingArt = true;
     try {
-      final uri = _player?.metadataResolver?.call(song)?.artUri;
-      if (uri != null && uri.host.isNotEmpty && !_isPrivateHost(uri.host)) {
-        resolved = uri.toString();
-      } else {
-        resolved = await _lookupCoverArt(song);
+      while (_pairQueue.isNotEmpty) {
+        final key = _pairQueue.first;
+        final waiters = _pairWaiters[key];
+        if (waiters == null || waiters.isEmpty) {
+          _pairQueue.removeAt(0);
+          _pairJobs.remove(key);
+          continue;
+        }
+        final job = _pairJobs[key];
+        if (job == null) {
+          _pairQueue.removeAt(0);
+          continue;
+        }
+        // Politeness: honor the cooldown and keep >= 1.2 s between requests.
+        final now = DateTime.now();
+        final cooldownWait = _mbCooldownUntil.difference(now);
+        final spacingWait =
+            _lastMbRequest.add(const Duration(milliseconds: 1200)).difference(now);
+        final wait = cooldownWait > spacingWait ? cooldownWait : spacingWait;
+        if (wait > Duration.zero) {
+          await Future<void>.delayed(wait);
+          continue;
+        }
+        _lastMbRequest = DateTime.now();
+        String? resolved;
+        var failed = false;
+        try {
+          resolved = await _lookupCoverArt(job.song);
+        } catch (_) {
+          failed = true;
+        }
+        if (!failed) {
+          _mbBackoff = Duration.zero;
+          _mbCooldownUntil = DateTime.fromMillisecondsSinceEpoch(0);
+          _finishPair(key, resolved); // null = definitive miss (no archive art)
+          continue;
+        }
+        job.attempts++;
+        if (job.attempts >= 4) {
+          // Enough attempts: record the miss so this pair never hammers
+          // MusicBrainz again this session.
+          _finishPair(key, null);
+          continue;
+        }
+        // Rate-limited or network error: exponential backoff, then retry the
+        // same pair — moved to the END of the queue so a track the user is
+        // actually looking at goes first.
+        _mbBackoff = _mbBackoff == Duration.zero
+            ? const Duration(seconds: 30)
+            : (_mbBackoff * 2 > const Duration(minutes: 5)
+                ? const Duration(minutes: 5)
+                : _mbBackoff * 2);
+        _mbCooldownUntil = DateTime.now().add(_mbBackoff);
+        _pairQueue.removeAt(0);
+        _pairQueue.add(key);
       }
-    } catch (_) {
-      // Network down, MB 503/429, timeout: not a verdict. Leave the song out
-      // of the cache so the next visit to it retries.
-      transient = true;
-      resolved = null;
+    } finally {
+      _drainingArt = false;
     }
-    if (transient) {
-      _artCache.remove(song.id);
-    } else {
-      _artCache[song.id] = resolved;
+  }
+
+  /// Distributes a finished pair to every song that was waiting on it and
+  /// nudges the presence so the visible card upgrades immediately.
+  void _finishPair(String key, String? resolved) {
+    _pairQueue.remove(key);
+    _pairJobs.remove(key);
+    _pairCache[key] = resolved;
+    final waiters = _pairWaiters.remove(key) ?? const <String>[];
+    for (final id in waiters) {
+      _artCache[id] = resolved;
     }
-    _artInFlight.remove(song.id);
+    _nudge();
+  }
+
+  /// Re-pushes the presence so a freshly resolved cover (or a new waveform
+  /// frame) actually reaches Discord. Deduped by the signature otherwise.
+  void _nudge() {
     if (_connected) {
       _lastSignature = null;
       _push();
     }
   }
+
+  String _norm(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  String _pairKeyOf(Song song) =>
+      '${_norm(song.artist)}|${_norm(song.title)}';
 
   /// title + artist -> MusicBrainz recording -> first release group whose
   /// Cover Art Archive front image actually exists.
@@ -441,4 +567,17 @@ class DiscordRpcService {
   }
 
   static const String _idleSignature = '__idle__';
+}
+
+
+/// One pending artist+title lookup in the artwork fetcher's queue — see the
+/// fetcher docs on [DiscordRpcService]'s fields.
+class _ArtJob {
+  _ArtJob({required this.pairKey, required this.song});
+
+  final String pairKey;
+  final Song song;
+
+  /// Transient failures so far; 4 strikes = the pair is recorded as a miss.
+  int attempts = 0;
 }
