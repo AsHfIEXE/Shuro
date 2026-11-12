@@ -752,7 +752,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
   bool get _wideFull =>
       !widget.embedded &&
       !widget.compact &&
-      MediaQuery.sizeOf(context).width >= 900;
+      MediaQuery.sizeOf(context).width >= 700;
 
   Widget _shell(
       {required Color accent,
@@ -1507,10 +1507,10 @@ class _EmbeddedPaneHeader extends StatelessWidget {
           // translate control - the feature does not exist, and a dead
           // button is worse than no button.
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: kGlass,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: kHairline),
             ),
             child: Row(
@@ -1521,8 +1521,8 @@ class _EmbeddedPaneHeader extends StatelessWidget {
                   onPressed: onAppearance,
                   visualDensity: VisualDensity.compact,
                   constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  padding: const EdgeInsets.all(4),
+                      const BoxConstraints(minWidth: 38, minHeight: 38),
+                  padding: const EdgeInsets.all(6),
                   icon: Text('Aa',
                       style: GoogleFonts.getFont(currentFontFamily,
                           color: Colors.white70,
@@ -2123,7 +2123,7 @@ class _FloatingTransportPill extends StatelessWidget {
             child: Stack(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
                       SizedBox(
@@ -2140,7 +2140,7 @@ class _FloatingTransportPill extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -2162,9 +2162,9 @@ class _FloatingTransportPill extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(10),
                         icon: const ShuroIcon(ShuroGlyph.previous,
-                            size: 20, color: Colors.white70),
+                            size: 22, color: Colors.white70),
                         onPressed: player.previous,
                         tooltip: 'Previous',
                       ),
@@ -2187,28 +2187,28 @@ class _FloatingTransportPill extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.all(10),
                         icon: const ShuroIcon(ShuroGlyph.next,
-                            size: 20, color: Colors.white70),
+                            size: 22, color: Colors.white70),
                         onPressed: player.next,
                         tooltip: 'Next',
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 10),
                       // Nested sync control.
                       Container(
-                        height: 32,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text('Sync',
                                 style: GoogleFonts.getFont(currentFontFamily,
-                                    color: Colors.white54, fontSize: 11)),
-                            const SizedBox(width: 6),
+                                    color: Colors.white54, fontSize: 12)),
+                            const SizedBox(width: 10),
                             _SyncNudge(
                               icon: Icons.remove_rounded,
                               tooltip: 'Shift lyrics 0.1 s earlier',
@@ -2223,13 +2223,13 @@ class _FloatingTransportPill extends StatelessWidget {
                                       songId: song.id)
                                   : null,
                               child: SizedBox(
-                                width: 40,
+                                width: 48,
                                 child: Text(label,
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.getFont(
                                         currentFontFamily,
                                         color: Colors.white,
-                                        fontSize: 12,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w600)),
                               ),
                             ),
@@ -2241,7 +2241,7 @@ class _FloatingTransportPill extends StatelessWidget {
                                       song.id, offsetMs + 100)
                                   : null,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 10),
                             ClickRegion(
                               onTap: offsetMs == 0
                                   ? null
@@ -2254,7 +2254,7 @@ class _FloatingTransportPill extends StatelessWidget {
                                       color: offsetMs == 0
                                           ? const Color(0x66A78BFA)
                                           : const Color(0xFFA78BFA),
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w600)),
                             ),
                           ],
