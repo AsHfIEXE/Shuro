@@ -1,4 +1,4 @@
-; Shuro 2.6.2 Windows installer
+﻿; Shuro 2.6.2 Windows installer
 ; Paths are relative to this script's folder (installer\), so the repo root
 ; is one level up.
 
@@ -21,6 +21,9 @@ Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
+; The small logo BMP carries real alpha (transparent corners) so it floats
+; on the wizard surface instead of sitting in a white box.
+WizardImageAlphaFormat=defined
 WizardImageStretch=yes
 WizardImageFile=wizard_big.bmp
 WizardSmallImageFile=wizard_small.bmp
@@ -47,6 +50,10 @@ SelectDirLabel3=Setup will install Shuro into the following folder.
 SelectDirBrowseLabel=To continue, click Next. If you would like a different folder, click Browse.
 ReadyLabel1=Setup is ready. If Shuro is currently running — even minimized to the tray — it will be closed first, so nothing locks the files.
 ReadyLabel2b=Setup is ready. If Shuro is currently running — even minimized to the tray — it will be closed first, so nothing locks the files.
+BeveledLabel=Shuro 2.6.2 — github.com/AsHfIEXE/Shuro
+WelcomeLabel2=This will install Shuro 2.6.2 on your computer. If Shuro is currently running — even minimized to the tray — Setup will close it first, so nothing locks the files.%n%nYour library lives on your Navidrome or OpenSubsonic server; servers, lyrics, downloads and Discord presence are set up inside the app.
+FinishedHeadingLabel=Shuro 2.6.2 has been installed
+FinishedLabelNoIcons=Shuro is ready. Launch it, add your server, and enjoy your music.%n%nDiscord Rich Presence is on by default (Settings → Integrations) — it shows what you play, with cover art and a Listen along button.
 
 [Code]
 // Shuro lives in the tray when its window is closed, so a polite WM_CLOSE

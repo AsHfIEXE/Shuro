@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import 'app_persistence.dart';
 import '../models/song.dart';
+import '../playback/event_log.dart';
 import '../state/player_controller.dart';
 
 /// Desktop Discord Rich Presence for Shuro.
@@ -349,6 +350,8 @@ class DiscordRpcService {
     final uri = _player?.metadataResolver?.call(song)?.artUri;
     if (uri != null && uri.host.isNotEmpty && !_isPrivateHost(uri.host)) {
       _artCache[song.id] = uri.toString();
+      PlaybackEventLog.instance
+          .add('rpc.art', {'stage': 'direct', 'song': song.id});
       _nudge();
       return;
     }
@@ -367,6 +370,8 @@ class DiscordRpcService {
     _pairWaiters[key] = <String>[song.id];
     _pairJobs[key] = _ArtJob(pairKey: key, song: song);
     _pairQueue.add(key);
+    PlaybackEventLog.instance
+        .add('rpc.art', {'stage': 'queued', 'song': song.id});
     unawaited(_drainArtQueue());
   }
 
@@ -418,6 +423,8 @@ class DiscordRpcService {
         if (job.attempts >= 4) {
           // Enough attempts: record the miss so this pair never hammers
           // MusicBrainz again this session.
+          PlaybackEventLog.instance
+              .add('rpc.art', {'stage': 'gave-up', 'pair': key});
           _finishPair(key, null);
           continue;
         }
@@ -430,6 +437,11 @@ class DiscordRpcService {
                 ? const Duration(minutes: 5)
                 : _mbBackoff * 2);
         _mbCooldownUntil = DateTime.now().add(_mbBackoff);
+        PlaybackEventLog.instance.add('rpc.art', {
+          'stage': 'backoff',
+          'attempt': job.attempts,
+          'waitS': _mbBackoff.inSeconds,
+        });
         _pairQueue.removeAt(0);
         _pairQueue.add(key);
       }
@@ -444,6 +456,10 @@ class DiscordRpcService {
     _pairQueue.remove(key);
     _pairJobs.remove(key);
     _pairCache[key] = resolved;
+    PlaybackEventLog.instance.add('rpc.art', {
+      'stage': resolved == null ? 'miss' : 'found',
+      'pair': key,
+    });
     final waiters = _pairWaiters.remove(key) ?? const <String>[];
     for (final id in waiters) {
       _artCache[id] = resolved;
@@ -467,53 +483,106 @@ class DiscordRpcService {
       '${_norm(song.artist)}|${_norm(song.title)}';
 
   /// title + artist -> MusicBrainz recording -> first release group whose
-  /// Cover Art Archive front image actually exists.
+  /// Cover Art Archive front image exists; falls back to an album-level
+  /// (release-group) search when the recording doesn't match. THROWS on
+  /// transient errors so the fetcher can back off and retry — a 503 must
+  /// never be recorded as "no art".
   Future<String?> _lookupCoverArt(Song song) async {
     final client = HttpClient();
     client.userAgent = _userAgent;
     client.connectionTimeout = const Duration(seconds: 5);
     try {
-      final query = Uri.https('musicbrainz.org', '/ws/2/recording', {
-        'query': 'recording:"${song.title}" AND artist:"${song.artist}"',
-        'fmt': 'json',
-        'limit': '5',
-      });
-      final res =
-          await (await client.getUrl(query)).close().timeout(const Duration(seconds: 6));
-      if (res.statusCode != 200) {
-        // 503/429 = rate limiting, not "no art" — throw so the caller keeps
-        // the song out of the cache and retries later.
-        throw HttpException('musicbrainz ${res.statusCode}');
+      final recordingIds = await _searchReleaseGroups(
+        client,
+        '/ws/2/recording',
+        'recording:"${_q(song.title)}" AND artist:"${_q(song.artist)}"',
+        itemsKey: 'recordings',
+      );
+      for (final id in recordingIds.take(6)) {
+        final url = await _caaFrontIfReal(client, id);
+        if (url != null) return url;
       }
-      final body = await res.transform(utf8.decoder).join();
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      final recordings = data['recordings'];
-      if (recordings is! List) return null;
-      for (final rec in recordings) {
-        if (rec is! Map<String, dynamic>) continue;
-        final releases = rec['releases'];
-        if (releases is! List) continue;
-        for (final rel in releases) {
-          final rg = rel is Map<String, dynamic> ? rel['release-group'] : null;
-          final id = rg is Map<String, dynamic> ? rg['id'] : null;
-          if (id is! String || id.isEmpty) continue;
-          final caa = Uri.parse('$_caaFront/$id/front-500');
-          try {
-            final head =
-                await (await client.headUrl(caa)).close().timeout(const Duration(seconds: 6));
-            final code = head.statusCode;
-            if (code >= 200 && code < 400) return caa.toString();
-          } catch (_) {
-            // no art for this release — try the next one
-          }
+      // Album-level fallback: recording metadata drifts (live versions,
+      // remasters, messy tags) while the album still matches cleanly.
+      final album = _player?.metadataResolver?.call(song)?.albumTitle;
+      if (album != null && album.isNotEmpty) {
+        final albumIds = await _searchReleaseGroups(
+          client,
+          '/ws/2/release-group',
+          'releasegroup:"${_q(album)}" AND artist:"${_q(song.artist)}"',
+          itemsKey: 'release-groups',
+        );
+        for (final id in albumIds.take(4)) {
+          final url = await _caaFrontIfReal(client, id);
+          if (url != null) return url;
         }
       }
-      return null;
-    } catch (_) {
       return null;
     } finally {
       client.close();
     }
+  }
+
+  /// Quotes break the Lucene query; strip them instead of failing the lookup.
+  String _q(String s) => s.replaceAll('"', ' ').trim();
+
+  /// Runs a MusicBrainz search and returns unique release-group ids,
+  /// best-scored first. [itemsKey] is 'recordings' (ids nested under each
+  /// recording's releases) or 'release-groups' (ids at the top level).
+  Future<List<String>> _searchReleaseGroups(
+    HttpClient client,
+    String path,
+    String lucene, {
+    required String itemsKey,
+  }) async {
+    final query = Uri.https('musicbrainz.org', path, {
+      'query': lucene,
+      'fmt': 'json',
+      'limit': '5',
+    });
+    final res =
+        await (await client.getUrl(query)).close().timeout(const Duration(seconds: 6));
+    if (res.statusCode != 200) {
+      // 503/429 = rate limiting, not "no art" — throw so the fetcher backs
+      // off and retries; swallowing it here would cache a false miss.
+      throw HttpException('musicbrainz ${res.statusCode}');
+    }
+    final body = await res.transform(utf8.decoder).join();
+    final data = jsonDecode(body) as Map<String, dynamic>;
+    final items = data[itemsKey];
+    final ids = <String>[];
+    if (items is! List) return ids;
+    for (final item in items) {
+      if (item is! Map<String, dynamic>) continue;
+      if (itemsKey == 'recordings') {
+        final releases = item['releases'];
+        if (releases is! List) continue;
+        for (final rel in releases) {
+          final rg = rel is Map<String, dynamic> ? rel['release-group'] : null;
+          final id = rg is Map<String, dynamic> ? rg['id'] : null;
+          if (id is String && id.isNotEmpty && !ids.contains(id)) ids.add(id);
+        }
+      } else {
+        final id = item['id'];
+        if (id is String && id.isNotEmpty && !ids.contains(id)) ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  /// Cover Art Archive answers 307 (redirect to the Internet Archive) when
+  /// the art exists and 404 when the release group has no front image.
+  Future<String?> _caaFrontIfReal(HttpClient client, String rgId) async {
+    final caa = Uri.parse('$_caaFront/$rgId/front-500');
+    try {
+      final head =
+          await (await client.headUrl(caa)).close().timeout(const Duration(seconds: 6));
+      final code = head.statusCode;
+      if (code >= 200 && code < 400) return caa.toString();
+    } catch (_) {
+      // network hiccup on archive.org — treat as "not this one"
+    }
+    return null;
   }
 
   void _send(DiscordPresence? presence, String signature) {
