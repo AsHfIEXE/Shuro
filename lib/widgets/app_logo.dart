@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'page_transitions.dart' show reduceMotionEnabled;
 
-/// Shuro's brand mark: two rounded diagonal bars, offset into an "S" —
+/// Shuro's brand mark: two rounded diagonal bars, offset into an "S" â€”
 /// violet at top, shading to cyan at bottom. Pure vector (CustomPainter),
 /// crisp at any size, no image asset to ship. This is the single source
 /// of truth for the mark; every place it appears (splash, Welcome) uses
@@ -9,7 +10,7 @@ import '../theme/app_theme.dart';
 ///
 /// [progress] (0..1) plays the entrance from docs/03-splash-brand-motion:
 /// the top pill slides in from the upper-right and the bottom pill from
-/// the lower-left — each from ±0.35 × size away — fading in as it settles.
+/// the lower-left â€” each from Â±0.35 Ã— size away â€” fading in as it settles.
 /// Windows are the spec's seconds on its 1.4 s entrance scale, so
 /// progress 0..1 == 0..1.4 s: top pill 0.00-0.70 s, bottom pill
 /// 0.15-0.85 s, fades complete early (by 0.45 s / 0.60 s). Defaults to 1
@@ -48,17 +49,17 @@ class _AppLogoPainter extends CustomPainter {
 
   _AppLogoPainter({required this.progress, required this.showBackground});
 
-  static const double _rotation = -0.85; // radians, ~-49°
+  static const double _rotation = -0.85; // radians, ~-49Â°
 
-  // Entrance windows in progress-space = spec seconds ÷ 1.4 (the spec's
+  // Entrance windows in progress-space = spec seconds Ã· 1.4 (the spec's
   // entrance scale). Slides run on ShuroMotion.std; each pill's fade
   // completes well before its slide does, so it is seen settling rather
   // than popping in.
-  static const double _topSlideEnd = 0.70 / 1.4; // 0.50 — top settles at 0.70 s
-  static const double _topFadeEnd = 0.45 / 1.4; // 0.32 — top visible by 0.45 s
+  static const double _topSlideEnd = 0.70 / 1.4; // 0.50 â€” top settles at 0.70 s
+  static const double _topFadeEnd = 0.45 / 1.4; // 0.32 â€” top visible by 0.45 s
   static const double _bottomStart = 0.15 / 1.4; // bottom held off until 0.15 s
-  static const double _bottomSlideEnd = 0.85 / 1.4; // 0.61 — bottom settles at 0.85 s
-  static const double _bottomFadeEnd = 0.60 / 1.4; // 0.43 — bottom visible by 0.60 s
+  static const double _bottomSlideEnd = 0.85 / 1.4; // 0.61 â€” bottom settles at 0.85 s
+  static const double _bottomFadeEnd = 0.60 / 1.4; // 0.43 â€” bottom visible by 0.60 s
 
   /// Slide-in distance as a fraction of size: the top pill drops in from
   /// the upper-right, the bottom pill rises in from the lower-left.
@@ -121,7 +122,7 @@ class _AppLogoPainter extends CustomPainter {
     canvas.save();
     // The slide offset is applied *before* the mark's rotation, so it reads
     // in screen space (from the upper-right / lower-left) rather than along
-    // the bars' own axis. No clip anywhere — callers must leave the mark's
+    // the bars' own axis. No clip anywhere â€” callers must leave the mark's
     // container unclipped (see splash_screen.dart) or this offset gets cut.
     canvas.translate(slideOffset.dx * (1 - slideT), slideOffset.dy * (1 - slideT));
     canvas.translate(size.width / 2, size.height / 2);
@@ -137,4 +138,98 @@ class _AppLogoPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _AppLogoPainter oldDelegate) =>
       oldDelegate.progress != progress || oldDelegate.showBackground != showBackground;
+}
+
+/// One-shot launch pop for the sidebar and onboarding marks (splash motion
+/// spec: "a short one-shot pop with a ring on first load"). Plays once per
+/// app session - the first of these widgets to mount consumes the flag -
+/// then renders the plain mark everywhere else. Reduced motion: never plays.
+bool _logoPopSpent = false;
+
+class LogoPop extends StatefulWidget {
+  final double size;
+  final Widget child;
+
+  const LogoPop({super.key, required this.size, required this.child});
+
+  @override
+  State<LogoPop> createState() => _LogoPopState();
+}
+
+class _LogoPopState extends State<LogoPop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 600));
+  bool _play = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_logoPopSpent && !reduceMotionEnabled) {
+      _logoPopSpent = true;
+      _play = true;
+      _c.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_play) return widget.child;
+    final scale = TweenSequence<double>([
+      TweenSequenceItem(
+          tween: Tween(begin: 0.92, end: 1.06)
+              .chain(CurveTween(curve: ShuroMotion.std)),
+          weight: 45),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.06, end: 1.0)
+              .chain(CurveTween(curve: ShuroMotion.spring)),
+          weight: 55),
+    ]).animate(_c);
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) =>
+                CustomPaint(painter: _LogoRingPop(_c.value)),
+          ),
+        ),
+        AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) =>
+              Transform.scale(scale: scale.value, child: widget.child),
+        ),
+      ],
+    );
+  }
+}
+
+class _LogoRingPop extends CustomPainter {
+  final double progress;
+
+  _LogoRingPop(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0 || progress >= 1) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final base = size.shortestSide / 2;
+    final radius = base * (0.7 + 0.9 * progress);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = kVioletLight.withValues(alpha: (1 - progress) * 0.55);
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_LogoRingPop old) => old.progress != progress;
 }

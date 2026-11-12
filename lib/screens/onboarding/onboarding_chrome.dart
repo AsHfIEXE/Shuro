@@ -120,7 +120,7 @@ class OnboardingHeader extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const AppLogo(size: 34),
+        LogoPop(size: 34, child: const AppLogo(size: 34)),
         const SizedBox(width: 8),
         Text(
           'Shuro',

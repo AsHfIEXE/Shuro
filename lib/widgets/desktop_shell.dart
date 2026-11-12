@@ -592,7 +592,7 @@ class _DesktopSidebar extends StatelessWidget {
                       child: InkResponse(
                         onTap: onCollapse,
                         radius: 28,
-                        child: const AppLogo(size: 34),
+                        child: LogoPop(size: 34, child: const AppLogo(size: 34)),
                       ),
                     ),
                     if (!collapsed) ...[

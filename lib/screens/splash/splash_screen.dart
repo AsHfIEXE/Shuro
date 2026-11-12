@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -34,6 +35,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   late final AnimationController _entrance = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
   late final AnimationController _loop = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
+  // Mark float + halo breathe: the two 3.2 s loops from the motion spec.
+  // (The old expanding pulse rings were removed per review.)
+  late final AnimationController _float = AnimationController(vsync: this, duration: const Duration(milliseconds: 3200));
+  late final AnimationController _halo = AnimationController(vsync: this, duration: const Duration(milliseconds: 3200));
 
   // Pills: driven *linearly* to 1 across 1.4 s of the 1.5 s controller, so
   // AppLogo's own windows (spec seconds ÷ 1.4, each with its own easing) map
@@ -53,10 +58,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   late final Animation<double> _tagline = CurvedAnimation(parent: _entrance, curve: const Interval(0.95 / 1.5, 1.45 / 1.5, curve: Curves.easeOut));
   // The loader arrives with the wordmark and loops until navigation.
   late final Animation<double> _loader = CurvedAnimation(parent: _entrance, curve: const Interval(0.70 / 1.5, 1.20 / 1.5, curve: Curves.easeOut));
-  // Halo rings: strictly nothing before 0.85 s (no static glow circle before
-  // the logo), then a quick fade-in.
-  late final Animation<double> _ringsGate = CurvedAnimation(parent: _entrance, curve: const Interval(0.85 / 1.5, 1.15 / 1.5, curve: Curves.easeOut));
-
   int _statusIndex = 0;
   Timer? _statusTimer;
   bool _reducedMotion = false;
@@ -85,6 +86,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     }
     _entrance.forward();
     _loop.repeat();
+    _float.repeat();
+    _halo.repeat();
     _statusTimer = Timer.periodic(
       const Duration(milliseconds: 1600),
       (_) => setState(() => _statusIndex = (_statusIndex + 1) % _kStatuses.length),
@@ -105,6 +108,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _statusTimer?.cancel();
     _entrance.dispose();
     _loop.dispose();
+    _float.dispose();
+    _halo.dispose();
     super.dispose();
   }
 
@@ -113,32 +118,52 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       width: _markSize,
       height: _markSize,
       // Clip.none is load-bearing: the pills slide in from ±0.35 × size
-      // *outside* this box and the pulse rings expand past it — the spec
-      // calls out that these offsets were clipped in an earlier build.
+      // *outside* this box (the spec calls out that these offsets were
+      // clipped in an earlier build).
       child: Stack(
         clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
-          Positioned(
-            left: -112,
-            top: -112,
-            right: -112,
-            bottom: -112,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_loop, _ringsGate]),
-              builder: (context, _) => CustomPaint(
-                painter: _PulseRingsPainter(
-                  phase: _loop.value,
-                  gate: _reducedMotion ? 0.0 : _ringsGate.value,
-                  baseRadius: _markSize * 0.55,
-                ),
-              ),
+          // Halo breathe (3.2 s): a soft violet glow behind the mark.
+          if (!_reducedMotion)
+            AnimatedBuilder(
+              animation: _halo,
+              builder: (context, _) {
+                final breathe =
+                    (math.sin(_halo.value * 2 * math.pi) + 1) / 2;
+                return Transform.scale(
+                  scale: 1.0 + 0.06 * breathe,
+                  child: Opacity(
+                    opacity: 0.10 + 0.08 * breathe,
+                    child: Container(
+                      width: _markSize * 2.1,
+                      height: _markSize * 2.1,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [Color(0x2E7C3AED), Color(0x001E3A8A)],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
           ScaleTransition(
             scale: _markScale,
             child: AnimatedBuilder(
-              animation: _logoProgress,
-              builder: (context, _) => AppLogo(size: _markSize, progress: _logoProgress.value),
+              animation: Listenable.merge([_logoProgress, _float]),
+              builder: (context, _) {
+                // Mark float (3.2 s): a gentle ±4 px bob while loading.
+                final bob = _reducedMotion
+                    ? 0.0
+                    : math.sin(_float.value * 2 * math.pi) * 4.0;
+                return Transform.translate(
+                  offset: Offset(0, bob),
+                  child: AppLogo(
+                      size: _markSize, progress: _logoProgress.value),
+                );
+              },
             ),
           ),
         ],
