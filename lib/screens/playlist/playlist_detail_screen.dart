@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../backend/subsonic_api.dart';
 import '../../models/playlist.dart';
 import '../../models/song.dart';
+import '../../services/audio_cache.dart';
+import '../../services/download_service.dart';
 import '../../services/shuro_pulse.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
@@ -171,6 +176,55 @@ class PlaylistDetailScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Board breadcrumb: Library › Playlists › <name>.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                      child: Row(
+                        children: [
+                          InkWell(
+                            onTap: () => Navigator.of(context).pop(),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Text('Library',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: kMuted2,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500)),
+                          ),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text('›',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Color(0xFF6F7890), fontSize: 14)),
+                          ),
+                          InkWell(
+                            onTap: () => Navigator.of(context).pop(),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Text('Playlists',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: kMuted2,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500)),
+                          ),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text('›',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Color(0xFF6F7890), fontSize: 14)),
+                          ),
+                          Expanded(
+                            child: Text(live.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: kTextColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    ),
                     Entrance(
                       child: _PlaylistHeader(
                         playlist: live,
@@ -188,6 +242,23 @@ class PlaylistDetailScreen extends StatelessWidget {
                         onChangeArtwork: () => _changeArtwork(context, live.id),
                         onRename: () => _rename(context, live.name),
                         onDelete: () => _confirmDelete(context, live.name),
+                        onCache: songs.isEmpty
+                            ? null
+                            : () {
+                                final session =
+                                    context.read<ServerSession>().api;
+                                final api2 = session;
+                                if (api2 == null) return;
+                                unawaited(context
+                                    .read<DownloadService>()
+                                    .enqueueAll([
+                                      for (final song in songs)
+                                        DownloadRequest(
+                                            song: song,
+                                            streamUrl:
+                                                api2.downloadUrl(song.id)),
+                                    ]));
+                              },
                       ),
                     ),
                     Expanded(
@@ -446,6 +517,7 @@ class _PlaylistHeader extends StatelessWidget {
   final VoidCallback onChangeArtwork;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback? onCache;
 
   const _PlaylistHeader({
     required this.playlist,
@@ -456,6 +528,7 @@ class _PlaylistHeader extends StatelessWidget {
     required this.onChangeArtwork,
     required this.onRename,
     required this.onDelete,
+    this.onCache,
   });
 
   @override
@@ -465,138 +538,183 @@ class _PlaylistHeader extends StatelessWidget {
     final meta = [
       '${songs.length} song${songs.length == 1 ? '' : 's'}',
       if (totalSeconds > 0) _formatTotal(Duration(seconds: totalSeconds)),
-      if (playlist.isSmart) 'Smart Playlist',
     ].join('  ·  ');
 
-    Widget cover(double size) => Tooltip(
-          message: 'Change playlist artwork',
-          child: ClickRegion(
-            onTap: onChangeArtwork,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                SizedBox(
-                    width: size,
-                    height: size,
-                    child: PlaylistCollageArt(playlist: playlist, radius: 12)),
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                        color: kBrandColor, shape: BoxShape.circle),
-                    child: const Icon(Icons.edit_rounded,
-                        color: Colors.white, size: 12),
-                  ),
-                ),
-              ],
-            ),
+    // Board hero: a full-width gradient card (r24) with the 144 px mosaic,
+    // the 48/800 title, and the four action pills.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Color(0x8C4C1D95), // #4C1D95 at 55%
+              Color(0x331E3A8A), // #1E3A8A at 20%
+            ],
           ),
-        );
-
-    Widget actions({bool centered = false}) => Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: centered ? WrapAlignment.center : WrapAlignment.start,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _ActionPill(
-                label: 'Play',
-                icon: Icons.play_arrow_rounded,
-                onTap: onPlay),
-            _ActionPill(
-                label: 'Shuffle',
-                icon: Icons.shuffle_rounded,
-                onTap: onShuffle,
-                glass: true),
-            if (!playlist.isSmart)
-              _CircleAction(
-                icon: Icons.add_rounded,
-                tooltip: 'Add songs',
-                onTap: onAddSongs,
-              ),
-            _CircleAction(
-              icon: Icons.edit_rounded,
-              tooltip: 'Rename playlist',
-              onTap: onRename,
-            ),
-            _CircleAction(
-              icon: Icons.delete_outline_rounded,
-              tooltip: 'Delete playlist',
-              color: Colors.redAccent.shade100,
-              onTap: onDelete,
-            ),
-          ],
-        );
-
-    return LayoutBuilder(builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 640;
-      final titleStyle = wide
-          ? headingFont(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -0.75)
-          : headingFont(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5);
-
-      Widget textBlock({bool centered = false}) => Column(
-            crossAxisAlignment: centered
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 560;
+          final textBlock = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (wide)
-                Text(playlist.isSmart ? 'SMART PLAYLIST' : 'PLAYLIST',
-                    style: GoogleFonts.getFont(currentFontFamily,
-                        color: kMuted2,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.68)),
-              if (wide) const SizedBox(height: 4),
-              Text(playlist.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: centered ? TextAlign.center : TextAlign.start,
-                  style: titleStyle),
-              const SizedBox(height: 4),
+              Text(playlist.isSmart ? 'SMART PLAYLIST' : 'PLAYLIST · PRIVATE',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kVioletPale,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(playlist.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: headingFont(
+                            color: Colors.white,
+                            fontSize: wide ? 48 : 30,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: wide ? -1.2 : -0.75)),
+                  ),
+                  const SizedBox(width: 12),
+                  // Board edit circle (32, white 8%) next to the title.
+                  Tooltip(
+                    message: 'Rename playlist',
+                    child: ClickRegion(
+                      onTap: onRename,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.edit_rounded,
+                            size: 16, color: Color(0xFFB4BBCB)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               Text(meta,
-                  textAlign: centered ? TextAlign.center : TextAlign.start,
                   style: GoogleFonts.getFont(currentFontFamily,
                       color: kStatusText, fontSize: 13)),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _HeroPill(
+                      label: 'Play', icon: Icons.play_arrow_rounded, onTap: onPlay),
+                  _HeroPill(
+                      label: 'Shuffle',
+                      icon: Icons.shuffle_rounded,
+                      onTap: onShuffle,
+                      glass: true),
+                  _HeroPill(
+                      label: 'Cache',
+                      icon: Icons.download_rounded,
+                      onTap: onCache,
+                      glass: true),
+                  if (!playlist.isSmart)
+                    _HeroPill(
+                        label: 'Add songs',
+                        icon: Icons.add_rounded,
+                        onTap: onAddSongs,
+                        glass: true),
+                ],
+              ),
             ],
           );
 
-      if (wide) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
+          final art = Tooltip(
+            message: 'Change playlist artwork',
+            child: ClickRegion(
+              onTap: onChangeArtwork,
+              child: SizedBox(
+                  width: wide ? 144 : 112,
+                  height: wide ? 144 : 112,
+                  child: PlaylistCollageArt(playlist: playlist, radius: 20)),
+            ),
+          );
+
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                art,
+                const SizedBox(width: 28),
+                Expanded(child: textBlock),
+              ],
+            );
+          }
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              cover(160),
-              const SizedBox(width: 24),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    textBlock(),
-                    const SizedBox(height: 16),
-                    actions(),
-                  ],
-                ),
-              ),
+              art,
+              const SizedBox(height: 16),
+              textBlock,
+            ],
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// Board hero pill: 44 px tall, radius 22; violet filled or white 6% glass
+/// with a white 14% border.
+class _HeroPill extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool glass;
+
+  const _HeroPill(
+      {required this.label, required this.icon, this.onTap, this.glass = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = glass ? kTextColor : Colors.white;
+    return Opacity(
+      opacity: onTap != null ? 1 : 0.45,
+      child: ClickRegion(
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            color:
+                glass ? Colors.white.withValues(alpha: 0.06) : kBrandColor,
+            borderRadius: BorderRadius.circular(22),
+            border: glass
+                ? Border.all(color: Colors.white.withValues(alpha: 0.14))
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: foreground),
+              const SizedBox(width: 8),
+              Text(label,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: foreground,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700)),
             ],
           ),
-        );
-      }
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Column(
-          children: [
-            cover(112),
-            const SizedBox(height: 16),
-            textBlock(centered: true),
-            const SizedBox(height: 12),
-            actions(centered: true),
-          ],
         ),
-      );
-    });
+      ),
+    );
   }
 }
 
@@ -620,6 +738,9 @@ class _DetailTrackTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final desktop = isDesktopPlatform;
+    // Board row subtitle: a green "Cached" tag under the title for tracks
+    // whose audio is already on this device.
+    final cachedKeys = AudioCache.instance.entries().map((e) => e.songKey).toSet();
     final rows = ListView.builder(
       padding: EdgeInsets.only(bottom: desktop ? 8 : 24),
       itemCount: songs.length,
@@ -631,6 +752,7 @@ class _DetailTrackTable extends StatelessWidget {
             song: songs[i],
             index: i,
             desktop: desktop,
+            cached: cachedKeys.contains(AudioCache.sanitizeId(songs[i].id)),
             onTap: () => onPlaySong(songs[i]),
           ),
         );
@@ -652,7 +774,7 @@ class _DetailTrackTable extends StatelessWidget {
         child: Column(
           children: [
             SizedBox(
-              height: DesktopTokens.rowTable,
+              height: 42,
               child: const Row(
                 children: [
                   SizedBox(
@@ -661,38 +783,48 @@ class _DetailTrackTable extends StatelessWidget {
                           child: Text('#',
                               style: TextStyle(
                                   color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
                   Expanded(
                       flex: 4,
                       child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Text('Title',
+                          child: Text('TITLE',
                               style: TextStyle(
                                   color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
                   Expanded(
                       flex: 3,
                       child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Text('Artist',
+                          child: Text('ARTIST',
                               style: TextStyle(
                                   color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
+                  Expanded(
+                      flex: 3,
+                      child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Text('ALBUM',
+                              style: TextStyle(
+                                  color: kMuted2,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
                   SizedBox(
                       width: 64,
                       child: Center(
-                          child: Text('Duration',
+                          child: Text('TIME',
                               style: TextStyle(
                                   color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
                   SizedBox(width: 40),
                 ],
               ),
@@ -713,12 +845,14 @@ class _TrackRow extends StatelessWidget {
   final Song song;
   final int index;
   final bool desktop;
+  final bool cached;
   final VoidCallback onTap;
 
   const _TrackRow({
     required this.song,
     required this.index,
     required this.desktop,
+    this.cached = false,
     required this.onTap,
   });
 
@@ -728,6 +862,8 @@ class _TrackRow extends StatelessWidget {
         context.select<PlayerController, String?>((p) => p.currentSong?.id) ==
             song.id;
     final titleColor = playing ? kVioletPale : kTextColor;
+    final albumTitle =
+        context.select<AppState, String?>((a) => a.albumById(song.albumId)?.title);
 
     Widget menuButton() => SizedBox(
           width: 40,
@@ -771,13 +907,24 @@ class _TrackRow extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: titleColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600)),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(song.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: titleColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600)),
+                          if (cached)
+                            Text('Cached',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: const Color(0xFF6EE7B7),
+                                    fontSize: 12)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -787,6 +934,17 @@ class _TrackRow extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text(song.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kNavText, fontSize: 13)),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text(albumTitle ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.getFont(currentFontFamily,
@@ -856,7 +1014,7 @@ class _TrackRow extends StatelessWidget {
             ? null
             : () => showSongActionsSheet(context, song),
         child: SizedBox(
-          height: desktop ? DesktopTokens.rowTable : 56.0,
+          height: 56.0,
           child: Stack(
             fit: StackFit.expand,
             children: [

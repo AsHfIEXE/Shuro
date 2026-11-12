@@ -1488,13 +1488,22 @@ class _PlayerDockState extends State<_PlayerDock> {
               // --- Right zone: auxiliaries ------------------------------
               if (!compact)
                 SizedBox(
-                  width: 300,
+                  width: 360,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       if (song != null && qualityChipLabel(song) != null) ...[
-                        SignalPathChip(
-                            song: song, label: qualityChipLabel(song)!),
+                        // The board's bar chip is just the format ("FLAC");
+                        // the full signal path lives in the popover. Flexible
+                        // + ellipsis so a long queue of aux controls can
+                        // never push this past the window edge.
+                        Flexible(
+                          child: SignalPathChip(
+                            song: song,
+                            label: qualityChipShortLabel(song) ??
+                                qualityChipLabel(song)!,
+                          ),
+                        ),
                         const SizedBox(width: 6),
                       ],
                       _VolumeControl(

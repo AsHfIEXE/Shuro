@@ -1484,6 +1484,15 @@ String? qualityChipLabel(Song song) {
   return parts.join(' · ');
 }
 
+/// Board playbar chip: just the format ("FLAC", "MP3"); the full
+/// "format · depth/rate · Lossless" string stays in [qualityChipLabel]
+/// and the signal-path popover. Null = hide, same honesty rule.
+String? qualityChipShortLabel(Song song) {
+  final info = song.audioInfo;
+  if (!info.hasFormat) return null;
+  return info.format!.toUpperCase();
+}
+
 /// Title + "Artist · Album · Year" + quality chip (docs/02 metadata block):
 /// the artist is #F9A8D4 (kPinkPale) w600, the album/year muted. The whole
 /// block swaps as one animated unit when the track changes.

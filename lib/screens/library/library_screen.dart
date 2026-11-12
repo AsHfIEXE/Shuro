@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/server_config.dart';
+import '../../services/audio_cache.dart';
+import '../../widgets/click_region.dart';
 import '../../models/song.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
@@ -58,7 +60,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: 7, vsync: this);
+      TabController(length: 8, vsync: this);
   _SongSort _sort = _SongSort.titleAz;
 
   @override
@@ -83,8 +85,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                     child: Text('Library',
                         style: headingFont(
                             color: kTextColor,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600)),
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.9)),
                   ),
                   IconButton(
                     tooltip: 'Personal shelves',
@@ -102,24 +105,54 @@ class _LibraryScreenState extends State<LibraryScreen>
                 ],
               ),
             ),
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              indicatorColor: kBrandColor,
-              labelColor: Colors.white,
-              unselectedLabelColor: kMutedTextColor,
-              labelStyle: GoogleFonts.getFont(currentFontFamily,
-                  fontSize: 13, fontWeight: FontWeight.w600),
-              unselectedLabelStyle:
-                  GoogleFonts.getFont(currentFontFamily, fontSize: 13),
-              tabs: const [
-                Tab(text: 'Songs'),
-                Tab(text: 'Albums'),
-                Tab(text: 'Artists'),
-                Tab(text: 'Genres'),
-                Tab(text: 'Playlists'),
-                Tab(text: 'Local'),
-                Tab(text: 'Cached'),
+            // Board tab row: text tabs on a hairline, active label white
+            // with a 57 px violet underline, Cached carries a count chip,
+            // Downloads is a real tab.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _LibraryTab(
+                          label: 'Songs',
+                          selected: _tabController.index == 0,
+                          onTap: () => _tabController.animateTo(0)),
+                      _LibraryTab(
+                          label: 'Albums',
+                          selected: _tabController.index == 1,
+                          onTap: () => _tabController.animateTo(1)),
+                      _LibraryTab(
+                          label: 'Artists',
+                          selected: _tabController.index == 2,
+                          onTap: () => _tabController.animateTo(2)),
+                      _LibraryTab(
+                          label: 'Genres',
+                          selected: _tabController.index == 3,
+                          onTap: () => _tabController.animateTo(3)),
+                      _LibraryTab(
+                          label: 'Playlists',
+                          selected: _tabController.index == 4,
+                          onTap: () => _tabController.animateTo(4)),
+                      _LibraryTab(
+                          label: 'Local',
+                          selected: _tabController.index == 5,
+                          onTap: () => _tabController.animateTo(5)),
+                      _LibraryTab(
+                          label: 'Downloads',
+                          selected: _tabController.index == 6,
+                          onTap: () => _tabController.animateTo(6)),
+                      _LibraryTab(
+                          label: 'Cached',
+                          selected: _tabController.index == 7,
+                          onTap: () => _tabController.animateTo(7),
+                          count: AudioCache.instance.entries().length),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, thickness: 1, color: Color(0x14FFFFFF)),
               ],
             ),
             Expanded(
@@ -140,6 +173,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                   const GenresTab(),
                   const PlaylistsTab(),
                   const LocalTab(),
+                  const DownloadsScreen(),
                   const CachedTab(),
                 ],
               ),
@@ -503,6 +537,74 @@ class _ToolbarPill extends StatelessWidget {
                     color: foreground,
                     fontSize: 13,
                     fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// One board tab: 14/600 label, violet 2 px underline when selected, an
+/// optional count chip (Cached).
+class _LibraryTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final int? count;
+
+  const _LibraryTab(
+      {required this.label,
+      required this.selected,
+      required this.onTap,
+      this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClickRegion(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: selected ? Colors.white : kNavText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  if (count != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 34,
+                      height: 19,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: kBrandColor.withValues(alpha: 0.28),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text('$count',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kStatusText,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  color: selected ? kBrandColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
               ),
             ],
           ),

@@ -408,7 +408,9 @@ class _PlaylistsTabState extends State<PlaylistsTab> {
       final cols = c.maxWidth >= 1000
           ? 4
           : (c.maxWidth >= 720 ? 3 : (c.maxWidth >= 420 ? 2 : 1));
-      const gap = 16.0;
+      // Board gutters are wide (~41 px at 4 across); 32 keeps that feel
+      // while still fitting four columns at the table width.
+      const gap = 32.0;
       final w = (c.maxWidth - gap * (cols - 1)) / cols;
       final cells = <Widget>[
         if (showNew) _NewPlaylistTile(size: w, onTap: _newPlaylist),
@@ -447,21 +449,21 @@ class _SmartCard extends StatelessWidget {
       child: ClickRegion(
         onTap: onTap,
         child: Container(
-          height: 80,
+          height: 84,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: libraryTableCardDecoration(),
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: list.tint.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(list.icon, color: list.tint, size: 22),
+                child: Icon(list.icon, color: list.tint, size: 24),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -485,14 +487,18 @@ class _SmartCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                width: 34,
+                height: 20,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(999),
+                  color: Colors.white.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text('${list.songs.length}',
-                    style: libraryCellStyle(color: kNavText, size: 11)),
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kNavText,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -642,12 +648,12 @@ class _PlaylistTileState extends State<_PlaylistTile> {
                           child: ClickRegion(
                             onTap: widget.songs.isEmpty ? null : widget.onPlay,
                             child: Container(
-                              width: 40,
-                              height: 40,
+                              width: 44,
+                              height: 44,
                               decoration: const BoxDecoration(
                                   color: kBrandColor, shape: BoxShape.circle),
                               child: const Icon(Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 24),
+                                  color: Colors.white, size: 26),
                             ),
                           ),
                         ),
@@ -655,7 +661,7 @@ class _PlaylistTileState extends State<_PlaylistTile> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Text(p.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -667,7 +673,7 @@ class _PlaylistTileState extends State<_PlaylistTile> {
                 Text(meta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: libraryCellStyle(color: kStatusText, size: 12)),
+                    style: libraryCellStyle(color: kStatusText, size: 13)),
               ],
             ),
           ),

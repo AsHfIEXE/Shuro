@@ -100,6 +100,8 @@ class SignalPathChip extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: _t(kGreen, 11, FontWeight.w700)
                     .copyWith(letterSpacing: 0.2)),
           ),
