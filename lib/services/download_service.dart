@@ -92,6 +92,22 @@ class DownloadService extends ChangeNotifier {
           ? const DownloadStatus(stage: DownloadStage.downloaded, progress: 1)
           : const DownloadStatus(stage: DownloadStage.notDownloaded));
 
+  /// Ids of downloads that finished in this session and are still shown in
+  /// the "Completed this session" list. Clearing the list only forgets these
+  /// ids; the downloaded files stay on the device.
+  final List<String> _recentCompleted = [];
+
+  List<Song> get recentlyCompleted => [
+        for (final id in _recentCompleted.reversed)
+          if (_entries.containsKey(id)) _entries[id]!.toSong(),
+      ];
+
+  void clearRecentlyCompleted() {
+    if (_recentCompleted.isEmpty) return;
+    _recentCompleted.clear();
+    notifyListeners();
+  }
+
   bool isDownloaded(String songId) => _entries.containsKey(songId);
 
   int get managedDownloadCount => _entries.length;
@@ -275,6 +291,8 @@ class DownloadService extends ChangeNotifier {
       );
       status[song.id] =
           const DownloadStatus(stage: DownloadStage.downloaded, progress: 1);
+      _recentCompleted.remove(song.id);
+      _recentCompleted.add(song.id);
       await _persist();
       notifyListeners();
       return true;

@@ -29,6 +29,21 @@ class SpokenLibraryState extends ChangeNotifier {
   List<SpokenLibrary> get podcastLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.podcast).toList();
 
+  /// Forgets the Audiobookshelf connection and its token. The server itself
+  /// is untouched; Books and podcasts simply disappear from the sidebar.
+  Future<void> disconnect() async {
+    connection = null;
+    _api = null;
+    libraries = const [];
+    itemsByLibrary.clear();
+    error = null;
+    progress = null;
+    notifyListeners();
+    await ServerSecretStore.removeEntry(_secretKey);
+    final store = await AppPersistence.load();
+    await store.remove(_configKey);
+  }
+
   Future<void> restore() async {
     final store = await AppPersistence.load();
     final raw = store.getString(_configKey);

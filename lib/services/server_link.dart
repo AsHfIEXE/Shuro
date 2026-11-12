@@ -89,6 +89,18 @@ class ServerLink {
           if (!appState.favoriteSongIds.contains(qualified)) appState.toggleFavoriteSong(qualified);
         }
       }
+      // Real "date hearted" from the server's starred timestamps.
+      for (final entry in apis.entries) {
+        try {
+          final dates = await entry.value.starredSongDates();
+          for (final d in dates.entries) {
+            final qualified = MultiServerLibrary.qualify(entry.key, d.key);
+            if (appState.favoriteSongIds.contains(qualified)) {
+              appState.favoriteSongDates[qualified] = d.value;
+            }
+          }
+        } catch (_) {}
+      }
       for (final id in appState.favoriteSongIds.toList()) {
         final serverId = MultiServerLibrary.serverIdOf(id);
         if (serverId == null) continue; // legacy un-migrated id — next bind covers it

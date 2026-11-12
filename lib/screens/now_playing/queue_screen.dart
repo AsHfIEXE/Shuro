@@ -27,16 +27,30 @@ import '../../widgets/click_region.dart';
 /// Every action the old screen had is kept: save-the-queue-as-a-playlist,
 /// per-track "⋮" menus, remove-from-queue, clear queue (with its undo),
 /// drag/long-press reordering and the empty states.
-class QueueScreen extends StatelessWidget {
+class QueueScreen extends StatefulWidget {
   const QueueScreen({super.key});
+
+  @override
+  State<QueueScreen> createState() => _QueueScreenState();
+}
+
+class _QueueScreenState extends State<QueueScreen> {
+  /// 0 = Up next, 1 = History.
+  int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
+    final appState = context.watch<AppState>();
     final queue = player.queue;
     final List<Song> upNext = queue.length > player.queueIndex + 1
         ? queue.sublist(player.queueIndex + 1)
         : const [];
+    final List<Song> history = player.queueIndex > 0
+        ? queue.sublist(0, player.queueIndex.clamp(0, queue.length))
+        : const [];
+    final upNextMinutes =
+        (upNext.fold<int>(0, (a, s) => a + s.duration.inSeconds) / 60).round();
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
@@ -77,23 +91,89 @@ class QueueScreen extends StatelessWidget {
                   Entrance(child: _NowPlayingCard(song: player.currentSong!)),
                 ],
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                  padding: const EdgeInsets.fromLTRB(24, 12, 16, 0),
                   child: Row(
                     children: [
-                      Text('Up next',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: kTextColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(width: 8),
-                      Text('${upNext.length} song${upNext.length == 1 ? '' : 's'}',
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: kStatusText, fontSize: 12)),
+                      for (final entry in const [(0, 'Up next'), (1, 'History')])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: ClickRegion(
+                            onTap: () => setState(() => _tab = entry.$1),
+                            child: Container(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                    bottom: BorderSide(
+                                        width: 2,
+                                        color: _tab == entry.$1
+                                            ? kBrandColor
+                                            : Colors.transparent)),
+                              ),
+                              child: Text(entry.$2,
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: _tab == entry.$1
+                                          ? kTextColor
+                                          : kStatusText,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      if (_tab == 0 && upNext.isNotEmpty)
+                        TextButton(
+                          onPressed: player.clearQueue,
+                          child: Text('Clear',
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: Colors.redAccent.shade100,
+                                  fontSize: 12.5)),
+                        ),
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+                  child: Text(
+                      _tab == 0
+                          ? 'NEXT UP \u00b7 ${upNext.length} SONG${upNext.length == 1 ? '' : 'S'} \u00b7 $upNextMinutes MIN'
+                          : 'HISTORY \u00b7 ${history.length} SONG${history.length == 1 ? '' : 'S'}',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMuted2,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2)),
+                ),
                 Expanded(
-                  child: upNext.isEmpty
+                  child: _tab == 1
+                      ? (history.isEmpty
+                          ? Align(
+                              alignment: Alignment.topCenter,
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                child: Text('Nothing played yet in this queue',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.getFont(
+                                        currentFontFamily,
+                                        color: kMutedTextColor,
+                                        fontSize: 13)),
+                              ))
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              itemCount: history.length,
+                              itemBuilder: (context, i) {
+                                // Most recent first.
+                                final song = history[history.length - 1 - i];
+                                return _QueueRow(
+                                  song: song,
+                                  index: i,
+                                  queue: queue,
+                                  onRemove: () => player.removeFromQueue(
+                                      history.length - 1 - i),
+                                );
+                              },
+                            ))
+                      : upNext.isEmpty
                       ? Align(
                           // Expanded gives tight width, so a bare Text sat at
                           // x=0 against the screen edge.
@@ -134,30 +214,11 @@ class QueueScreen extends StatelessWidget {
                           },
                         ),
                 ),
-                if (upNext.isNotEmpty)
-                  // SafeArea: the button sat under the Android navigation bar
-                  // (edge-to-edge app), where it was both covered and unreadable.
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: player.clearQueue,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent.shade100,
-                            backgroundColor:
-                                Colors.redAccent.withValues(alpha: 0.10),
-                            side: BorderSide(
-                                color: Colors.redAccent.shade100
-                                    .withValues(alpha: 0.55)),
-                          ),
-                          child: const Text('Clear Queue'),
-                        ),
-                      ),
-                    ),
-                  ),
+                if (_tab == 0)
+                  _AutoplaySection(
+                      player: player,
+                      appState: appState,
+                      queue: queue),
               ],
             ),
     );
@@ -448,4 +509,112 @@ Future<String?> _promptName(BuildContext context) {
       ],
     ),
   );
+}
+
+/// "AUTOPLAY - SIMILAR TO <ARTIST>": a few tracks the autoplay provider would
+/// append, plus the toggle bound to the Settings autoplay choice.
+class _AutoplaySection extends StatelessWidget {
+  final PlayerController player;
+  final AppState appState;
+  final List<Song> queue;
+  const _AutoplaySection(
+      {required this.player, required this.appState, required this.queue});
+
+  @override
+  Widget build(BuildContext context) {
+    final current = player.currentSong;
+    final provider = player.suggestionProvider;
+    final queued = queue.map((s) => s.id).toSet();
+    final suggestions = (current == null || provider == null)
+        ? const <Song>[]
+        : provider(current)
+            .where((s) => !queued.contains(s.id))
+            .take(3)
+            .toList();
+    return SafeArea(
+      top: false,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 260),
+        decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: kHairline))),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (suggestions.isNotEmpty && current != null) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                  child: Text(
+                      'AUTOPLAY \u00b7 SIMILAR TO ${current.artist.toUpperCase()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMuted2,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2)),
+                ),
+                for (final song in suggestions)
+                  InkWell(
+                    onTap: () => player.addToQueue(song),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      child: Row(children: [
+                        ArtworkThumb(
+                            gradientColors: song.gradientColors,
+                            artwork: song.artwork,
+                            size: 36,
+                            radius: 6),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(song.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: kTextColor,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w500)),
+                              Text(song.artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.getFont(currentFontFamily,
+                                      color: kStatusText, fontSize: 11.5)),
+                            ],
+                          ),
+                        ),
+                        Tooltip(
+                          message: 'Add to queue',
+                          child: Icon(Icons.add_rounded,
+                              color: kMuted2, size: 20),
+                        ),
+                      ]),
+                    ),
+                  ),
+              ],
+              SwitchListTile(
+                secondary:
+                    const Icon(Icons.auto_awesome_rounded, color: kBrandColor),
+                title: Text('Autoplay similar songs',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kTextColor, fontSize: 14)),
+                subtitle: Text('Keeps playing when the queue ends',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kStatusText, fontSize: 12)),
+                value: appState.autoplay,
+                activeThumbColor: kBrandColor,
+                onChanged: (v) {
+                  appState.updateQueueEnd(v ? 'similar' : 'stop');
+                  player.autoplay = v;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

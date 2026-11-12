@@ -19,6 +19,7 @@ import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
 import 'shuro_icons.dart';
 import 'click_region.dart';
+import 'player_bar_extras.dart';
 
 /// Persistent bar shown above the bottom nav on every main tab.
 ///
@@ -146,11 +147,10 @@ class _MiniPlayerBar extends StatelessWidget {
                     onTap: () => Favorites.toggle(context, song.id),
                   ),
                   if (wide)
-                    IconButton(
-                      tooltip: 'Queue',
-                      icon: const Icon(Icons.queue_music_rounded,
-                          color: Colors.white70, size: 22),
-                      onPressed: () =>
+                    QueuePeekButton(
+                      color: Colors.white70,
+                      iconSize: 22,
+                      onOpen: () =>
                           pushRisingOnce(context, const QueueScreen()),
                     ),
                   _TransportButton(

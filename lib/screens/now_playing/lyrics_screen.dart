@@ -22,9 +22,13 @@ import '../../widgets/shuro_icons.dart';
 import '../../widgets/smooth_position_builder.dart';
 import 'lyrics_edit_sheet.dart';
 import 'lyrics_appearance_sheet.dart';
+import 'lyrics_sync_card.dart';
 import '../../services/lrc_tools.dart';
 import '../../services/lyrics_prefetch.dart';
 import '../../widgets/click_region.dart';
+import '../../widgets/desktop_context_menu.dart';
+import '../../widgets/state_views.dart';
+import 'package:flutter/services.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
 /// point: the screen follows [PlayerController.currentSong] from then on, so
@@ -478,7 +482,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
   Widget build(BuildContext context) {
     final player = context.watch<PlayerController>();
     final appState = context.watch<AppState>();
-    _offset = Duration(milliseconds: appState.lyricsOffsetMs);
+    _offset = Duration(
+        milliseconds: appState
+            .lyricsOffsetFor(player.currentSong?.id ?? _song?.id));
     _autoScrollEnabled = appState.lyricsAutoScroll;
 
     // The live track wins over whatever this screen was opened with.
@@ -667,6 +673,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
                           fontScale: appearance.lyricsFontScale,
                           glow: appearance.lyricsGlow,
                           onTap: () => _seekToLine(track.lines[i], isCurrent),
+                          onContextMenu: (pos) =>
+                              _showLineMenu(pos, track.lines[i]),
                         );
                       },
                     ),
@@ -686,6 +694,33 @@ class _LyricsScreenState extends State<LyricsScreen> {
           ),
       ],
     );
+  }
+
+  /// Right-click on a lyric line: copy the line, or the line with the song's
+  /// title and artist. Clipboard only; nothing is shared off-device.
+  void _showLineMenu(Offset globalPosition, LyricsLine line) {
+    final text = line.plainText.trim();
+    if (text.isEmpty) return;
+    final song = context.read<PlayerController>().currentSong ?? _song;
+    Future<void> copy(String value, String message) async {
+      await Clipboard.setData(ClipboardData(text: value));
+      if (mounted) showSuccessSnackBar(context, message);
+    }
+
+    showContextMenuAt(context, globalPosition, [
+      ContextMenuItem(
+        label: 'Copy line',
+        icon: Icons.copy_rounded,
+        onTap: () => copy(text, 'Lyric line copied'),
+      ),
+      ContextMenuItem(
+        label: 'Copy with title and artist',
+        icon: Icons.format_quote_rounded,
+        onTap: () => copy(
+            song == null ? text : '"$text"\n${song.title} - ${song.artist}',
+            'Line copied with title and artist'),
+      ),
+    ]);
   }
 
   /// Tapping a line jumps playback there. Uses the player's own
@@ -736,6 +771,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
+              songId: song?.id ?? _song?.id,
               enabled: _track?.hasTiming ?? false),
         Expanded(child: child),
         // Attribution shows in the embedded pane too: the desktop lyrics
@@ -748,6 +784,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
+              songId: song?.id ?? _song?.id,
               enabled: _track?.hasTiming ?? false),
         if (!widget.embedded && song != null)
           MiniTransportBar(song: song, accentColor: accent),
@@ -798,6 +835,7 @@ class _LyricsLineView extends StatefulWidget {
   final Color accent;
   final TextAlign textAlign;
   final VoidCallback onTap;
+  final void Function(Offset globalPosition)? onContextMenu;
 
   /// Appearance from Settings (roadmap #27): the same three knobs on every
   /// platform - text size, whether the glow renders, and (via [textAlign],
@@ -816,6 +854,7 @@ class _LyricsLineView extends StatefulWidget {
     required this.dimmed,
     required this.textAlign,
     required this.onTap,
+    this.onContextMenu,
     this.fontScale = 1.0,
     this.glow = true,
   });
@@ -949,6 +988,7 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
     // Hover is a pointer affordance: there is no hover to answer on touch,
     // so those platforms keep the plain tappable line.
     if (!isDesktopPlatform) return tappable;
+    final menuCallback = widget.onContextMenu;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -966,7 +1006,14 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
         ),
         child: Row(
           children: [
-            Expanded(child: tappable),
+            Expanded(
+              child: ClickRegion(
+                onSecondaryTapUp: menuCallback == null
+                    ? null
+                    : (d) => menuCallback(d.globalPosition),
+                child: tappable,
+              ),
+            ),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 120),
               opacity: _hovered && !widget.dimmed ? 1.0 : 0.0,
@@ -1331,15 +1378,19 @@ class _SyncBar extends StatelessWidget {
   final Color accent;
   final int offsetMs;
   final bool enabled;
+  final String? songId;
   const _SyncBar(
-      {required this.accent, required this.offsetMs, required this.enabled});
+      {required this.accent,
+      required this.offsetMs,
+      required this.enabled,
+      this.songId});
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.read<AppState>();
+    final appState = context.watch<AppState>();
     final label = offsetMs == 0
         ? 'Lyrics in sync'
-        : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)}s';
+        : '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)} s';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       // Wrap: the controls total ~290 dp and overflowed in a narrow lyrics pane.
@@ -1349,32 +1400,38 @@ class _SyncBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: enabled
-                ? () => appState.updateLyricsOffset(offsetMs - 500)
+                ? () => appState.nudgeLyricsOffset(songId, offsetMs - 100)
                 : null,
-            icon: const Icon(Icons.replay_10_rounded, size: 20),
+            icon: const Icon(Icons.remove_rounded, size: 20),
             color: Colors.white70,
-            tooltip: 'Shift lyrics 0.5s earlier',
+            tooltip: 'Shift lyrics 0.1 s earlier (saved for this song)',
           ),
           SizedBox(
             width: 128,
-            child: Text(
-              enabled ? label : 'No timing to adjust',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white70, fontSize: 12),
+            child: ClickRegion(
+              onTap: enabled
+                  ? () => showLyricsSyncCard(context, songId: songId)
+                  : null,
+              child: Text(
+                enabled ? label : 'No timing to adjust',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: Colors.white70, fontSize: 12),
+              ),
             ),
           ),
           IconButton(
             onPressed: enabled
-                ? () => appState.updateLyricsOffset(offsetMs + 500)
+                ? () => appState.nudgeLyricsOffset(songId, offsetMs + 100)
                 : null,
-            icon: const Icon(Icons.forward_10_rounded, size: 20),
+            icon: const Icon(Icons.add_rounded, size: 20),
             color: Colors.white70,
-            tooltip: 'Shift lyrics 0.5s later',
+            tooltip: 'Shift lyrics 0.1 s later (saved for this song)',
           ),
           if (offsetMs != 0)
             TextButton(
-              onPressed: () => appState.updateLyricsOffset(0),
+              onPressed: () =>
+                  appState.nudgeLyricsOffset(songId, 0, reset: true),
               child: Text('Reset',
                   style: GoogleFonts.getFont(currentFontFamily,
                       color: accent, fontSize: 12)),
@@ -1578,55 +1635,74 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelStyle = GoogleFonts.getFont(currentFontFamily,
-        fontSize: 13, fontWeight: FontWeight.w600);
+    // Board "Lyrics - tools and states": an 80 px disc with a 36 px icon, a
+    // 16/700 title, 12 px copy and 220 x 40 pills. Paused lookups are amber.
+    final paused = icon == Icons.hourglass_bottom_rounded;
+    final tint = paused ? const Color(0xFFF59E0B) : Colors.white;
+    Widget pill(String label, VoidCallback onTap, {required bool primary}) =>
+        ClickRegion(
+          onTap: onTap,
+          child: Container(
+            width: 220,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: primary
+                  ? const Color(0xFF7C3AED)
+                  : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(label,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    fontSize: primary ? 13 : 12,
+                    fontWeight: FontWeight.w600,
+                    color: primary ? Colors.white : const Color(0xFFE8E8F0))),
+          ),
+        );
+    final both = onRetry != null && onSecondary != null && secondaryLabel != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 36),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) Icon(icon, color: Colors.white54, size: 32),
-            const SizedBox(height: 16),
+            if (icon != null)
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: tint.withValues(alpha: paused ? 0.12 : 0.06),
+                ),
+                child: Icon(icon,
+                    color: paused ? tint : Colors.white54, size: 36),
+              ),
+            const SizedBox(height: 24),
             Text(message,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.getFont(currentFontFamily,
-                    color: Colors.white,
-                    fontSize: 14,
-                    height: 1.5,
-                    fontWeight: FontWeight.w600)),
+                    color: const Color(0xFFE8E8F0),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700)),
             if (caption != null) ...[
               const SizedBox(height: 8),
-              Text(caption!,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: Colors.white60, fontSize: 12, height: 1.5)),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 230),
+                child: Text(caption!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: const Color(0xFF9AA3B5),
+                        fontSize: 12,
+                        height: 1.6)),
+              ),
             ],
             if (onRetry != null || onSecondary != null) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  if (onRetry != null)
-                    OutlinedButton(
-                      onPressed: onRetry,
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: kDividerColor)),
-                      child: Text(retryLabel, style: labelStyle),
-                    ),
-                  if (onSecondary != null && secondaryLabel != null)
-                    FilledButton(
-                      onPressed: onSecondary,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: kBrandColor,
-                          foregroundColor: Colors.white),
-                      child: Text(secondaryLabel!, style: labelStyle),
-                    ),
-                ],
-              ),
+              const SizedBox(height: 32),
+              if (onRetry != null)
+                pill(retryLabel, onRetry!, primary: both),
+              if (both) const SizedBox(height: 10),
+              if (onSecondary != null && secondaryLabel != null)
+                pill(secondaryLabel!, onSecondary!, primary: false),
             ],
           ],
         ),
@@ -1635,9 +1711,6 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Slim transport bar pinned to the bottom of lyrics — play/pause and skip
-/// without leaving the screen. Driven by the live player, so it stays honest
-/// when the track changes underneath it.
 class MiniTransportBar extends StatelessWidget {
   final Song song;
   final Color? accentColor;

@@ -7,6 +7,22 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app_persistence.dart';
 
+/// One complete cached song file (see [AudioCache.entries]).
+class AudioCacheEntry {
+  /// The sanitised song id used in the file name (match with
+  /// [AudioCache.sanitizeId] against real song ids).
+  final String songKey;
+  final String quality;
+  final int bytes;
+  final DateTime modified;
+  const AudioCacheEntry({
+    required this.songKey,
+    required this.quality,
+    required this.bytes,
+    required this.modified,
+  });
+}
+
 /// Song cache: keeps the songs you play (and the next few in the queue) on
 /// this device so replays start instantly, skipping never waits on the
 /// network, and recently played music still works when the connection drops.
@@ -75,6 +91,59 @@ class AudioCache extends ChangeNotifier {
       _dir = null;
     }
     _ready = true;
+    notifyListeners();
+  }
+
+  /// The id form used in cache file names.
+  static String sanitizeId(String songId) =>
+      songId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+
+  /// Every complete cached file, newest first. Synchronous directory scan;
+  /// cheap enough for a settings/library list.
+  List<AudioCacheEntry> entries() {
+    final dir = _dir;
+    if (dir == null) return const [];
+    final out = <AudioCacheEntry>[];
+    try {
+      for (final f in dir.listSync().whereType<File>()) {
+        if (!f.path.endsWith('.audio')) continue;
+        final name = f.path.split(Platform.pathSeparator).last;
+        final base = name.substring(0, name.length - '.audio'.length);
+        final dash = base.lastIndexOf('-');
+        if (dash <= 0) continue;
+        try {
+          out.add(AudioCacheEntry(
+            songKey: base.substring(0, dash),
+            quality: base.substring(dash + 1),
+            bytes: f.lengthSync(),
+            modified: f.lastModifiedSync(),
+          ));
+        } catch (_) {}
+      }
+    } catch (_) {}
+    out.sort((a, b) => b.modified.compareTo(a.modified));
+    return out;
+  }
+
+  /// Deletes every cached quality of one song.
+  Future<void> remove(String songId) async {
+    final dir = _dir;
+    if (dir == null) return;
+    final key = sanitizeId(songId);
+    try {
+      for (final f in dir.listSync().whereType<File>()) {
+        final name = f.path.split(Platform.pathSeparator).last;
+        if (name.endsWith('.audio') && name.startsWith('$key-')) {
+          // Guard against ids that are prefixes of other ids.
+          final rest = name.substring(key.length + 1);
+          if (rest.contains('-')) continue;
+          try {
+            f.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    usedBytes = _measure();
     notifyListeners();
   }
 

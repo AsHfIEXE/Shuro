@@ -51,6 +51,17 @@ class ShuroMotion {
   static const std = Cubic(0.2, 0.8, 0.2, 1);
   /// spring = cubic(.34,1.56,.64,1)
   static const spring = Cubic(0.34, 1.56, 0.64, 1);
+  /// emphasized = cubic(.16,1,.3,1)
+  static const emphasized = Cubic(0.16, 1, 0.3, 1);
+  // Motion board tokens: fast (press, hover tint), standard (cards, menus,
+  // pages), emphasized (onboarding, cover morph). Nothing runs past 480 ms.
+  static const fast = Duration(milliseconds: 120);
+  static const standard = Duration(milliseconds: 240);
+  static const emphasizedDuration = Duration(milliseconds: 420);
+  static const menuIn = Duration(milliseconds: 140);
+  static const menuOut = Duration(milliseconds: 90);
+  static const toastIn = Duration(milliseconds: 220);
+  static const stepSlide = Duration(milliseconds: 360);
   static const lineChange = Duration(milliseconds: 260);
   static const autoscroll = Duration(milliseconds: 480);
 }

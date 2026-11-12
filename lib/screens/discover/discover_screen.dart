@@ -18,6 +18,7 @@ import '../../widgets/shimmer_box.dart';
 import '../../widgets/state_views.dart';
 import '../artist/artist_detail_screen.dart';
 import 'build_with_shuro_screen.dart';
+import 'pulse_dashboard.dart';
 import 'smart_playlists_screen.dart';
 import '../../widgets/click_region.dart';
 

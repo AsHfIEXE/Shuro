@@ -95,9 +95,14 @@ class CachingHttpOverrides extends HttpOverrides {
     // Self-signed certificates on the user's OWN LAN (192.168.x, 10.x,
     // 172.16-31.x, localhost) are accepted — the classic homelab setup.
     // Public hosts keep full validation.
-    client.badCertificateCallback = (cert, host, port) => _isPrivateHost(host);
+    client.badCertificateCallback = (cert, host, port) =>
+        _isPrivateHost(host) || selfSignedHosts.contains(host.toLowerCase());
     return client;
   }
+
+  /// Hosts of servers the user marked "accept self-signed certificate" in
+  /// Settings → Servers. Kept in sync from app.dart.
+  static final Set<String> selfSignedHosts = <String>{};
 
   static bool _isPrivateHost(String host) {
     final h = host.toLowerCase();

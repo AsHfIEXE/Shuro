@@ -36,6 +36,21 @@ class PlaybackPrefs extends ChangeNotifier {
   /// of other applications.
   double appVolume = 1.0;
 
+  static const String _kRgMode = 'playback_rg_mode_v1';
+  static const String _kRgPreamp = 'playback_rg_preamp_untagged_v1';
+  static const String _kFadePause = 'playback_fade_on_pause_v1';
+
+  /// 'track' or 'album' when [replayGain] is on. The player reads track gain
+  /// today; album mode is stored for the engine hook.
+  String replayGainMode = 'album';
+
+  /// Pre-amp (dB, -12..+12) for files with no ReplayGain tags. Stored only
+  /// until the player applies it.
+  double untaggedPreampDb = 0.0;
+
+  /// Short fade when pausing/resuming. Stored only until the player reads it.
+  bool fadeOnPause = true;
+
   bool _restored = false;
 
   Future<void> restore() async {
@@ -48,6 +63,9 @@ class PlaybackPrefs extends ChangeNotifier {
       playbackSpeed = prefs.getDouble(_kSpeed) ?? playbackSpeed;
       skipSilence = prefs.getBool(_kSkipSilence) ?? skipSilence;
       appVolume = (prefs.getDouble(_kAppVolume) ?? appVolume).clamp(0.0, 1.0);
+      replayGainMode = prefs.getString(_kRgMode) ?? replayGainMode;
+      untaggedPreampDb = prefs.getDouble(_kRgPreamp) ?? untaggedPreampDb;
+      fadeOnPause = prefs.getBool(_kFadePause) ?? fadeOnPause;
       notifyListeners();
     } catch (_) {
       // No storage: defaults.
@@ -84,6 +102,33 @@ class PlaybackPrefs extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kSkipSilence, value);
+  }
+
+  /// 'off', 'track' or 'album'. 'off' switches [replayGain] off; the mode is
+  /// remembered so turning it back on restores the last choice.
+  Future<void> setReplayGainMode(String mode) async {
+    if (mode != 'off') replayGainMode = mode;
+    await setReplayGain(mode != 'off');
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kRgMode, replayGainMode);
+  }
+
+  Future<void> setUntaggedPreampDb(double value) async {
+    final next = value.clamp(-12.0, 12.0);
+    if (untaggedPreampDb == next) return;
+    untaggedPreampDb = next;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kRgPreamp, next);
+  }
+
+  Future<void> setFadeOnPause(bool value) async {
+    if (fadeOnPause == value) return;
+    fadeOnPause = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kFadePause, value);
   }
 
   Future<void> setAppVolume(double value) async {

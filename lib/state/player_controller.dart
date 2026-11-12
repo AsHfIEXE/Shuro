@@ -83,6 +83,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       }
       _checkListenThreshold(pos);
       _checkCrossfade(pos);
+      _checkAbLoop(pos);
     }, onError: _onPlaybackStreamError);
     // The native playlist's index changes are how notification skip buttons
     // move the app forward.
@@ -105,6 +106,66 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           audioPipeline: AudioPipeline(androidAudioEffects: [eq]));
     }
     return AudioPlayer();
+  }
+
+  // --- A to B loop -------------------------------------------------------
+  Duration? _loopA;
+  Duration? _loopB;
+  String? _loopSongId;
+  DateTime _lastLoopSeek = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Duration? get loopA => _loopA;
+  Duration? get loopB => _loopB;
+  bool get hasAbLoop => _loopA != null && _loopB != null;
+
+  /// Marks the current position as the loop start. A B point at or before it
+  /// is dropped so the pair is always ordered.
+  void setLoopA([Duration? at]) {
+    final song = _currentSong;
+    if (song == null) return;
+    _loopSongId = song.id;
+    _loopA = at ?? position;
+    if (_loopB != null && _loopB! <= _loopA!) _loopB = null;
+    notifyListeners();
+  }
+
+  /// Marks the current position as the loop end (needs an A before it).
+  void setLoopB([Duration? at]) {
+    final song = _currentSong;
+    if (song == null) return;
+    final b = at ?? position;
+    if (_loopA == null || _loopSongId != song.id) {
+      _loopSongId = song.id;
+      _loopA = Duration.zero;
+    }
+    if (b <= _loopA!) return;
+    _loopB = b;
+    notifyListeners();
+  }
+
+  void clearLoop() {
+    if (_loopA == null && _loopB == null) return;
+    _loopA = null;
+    _loopB = null;
+    _loopSongId = null;
+    notifyListeners();
+  }
+
+  /// Seeks back to A when playback passes B. A different track clears it.
+  void _checkAbLoop(Duration pos) {
+    if (_loopA == null && _loopB == null) return;
+    if (_currentSong?.id != _loopSongId) {
+      clearLoop();
+      return;
+    }
+    final a = _loopA;
+    final b = _loopB;
+    if (a == null || b == null || pos < b) return;
+    final now = DateTime.now();
+    // Debounce: the position stream keeps ticking while the seek lands.
+    if (now.difference(_lastLoopSeek).inMilliseconds < 400) return;
+    _lastLoopSeek = now;
+    unawaited(seekTo(a));
   }
 
   AudioPlayer _audioPlayer = _createPlayer();
@@ -556,6 +617,22 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   bool _fadingOut = false;
 
+  /// Settings -> Playback / Audio hooks (wired in app.dart).
+  /// Gapless off loads one song at a time instead of a native playlist.
+  bool gaplessEnabled = true;
+
+  /// Short volume ramp when pausing / resuming.
+  bool fadeOnPause = true;
+
+  /// 'Repeat' for Settings -> When the queue ends: wrap to the first song.
+  bool queueEndRepeat = false;
+
+  /// Cap ReplayGain boosts at unity so peaks never clip (safety limiter).
+  bool limiterEnabled = true;
+
+  /// Extra attenuation (dB, >= 0) applied by auto-headroom for EQ boosts.
+  double headroomDb = 0.0;
+
   /// Gain contributed by ReplayGain. Kept separately so the user-controlled
   /// app level is never overwritten when a song changes.
   double _contentVolume = 1.0;
@@ -589,8 +666,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
           // dB → linear gain, clamped: never silence a track, never blast one.
           volume = pow(10.0, db.clamp(-24.0, 12.0) / 20.0)
               .toDouble()
-              .clamp(0.0, 1.25);
+              .clamp(0.0, limiterEnabled ? 1.0 : 1.25);
         }
+      }
+      if (headroomDb > 0) {
+        volume *= pow(10.0, -headroomDb.clamp(0.0, 24.0) / 20.0).toDouble();
       }
       _contentVolume = volume;
       _targetVolume = volume * _appVolume;
@@ -717,8 +797,8 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   /// source is available" on Resume right after start).
   Future<String?> _resolveSourceWithRetry(Song song, int generation) async {
     var source = audioSourceResolver?.call(song);
-    // No resolver wired (tests, resolver-less hosts): a null that will never
-    // change must not stall every load for the full back-off window.
+    // No resolver wired (tests and headless harnesses): retrying can
+    // never produce a source, so don't stall the load 6 s per attempt.
     if (audioSourceResolver == null) return source;
     for (var i = 0; i < 12 && source == null; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -826,7 +906,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       // keeps prev/next without ever mutating the live playlist. Small queues
       // load whole.
       var loadedNatively = false;
-      if (_queue.length > 1 && _supportsNativeQueue) {
+      if (_queue.length > 1 && _supportsNativeQueue && gaplessEnabled) {
         try {
           final whole = _queue.length <= _kNativeWindowFullLimit;
           final windowStart = whole
@@ -1054,8 +1134,14 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // Sleep "end of queue": when armed and the LAST queued track finishes,
     // pause instead of advancing/repeating. Survives skips and seeks; only a
     // manual cancel disarms it.
-    if (_sleepEndOfQueue && fromTrackEnd && _queueIndex >= _queue.length - 1) {
+    final albumEnds = _sleepEndOfAlbum &&
+        fromTrackEnd &&
+        (_queueIndex >= _queue.length - 1 ||
+            _queue[_queueIndex + 1].albumId != _queue[_queueIndex].albumId);
+    if ((_sleepEndOfQueue && fromTrackEnd && _queueIndex >= _queue.length - 1) ||
+        albumEnds) {
       _sleepEndOfQueue = false;
+      _sleepEndOfAlbum = false;
       _sleepTimer?.cancel();
       try {
         await _audioPlayer.pause();
@@ -1078,7 +1164,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     // "previous" with nowhere sensible to go.
     if (_queueIndex < _queue.length - 1) {
       nextIndex = _queueIndex + 1;
-    } else if (_repeatMode == PlayerRepeatMode.all) {
+    } else if (_repeatMode == PlayerRepeatMode.all || queueEndRepeat) {
       nextIndex = 0;
     } else if (autoplay && !_shuffle && _appendSuggestions()) {
       // Autoplay only widens the queue when shuffle is OFF. With shuffle on,
@@ -1177,7 +1263,15 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (_isPlaying) {
       _isPlaying = false;
       notifyListeners();
-      await _audioPlayer.pause();
+      if (fadeOnPause) {
+        await _rampVolume(_targetVolume, 0.0);
+        await _audioPlayer.pause();
+        try {
+          await _audioPlayer.setVolume(_targetVolume);
+        } catch (_) {}
+      } else {
+        await _audioPlayer.pause();
+      }
       return;
     }
     // Nothing loaded behind this song (the first play, a failed load, or a
@@ -1195,10 +1289,29 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       await _audioPlayer.seek(Duration.zero);
     }
     try {
+      if (fadeOnPause) {
+        try {
+          await _audioPlayer.setVolume(0.0);
+        } catch (_) {}
+      }
       await _startPlayback();
+      if (fadeOnPause) unawaited(_rampVolume(0.0, _targetVolume));
     } catch (_) {
       // Surfaced through the player-state stream instead of throwing into a
       // button callback.
+    }
+  }
+
+  /// ~140 ms linear volume ramp used by fade-on-pause/resume.
+  Future<void> _rampVolume(double from, double to) async {
+    const steps = 7;
+    for (var i = 1; i <= steps; i++) {
+      try {
+        await _audioPlayer.setVolume(from + (to - from) * i / steps);
+      } catch (_) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
     }
   }
 
@@ -1767,11 +1880,23 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   bool _sleepEndOfQueue = false;
   bool get sleepEndOfQueueArmed => _sleepEndOfQueue;
 
+  /// "End of album": pause when the current album's last queued track ends.
+  bool _sleepEndOfAlbum = false;
+  bool get sleepEndOfAlbumArmed => _sleepEndOfAlbum;
+
+  void startSleepTimerEndOfAlbum() {
+    startSleepTimerEndOfQueue();
+    _sleepEndOfQueue = false;
+    _sleepEndOfAlbum = true;
+    notifyListeners();
+  }
+
   void startSleepTimerEndOfQueue() {
     _sleepGeneration++; // abort any in-flight fade-out
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _sleepUntil = null;
+    _sleepEndOfAlbum = false;
     _sleepEndOfQueue = true;
     notifyListeners();
   }
@@ -1779,6 +1904,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   void cancelSleepTimer() {
     _sleepGeneration++; // aborts any in-flight fade-out
     _sleepEndOfQueue = false;
+    _sleepEndOfAlbum = false;
     _sleepTimer?.cancel();
     _sleepTimer = null;
     if (_sleepUntil != null) {

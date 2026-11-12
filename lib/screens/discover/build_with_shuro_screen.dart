@@ -154,7 +154,7 @@ class _BuildWithShuroScreenState extends State<BuildWithShuroScreen> {
                                 itemCount: result.length,
                                 itemBuilder: (context, i) {
                                   final song = result[i];
-                                  return ListTile(
+                                  return Material(type: MaterialType.transparency, child: ListTile(
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
                                     leading: ArtworkThumb(gradientColors: song.gradientColors, artwork: song.artwork, size: 46, radius: 8),
                                     title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -162,7 +162,7 @@ class _BuildWithShuroScreenState extends State<BuildWithShuroScreen> {
                                     subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
                                     onTap: () => player.playSong(song, queue: result),
-                                  );
+                                  ));
                                 },
                               ),
                             ),

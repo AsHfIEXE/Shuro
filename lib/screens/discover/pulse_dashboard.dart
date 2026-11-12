@@ -72,6 +72,8 @@ class _PulseData {
     required this.topArtists,
     required this.streak,
     required this.bestStreak,
+    required this.topGenre,
+    required this.topGenreShare,
   });
 
   final Duration listened;
@@ -82,6 +84,8 @@ class _PulseData {
   final List<({Artist artist, Duration time})> topArtists;
   final int streak;
   final int bestStreak;
+  final String? topGenre;
+  final double topGenreShare; // 0..1 of the period's plays
 }
 
 class _PulseDashboardState extends State<PulseDashboard> {
@@ -103,6 +107,14 @@ class _PulseDashboardState extends State<PulseDashboard> {
     final byDay = List<Duration>.filled(7, Duration.zero);
     final byArtist = <String, Duration>{};
     final playDays = <DateTime>{};
+    // song id -> genre, from the catalogue's genre index.
+    final genreOf = <String, String>{};
+    app.catalogGenres.forEach((genre, ids) {
+      for (final id in ids) {
+        genreOf.putIfAbsent(id, () => genre);
+      }
+    });
+    final byGenre = <String, int>{};
 
     for (final entry in app.plays) {
       final song = app.songById(entry.songId);
@@ -113,6 +125,8 @@ class _PulseDashboardState extends State<PulseDashboard> {
         plays++;
         listened += dur;
         byDay[entry.at.weekday - 1] += dur;
+        final g = genreOf[entry.songId];
+        if (g != null) byGenre[g] = (byGenre[g] ?? 0) + 1;
         if (song != null) {
           byArtist[song.artistId] =
               (byArtist[song.artistId] ?? Duration.zero) + dur;
@@ -131,6 +145,15 @@ class _PulseDashboardState extends State<PulseDashboard> {
       if (artist != null) top.add((artist: artist, time: byArtist[id]!));
       if (top.length == 5) break;
     }
+
+    String? topGenre;
+    var topGenreCount = 0;
+    byGenre.forEach((g, c) {
+      if (c > topGenreCount) {
+        topGenre = g;
+        topGenreCount = c;
+      }
+    });
 
     // Streak: consecutive calendar days with a play, ending today (or
     // yesterday, so the streak does not read 0 before the first play of the
@@ -167,6 +190,8 @@ class _PulseDashboardState extends State<PulseDashboard> {
       topArtists: top,
       streak: streak,
       bestStreak: best,
+      topGenre: topGenre,
+      topGenreShare: plays == 0 ? 0 : topGenreCount / plays,
     );
   }
 
@@ -191,7 +216,6 @@ class _PulseDashboardState extends State<PulseDashboard> {
 
     final delta = data.listened - data.prevListened;
     final playDelta = data.plays - data.prevPlays;
-    final topArtist = data.topArtists.isEmpty ? null : data.topArtists.first;
 
     final stats = <Widget>[
       _StatCard(
@@ -215,11 +239,11 @@ class _PulseDashboardState extends State<PulseDashboard> {
             : (playDelta < 0 ? kStatusText : _good),
       ),
       _StatCard(
-        label: 'TOP ARTIST',
-        value: topArtist?.artist.name ?? '—',
-        note: topArtist == null
+        label: 'TOP GENRE',
+        value: data.topGenre ?? '—',
+        note: data.topGenre == null
             ? 'Play something to find out'
-            : '${fmt(topArtist.time)} listened',
+            : '${(data.topGenreShare * 100).round()}% of your plays',
         noteColor: kStatusText,
       ),
       _StatCard(

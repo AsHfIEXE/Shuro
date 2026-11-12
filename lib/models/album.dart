@@ -10,6 +10,15 @@ class Album {
   final ImageProvider? artwork;
   final List<String> songIds;
 
+  /// When the server first saw the album (Subsonic `created`), if reported.
+  final DateTime? added;
+
+  /// Record label (OpenSubsonic `recordLabels[0]`), if reported.
+  final String? label;
+
+  /// Lower-cased OpenSubsonic `releaseTypes` (album, single, ep, compilation...).
+  final List<String> releaseTypes;
+
   const Album({
     required this.id,
     required this.title,
@@ -19,5 +28,8 @@ class Album {
     required this.gradientColors,
     required this.songIds,
     this.artwork,
+    this.added,
+    this.label,
+    this.releaseTypes = const [],
   });
 }

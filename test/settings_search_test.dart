@@ -10,6 +10,7 @@ import 'package:shuro/state/player_controller.dart';
 import 'package:shuro/backend/subsonic_api.dart';
 import 'package:shuro/state/appearance_settings.dart';
 import 'package:shuro/services/playback_prefs.dart';
+import 'package:shuro/state/spoken_library_state.dart';
 
 void main() {
   Future<void> pumpSettings(WidgetTester tester) async {
@@ -22,6 +23,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => DownloadService()),
           ChangeNotifierProvider(create: (_) => PlaybackPrefs()),
           ChangeNotifierProvider(create: (_) => AppearanceSettings()),
+          ChangeNotifierProvider(create: (_) => SpokenLibraryState()),
         ],
         child: const MaterialApp(home: SettingsScreen()),
       ),
@@ -57,10 +59,11 @@ void main() {
         'listenbrainz');
     await tester.pumpAndSettle();
 
-    // The index should narrow to the ListenBrainz section. Scope to the
-    // dialog: the settings list has its own row with the same label.
+    // The index narrows to the Integrations section: in the redesigned
+    // Settings, ListenBrainz is a row on that page and its keywords carry
+    // the match. Scope to the dialog: the rail lists the same title.
     final dialogRow = find.descendant(
-        of: find.byType(Dialog), matching: find.text('ListenBrainz'));
+        of: find.byType(Dialog), matching: find.text('Integrations'));
     expect(dialogRow, findsOneWidget);
 
     await tester.tap(dialogRow);
@@ -70,12 +73,13 @@ void main() {
       expect(scrollOffset(tester), greaterThan(0),
           reason: 'the page must actually move to the section');
     }
-    expect(find.text('LISTENBRAINZ'), findsOneWidget,
-        reason: 'the section heading must end up in the tree');
+    expect(find.text('ListenBrainz'), findsOneWidget,
+        reason: 'the ListenBrainz row must end up on screen');
 
     // The highlight clears itself after a moment; drain it so the test ends
     // with no scheduled work.
     await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump();
   });
 
   testWidgets('an unmatched query says so instead of jumping nowhere',

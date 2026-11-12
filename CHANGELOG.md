@@ -1,4 +1,13 @@
 ## 2.6.2
+- Lyrics tools rebuilt to the board: Appearance card (text size slider, Left/Centre, Word/Line, glow, translation, backdrop), Sync offset card (±0.5 s, Only this song, Reset), Edit lyrics card (LRC chip, editor, shift, Import .lrc, Save, Remove edit); No lyrics / Instrumental / Lookup paused states use the 80 px disc layout.
+- Shuro Pulse stat card 'Top genre' (share of plays); playlist detail gets the dashed 'Find songs to add' row.
+- Onboarding: the Sound step no longer renders blank (its signal-line used a LayoutBuilder inside an IntrinsicHeight, which threw); the Navidrome step has a Material/Scaffold again (no white background or yellow debug underlines).
+- Settings: two-pane redesign (12 pages, search, Audio/EQ with AutoEq import, Servers, Playback). Now-playing signal-path chip and queue peek in the player bars; A-B loop, sleep timer 'end of album', queue and downloads panels per the boards.
+- Settings now act on playback: gapless off loads one track at a time; fade on pause/resume; ReplayGain track/album mode with tagged and untagged pre-amp; safety limiter caps gain at unity; auto-headroom lowers level by the largest EQ boost; 'When the queue ends' Repeat wraps to the first song; Scrobble plays off stops scrobbling; close-to-tray and start-minimized; per-server self-signed certificates.
+- Motion board: tokens (fast 120 / standard 240 / emphasized 420 ms, emphasized curve), card hover lift 6 px with shadow, play button press squash with spring, 5-bar now-playing mark, switch knob spring 200 ms, drawn connection-test check, onboarding step slide, toast rise (PressScale, DrawnCheck, StepSwitcher, ToastIn in motion.dart).
+- Tray: right-click now opens the menu (Windows only forwards the event). Song rows no longer throw the ListTile ink-splash assertion, and HoverLift no longer calls setState after dispose.
+- Lyrics: 'Only this song' keeps a timing correction on the current track (global offset untouched); 'Show translation' row added (disabled until a source provides translations).
+- Library: Genres, Artists, Albums, Playlists (smart + M3U import), Local files and Cached tabs rebuilt to the boards; Artist and Album detail rebuilt.
 - Lyrics states match the board: No lyrics (Search again / Add lyrics), Instrumental, Lookup paused, and the 'Looking for synced lyrics…' loading caption.
 - Hand cursor over every custom tappable (new ClickRegion), title bar drag fixed (nested double-tap handler removed), custom title bar always shown on desktop, tray setup logged and no longer shares a failure with the title bar.
 - Lyrics paint on the first frame from the warm caches when the song changes (no skeleton round-trip).

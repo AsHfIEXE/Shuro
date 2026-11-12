@@ -136,6 +136,7 @@ class NavidromeMusicRepository extends MusicRepository {
           artistId: artistId,
           albumId: albumId,
           duration: Duration(seconds: durationSecs),
+          playCount: (song['playCount'] as num?)?.toInt() ?? 0,
           gradientColors: _gradientFor(songId),
           artwork: song['coverArt'] != null ? NetworkImage(_client.coverArtUrl('${song['coverArt']}')) : null,
           // samplingRate/bitDepth/channelCount are OpenSubsonic extension
@@ -171,6 +172,15 @@ class NavidromeMusicRepository extends MusicRepository {
         gradientColors: _gradientFor(albumId),
         artwork: a['coverArt'] != null ? NetworkImage(_client.coverArtUrl('${a['coverArt']}')) : null,
         songIds: songIds,
+        added: DateTime.tryParse('${a['created'] ?? detail['created'] ?? ''}'),
+        label: ((a['recordLabels'] ?? detail['recordLabels']) is List &&
+                ((a['recordLabels'] ?? detail['recordLabels']) as List).isNotEmpty)
+            ? '${(((a['recordLabels'] ?? detail['recordLabels']) as List).first as Map)['name'] ?? ''}'
+            : null,
+        releaseTypes: [
+          for (final t in (a['releaseTypes'] ?? detail['releaseTypes'] ?? const []) as List)
+            '$t'.toLowerCase(),
+        ],
       ));
 
       artistAlbumIds.putIfAbsent(artistId, () => []).add(albumId);

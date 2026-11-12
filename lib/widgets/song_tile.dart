@@ -84,7 +84,7 @@ class _SongTileState extends State<SongTile> {
             const Positioned(left: 0, top: 10, bottom: 10, child: _RailBar()),
           ContextMenuRegion(
             items: songContextMenuItems(context, song),
-            child: ListTile(
+            child: Material(type: MaterialType.transparency, child: ListTile(
               onTap: widget.onTap,
               // Hold-to-open is touch-only now; desktop right-clicks.
               onLongPress: isDesktopPlatform
@@ -174,7 +174,7 @@ class _SongTileState extends State<SongTile> {
                   ),
                 ],
               ),
-            ),
+            )),
           ),
         ],
       ),

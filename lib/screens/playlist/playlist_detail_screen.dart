@@ -227,6 +227,12 @@ class PlaylistDetailScreen extends StatelessWidget {
                                       ),
                             ),
                     ),
+                    if (!live.isSmart)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                        child: _FindSongsRow(
+                            onTap: () => _showAddSongs(context, live)),
+                      ),
                   ],
                 ),
               ),
@@ -239,6 +245,64 @@ class PlaylistDetailScreen extends StatelessWidget {
 }
 
 /// Board back affordance: a 36 px circle on white 7%.
+/// Board: dashed "Find songs to add to this playlist" row under the table.
+class _FindSongsRow extends StatelessWidget {
+  const _FindSongsRow({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClickRegion(
+      onTap: onTap,
+      child: CustomPaint(
+        painter: _DashedRRect(
+            color: const Color(0xFF7C3AED).withValues(alpha: 0.5), radius: 14),
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC4B5FD)),
+            const SizedBox(width: 10),
+            Text('Find songs to add to this playlist',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFFC4B5FD))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRRect extends CustomPainter {
+  _DashedRRect({required this.color, required this.radius});
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          Offset.zero & size, Radius.circular(radius)));
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    for (final m in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < m.length) {
+        canvas.drawPath(m.extractPath(d, d + 6), paint);
+        d += 10;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRRect old) =>
+      old.color != color || old.radius != radius;
+}
+
 class _BackCircleButton extends StatelessWidget {
   final VoidCallback onPressed;
   const _BackCircleButton({required this.onPressed});

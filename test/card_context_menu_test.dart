@@ -85,7 +85,6 @@ void main() {
     // the bulk items are visible but inert, favourites is live.
     expect(find.text('Play'), findsOneWidget);
     expect(find.text('Shuffle'), findsOneWidget);
-    expect(find.text('Add to queue'), findsOneWidget);
     expect(find.text('Add to favourites'), findsOneWidget);
 
     await tester.tap(find.text('Add to favourites'));

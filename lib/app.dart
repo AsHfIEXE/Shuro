@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'backend/subsonic_api.dart';
 import 'models/download_state.dart';
 import 'models/server_config.dart';
+import 'screens/settings/settings_prefs.dart';
+import 'services/image_disk_cache.dart' show CachingHttpOverrides;
 import 'models/song.dart';
 import 'playback/audio_capability.dart';
 import 'playback/audio_diagnostics.dart';
@@ -410,6 +412,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _boundAppState = appState;
       _boundPlayer = player;
       player.autoplay = appState.autoplay;
+      player.queueEndRepeat = appState.queueEnd == 'repeat';
 
       // Lyrics stay one step ahead of the user: the current and next tracks
       // are warmed the moment playback moves, so opening the lyrics screen is
@@ -524,8 +527,39 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // replay gain resolves the dB from the server's own tags (memoised per
       // song id, fire-and-forget).
       final playbackPrefs = context.read<PlaybackPrefs>();
-      final gainMemo = <String, double?>{};
+      final gainMemo = <String, Map<String, dynamic>?>{};
+      final extras = SettingsExtras.instance;
+      unawaited(extras.restore());
+      // Self-signed certificates: allow the hosts of servers the user ticked.
+      void syncSelfSigned() {
+        final hosts = CachingHttpOverrides.selfSignedHosts..clear();
+        for (final s in appState.servers) {
+          if (!extras.selfSignedServerIds.contains(s.id)) continue;
+          final host = Uri.tryParse(s.url)?.host.toLowerCase();
+          if (host != null && host.isNotEmpty) hosts.add(host);
+        }
+      }
+
+      appState.addListener(syncSelfSigned);
+      void pushAudioExtras() {
+        player.limiterEnabled = extras.limiter;
+        var boost = 0.0;
+        if (extras.eqOn) {
+          for (final g in extras.eqGains) {
+            if (g > boost) boost = g;
+          }
+          if (extras.eqPreampDb > boost) boost = extras.eqPreampDb;
+        }
+        player.headroomDb = extras.autoHeadroom ? boost : 0.0;
+        syncSelfSigned();
+        unawaited(player.applyPlaybackTweaksNow());
+      }
+
+      extras.addListener(pushAudioExtras);
+      pushAudioExtras();
       void pushPlaybackSettings() {
+        player.fadeOnPause = playbackPrefs.fadeOnPause;
+        player.gaplessEnabled = appState.gaplessPlayback;
         player.crossfadeSeconds = playbackPrefs.crossfadeSeconds;
         player.replayGainEnabled = playbackPrefs.replayGain;
         player.playbackSpeed = playbackPrefs.playbackSpeed;
@@ -537,19 +571,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       pushPlaybackSettings();
       playbackPrefs.addListener(pushPlaybackSettings);
       player.replayGainResolver = (song) async {
-        if (gainMemo.containsKey(song.id)) return gainMemo[song.id];
-        final api = context.read<ServerSession>().api;
-        if (api == null) return null;
-        try {
-          final info = await api.getSong(song.id);
-          final db = ((info?['replayGain']
-                  as Map<String, dynamic>?)?['trackGain'] as num?)
-              ?.toDouble();
-          gainMemo[song.id] = db;
-          return db;
-        } catch (_) {
-          return null;
+        Map<String, dynamic>? rg;
+        if (gainMemo.containsKey(song.id)) {
+          rg = gainMemo[song.id];
+        } else {
+          final api = context.read<ServerSession>().api;
+          if (api == null) return null;
+          try {
+            final info = await api.getSong(song.id);
+            rg = info?['replayGain'] as Map<String, dynamic>?;
+            gainMemo[song.id] = rg;
+          } catch (_) {
+            return null;
+          }
         }
+        // Album mode prefers the album gain, falling back to the track's.
+        final track = (rg?['trackGain'] as num?)?.toDouble();
+        final album = (rg?['albumGain'] as num?)?.toDouble();
+        final tagged = playbackPrefs.replayGainMode == 'album'
+            ? (album ?? track)
+            : track;
+        if (tagged == null) return playbackPrefs.untaggedPreampDb;
+        return tagged + extras.rgPreampDb;
       };
       player.metadataResolver = appState.nowPlayingMetadataFor;
 
@@ -673,6 +716,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (appState == null || !mounted) return;
     final player = context.read<PlayerController>();
     player.autoplay = appState.autoplay;
+    player.queueEndRepeat = appState.queueEnd == 'repeat';
+    player.gaplessEnabled = appState.gaplessPlayback;
     // Settings → Wi-Fi/Mobile data quality, resolved against the connection the
     // device is actually on — the same value the stream URL is built from, so
     // the diagnostics panel reports against the policy that really applied.
@@ -727,6 +772,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       // Never send an in-progress track after the user turns privacy on.
       // Dropping a partial candidate is conservative and prevents a later
       // track change from submitting private listening time.
+      _resetScrobbleSession();
+      return;
+    }
+    if (!appState.scrobblePlays) {
+      // Settings → Playback → Scrobble plays is off.
       _resetScrobbleSession();
       return;
     }

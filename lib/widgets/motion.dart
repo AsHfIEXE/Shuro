@@ -102,7 +102,7 @@ class HoverLift extends StatefulWidget {
   const HoverLift({
     super.key,
     required this.child,
-    this.lift = 3,
+    this.lift = 6,
     this.radius = const BorderRadius.all(Radius.circular(16)),
     this.borderColor = const Color(0x80A78BFA),
     this.enabled = true,
@@ -128,11 +128,16 @@ class _HoverLiftState extends State<HoverLift> {
     final lifted = _hover && animate;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() {
-        _hover = false;
-        _pressing = false;
-      }),
+      onEnter: (_) {
+        if (mounted) setState(() => _hover = true);
+      },
+      onExit: (_) {
+        if (!mounted) return;
+        setState(() {
+          _hover = false;
+          _pressing = false;
+        });
+      },
       child: Listener(
         onPointerDown: (_) {
           if (animate) {
@@ -140,8 +145,12 @@ class _HoverLiftState extends State<HoverLift> {
             HapticFeedback.selectionClick();
           }
         },
-        onPointerUp: (_) => setState(() => _pressing = false),
-        onPointerCancel: (_) => setState(() => _pressing = false),
+        onPointerUp: (_) {
+          if (mounted) setState(() => _pressing = false);
+        },
+        onPointerCancel: (_) {
+          if (mounted) setState(() => _pressing = false);
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: ShuroMotion.std,
@@ -149,6 +158,14 @@ class _HoverLiftState extends State<HoverLift> {
             ..scaleByDouble(_pressing ? 0.97 : 1.0, _pressing ? 0.97 : 1.0, _pressing ? 0.97 : 1.0, 1.0),
           decoration: BoxDecoration(
             borderRadius: widget.radius,
+            boxShadow: lifted && widget.lift >= 3
+                ? const [
+                    BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 12))
+                  ]
+                : null,
             border: Border.all(
               color: lifted ? widget.borderColor : Colors.transparent,
               width: 1,
@@ -180,7 +197,7 @@ class PlayingBars extends StatefulWidget {
 class _PlayingBarsState extends State<PlayingBars>
     with SingleTickerProviderStateMixin {
   late final AnimationController _loop = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 900))
+      vsync: this, duration: const Duration(milliseconds: 1100))
     ..repeat();
 
   @override
@@ -200,7 +217,7 @@ class _PlayingBarsState extends State<PlayingBars>
         // Three bars phase-shifted by a third — reads as audio, not as a
         // spinner.
         return _bars((i) {
-          final phase = (_loop.value + i / 3) % 1.0;
+          final phase = (_loop.value + i / 5) % 1.0;
           return 0.25 + 0.75 * (0.5 - 0.5 * _wave(phase));
         });
       },
@@ -210,14 +227,14 @@ class _PlayingBarsState extends State<PlayingBars>
   static double _wave(double t) => -math.cos(2 * math.pi * t);
 
   Widget _bars(double Function(int) scaleOf) {
-    final barWidth = widget.size / 5;
+    final barWidth = widget.size / 9;
     return SizedBox(
       width: widget.size,
       height: widget.size,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          for (var i = 0; i < 3; i++)
+          for (var i = 0; i < 5; i++)
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
@@ -346,6 +363,160 @@ class _MeshBlobsState extends State<MeshBlobs>
           ),
         ),
       ),
+    );
+  }
+}
+
+
+/// Press feedback from the Motion board: squashes to [scale] (92 %) on press,
+/// springs back with overshoot (120 ms down, 220 ms up). Wrap play buttons and
+/// cover play discs. Frozen under reduced motion.
+class PressScale extends StatefulWidget {
+  const PressScale({super.key, required this.child, this.scale = 0.92});
+
+  final Widget child;
+  final double scale;
+
+  @override
+  State<PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<PressScale> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (mounted && _down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (reduceMotionEnabled) return widget.child;
+    return Listener(
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: AnimatedScale(
+        scale: _down ? widget.scale : 1.0,
+        duration: _down ? ShuroMotion.fast : const Duration(milliseconds: 220),
+        curve: _down ? ShuroMotion.std : ShuroMotion.spring,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Connection-test result: a spinner that resolves into a check drawn over
+/// 450 ms (Motion board "Connection test"). [done] false shows the spinner.
+class DrawnCheck extends StatelessWidget {
+  const DrawnCheck({
+    super.key,
+    required this.done,
+    this.size = 36,
+    this.color = const Color(0xFF34D399),
+  });
+
+  final bool done;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!done) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: CircularProgressIndicator(
+            strokeWidth: 3, color: kVioletPale, backgroundColor: Colors.white12),
+      );
+    }
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: reduceMotionEnabled ? 1 : 0, end: 1),
+      duration: const Duration(milliseconds: 450),
+      curve: ShuroMotion.std,
+      builder: (context, t, _) => CustomPaint(
+        size: Size.square(size),
+        painter: _CheckPainter(t, color),
+      ),
+    );
+  }
+}
+
+class _CheckPainter extends CustomPainter {
+  _CheckPainter(this.t, this.color);
+  final double t;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final ring = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(size.center(Offset.zero), size.width / 2, ring);
+    final path = Path()
+      ..moveTo(size.width * 0.28, size.height * 0.52)
+      ..lineTo(size.width * 0.44, size.height * 0.68)
+      ..lineTo(size.width * 0.74, size.height * 0.34);
+    final metric = path.computeMetrics().first;
+    canvas.drawPath(
+      metric.extractPath(0, metric.length * t),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.09
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CheckPainter old) => old.t != t || old.color != color;
+}
+
+/// Onboarding step change: the current step slides left 40 px and fades while
+/// the next arrives from the right, 360 ms on the emphasized curve.
+class StepSwitcher extends StatelessWidget {
+  const StepSwitcher({super.key, required this.child});
+
+  final Widget child; // give it a ValueKey per step
+
+  @override
+  Widget build(BuildContext context) {
+    if (reduceMotionEnabled) return child;
+    return AnimatedSwitcher(
+      duration: ShuroMotion.stepSlide,
+      switchInCurve: ShuroMotion.emphasized,
+      switchOutCurve: ShuroMotion.emphasized,
+      transitionBuilder: (c, a) => FadeTransition(
+        opacity: a,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0.04, 0), end: Offset.zero)
+              .animate(a),
+          child: c,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Toast entrance: slides up 24 px with a fade, 220 ms.
+class ToastIn extends StatelessWidget {
+  const ToastIn({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (reduceMotionEnabled) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: ShuroMotion.toastIn,
+      curve: ShuroMotion.std,
+      builder: (context, t, c) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, 24 * (1 - t)), child: c),
+      ),
+      child: child,
     );
   }
 }

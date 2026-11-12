@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import 'animated_favorite_icon.dart';
 import 'shuro_icons.dart';
 import 'click_region.dart';
+import 'motion.dart';
 
 /// Track title + artist, flanked by shuffle/repeat — the "Música/Artista"
 /// row from the design. [accent] is passed in explicitly (the track's
@@ -328,7 +329,7 @@ class PlaybackControls extends StatelessWidget {
     final fg = whiteDisc ? kSurfaceColor : Colors.white;
     return ClickRegion(
       onTap: onPlayPause,
-      child: Semantics(
+      child: PressScale(child: Semantics(
         button: true,
         label: isBuffering ? 'Loading' : (isPlaying ? 'Pause' : 'Play'),
         child: AnimatedContainer(
@@ -380,7 +381,7 @@ class PlaybackControls extends StatelessWidget {
                   ),
           ),
         ),
-      ),
+      )),
     );
   }
 }

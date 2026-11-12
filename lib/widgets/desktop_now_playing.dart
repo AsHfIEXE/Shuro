@@ -114,6 +114,7 @@ import '../screens/now_playing/lyrics_screen.dart';
 
 import '../theme/app_theme.dart';
 import 'click_region.dart';
+import 'desktop_context_menu.dart';
 
 
 
@@ -3089,7 +3090,11 @@ class _DesktopSeekState extends State<_DesktopSeek> {
 
 
 
-        SliderTheme(
+        _AbLoopSeekOverlay(
+          player: player,
+          enabled: isActive,
+          total: total,
+          child: SliderTheme(
 
 
 
@@ -3174,6 +3179,7 @@ class _DesktopSeekState extends State<_DesktopSeek> {
 
 
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: _AbLoopSeekOverlay.inset),
 
 
 
@@ -3293,7 +3299,7 @@ class _DesktopSeekState extends State<_DesktopSeek> {
 
 
 
-        ),
+        )),
 
 
 
@@ -3563,3 +3569,107 @@ class _DesktopSeekState extends State<_DesktopSeek> {
 
 
 
+
+
+/// Right-click menu and A/B markers for the desktop seek bar. The slider's
+/// overlay radius is fixed to [inset] so markers line up with the real track.
+class _AbLoopSeekOverlay extends StatelessWidget {
+  static const double inset = 12;
+  final PlayerController player;
+  final bool enabled;
+  final Duration total;
+  final Widget child;
+  const _AbLoopSeekOverlay({
+    required this.player,
+    required this.enabled,
+    required this.total,
+    required this.child,
+  });
+
+  String _fmt(Duration d) =>
+      '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: player,
+      builder: (context, _) {
+        final a = player.loopA;
+        final b = player.loopB;
+        final totalMs = total.inMilliseconds;
+        return ClickRegion(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: !enabled
+              ? null
+              : (d) => showContextMenuAt(context, d.globalPosition, [
+                    ContextMenuItem(
+                      label: a == null ? 'Set A' : 'Set A (now ${_fmt(a)})',
+                      icon: Icons.flag_outlined,
+                      onTap: player.setLoopA,
+                    ),
+                    ContextMenuItem(
+                      label: b == null ? 'Set B' : 'Set B (now ${_fmt(b)})',
+                      icon: Icons.flag_rounded,
+                      onTap: player.setLoopB,
+                    ),
+                    ContextMenuItem(
+                      label: 'Clear loop',
+                      icon: Icons.close_rounded,
+                      onTap: player.clearLoop,
+                    ),
+                  ]),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              child,
+              if (totalMs > 0 && (a != null || b != null))
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: LayoutBuilder(builder: (context, c) {
+                      final trackW = (c.maxWidth - inset * 2).clamp(0.0, 1e6);
+                      double x(Duration d) =>
+                          inset +
+                          trackW * (d.inMilliseconds / totalMs).clamp(0.0, 1.0);
+                      Widget marker(Duration d, String label) => Positioned(
+                            left: x(d) - 1,
+                            top: 0,
+                            bottom: 0,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(label,
+                                    style: const TextStyle(
+                                        color: Color(0xFFA78BFA),
+                                        fontSize: 9,
+                                        height: 1,
+                                        fontWeight: FontWeight.w700)),
+                                Container(
+                                    width: 2,
+                                    height: 14,
+                                    color: const Color(0xFFA78BFA)),
+                              ],
+                            ),
+                          );
+                      return Stack(children: [
+                        if (a != null && b != null && b > a)
+                          Positioned(
+                            left: x(a),
+                            width: x(b) - x(a),
+                            top: c.maxHeight / 2 + 4,
+                            height: 3,
+                            child: Container(
+                                color: const Color(0x66A78BFA)),
+                          ),
+                        if (a != null) marker(a, 'A'),
+                        if (b != null) marker(b, 'B'),
+                      ]);
+                    }),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

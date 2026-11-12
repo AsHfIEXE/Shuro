@@ -35,6 +35,7 @@ import 'audio_info_sheet.dart';
 import 'lyrics_screen.dart';
 import 'queue_screen.dart';
 import '../../widgets/click_region.dart';
+import '../../widgets/player_bar_extras.dart';
 
 /// At or above this width the screen switches from the phone stack to a
 /// two-pane layout (artwork beside the controls). 1024 also happens to be the
@@ -1483,32 +1484,6 @@ String? qualityChipLabel(Song song) {
   return parts.join(' · ');
 }
 
-/// Green pill on a 14% green fill (docs/02): source quality at a glance.
-class _QualityChip extends StatelessWidget {
-  final String label;
-
-  const _QualityChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: kGreen.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.getFont(currentFontFamily,
-            color: kGreen,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.2),
-      ),
-    );
-  }
-}
-
 /// Title + "Artist · Album · Year" + quality chip (docs/02 metadata block):
 /// the artist is #F9A8D4 (kPinkPale) w600, the album/year muted. The whole
 /// block swaps as one animated unit when the track changes.
@@ -1601,7 +1576,7 @@ class _MetaBlock extends StatelessWidget {
           ),
           if (quality != null) ...[
             const SizedBox(height: 8),
-            _QualityChip(label: quality),
+            SignalPathChip(song: song, label: quality),
           ],
         ],
       ),
@@ -1769,6 +1744,19 @@ Future<void> showSleepTimerSheet(
                         color: Colors.white, fontSize: 13.5)),
                 onTap: () {
                   player.startSleepTimerEndOfTrack(fadeOut: fade);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.album_rounded, color: kBrandColor),
+                title: Text('End of album',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white, fontSize: 13.5)),
+                subtitle: Text('Pauses after this album\'s last queued track',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMutedTextColor, fontSize: 11.5)),
+                onTap: () {
+                  player.startSleepTimerEndOfAlbum();
                   Navigator.of(sheetContext).pop();
                 },
               ),
@@ -2244,10 +2232,13 @@ class _NpvActionRow extends StatelessWidget {
             onTap: () => showSleepTimerSheet(context, player),
           ),
           const SizedBox(width: 12),
-          _CircleAction(
-            icon: Icons.queue_music_rounded,
-            tooltip: 'Queue',
-            onTap: () => pushRisingOnce(context, const QueueScreen()),
+          QueuePeekButton(
+            onOpen: () => pushRisingOnce(context, const QueueScreen()),
+            child: _CircleAction(
+              icon: Icons.queue_music_rounded,
+              tooltip: 'Queue (hold to peek)',
+              onTap: () => pushRisingOnce(context, const QueueScreen()),
+            ),
           ),
           if (!desktop) ...[
             const SizedBox(width: 12),

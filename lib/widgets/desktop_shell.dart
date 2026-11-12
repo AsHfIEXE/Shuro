@@ -27,6 +27,7 @@ import '../theme/desktop_tokens.dart';
 import 'app_logo.dart';
 import 'playlist_collage_art.dart';
 import 'page_transitions.dart';
+import 'player_bar_extras.dart';
 import 'shuro_icons.dart';
 
 /// Windows/Linux workspace. All content screens and the mobile shell remain
@@ -1491,6 +1492,11 @@ class _PlayerDockState extends State<_PlayerDock> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (song != null && qualityChipLabel(song) != null) ...[
+                        SignalPathChip(
+                            song: song, label: qualityChipLabel(song)!),
+                        const SizedBox(width: 6),
+                      ],
                       _VolumeControl(
                         volume: playbackPrefs.appVolume,
                         enabled: true,
@@ -1502,11 +1508,9 @@ class _PlayerDockState extends State<_PlayerDock> {
                         icon: const Icon(Icons.lyrics_rounded,
                             color: Colors.white54),
                       ),
-                      IconButton(
-                        tooltip: 'Queue',
-                        onPressed: widget.onQueuePage,
-                        icon: const Icon(Icons.queue_music_rounded,
-                            color: Colors.white54),
+                      QueuePeekButton(
+                        onOpen: widget.onQueuePage,
+                        color: Colors.white54,
                       ),
                       IconButton(
                         tooltip: player.sleepUntil != null

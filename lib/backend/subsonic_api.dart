@@ -192,6 +192,19 @@ class SubsonicApi {
     };
   }
 
+  /// Server-side starred songs with the date each was starred (Subsonic
+  /// `starred` ISO timestamp). Entries without a parseable date are omitted.
+  Future<Map<String, DateTime>> starredSongDates() async {
+    final body = await _call('getStarred2', {});
+    final starred = body['starred2'] as Map<String, dynamic>? ?? const {};
+    final out = <String, DateTime>{};
+    for (final song in _listOf(starred['song'])) {
+      final at = DateTime.tryParse('${song['starred'] ?? ''}');
+      if (at != null) out['${song['id']}'] = at.toLocal();
+    }
+    return out;
+  }
+
   // --- play counting ---------------------------------------------------------
 
   /// scrobble: [submission] true = a finished listen (Navidrome counts a play);
@@ -222,6 +235,27 @@ class SubsonicApi {
       );
     } catch (_) {
       return (imageUrl: null, biography: null);
+    }
+  }
+
+  /// Biography plus `similarArtist` entries from getArtistInfo2 (Artist detail
+  /// "About" / "Similar artists"). Empty on any failure.
+  Future<({String? biography, List<({String id, String name, String? imageUrl})> similar})>
+      artistInfoWithSimilar(String id, {int count = 6}) async {
+    try {
+      final body = await _call('getArtistInfo2', {'id': id, 'count': '$count', 'includeNotPresent': 'false'});
+      final info = body['artistInfo2'] as Map<String, dynamic>?;
+      if (info == null) return (biography: null, similar: const <({String id, String name, String? imageUrl})>[]);
+      final similar = <({String id, String name, String? imageUrl})>[];
+      for (final a in _listOf(info['similarArtist'])) {
+        final name = '${a['name'] ?? ''}';
+        if (name.isEmpty) continue;
+        final img = (a['artistImageUrl'] as String?) ?? (a['largeImageUrl'] as String?) ?? (a['mediumImageUrl'] as String?);
+        similar.add((id: '${a['id'] ?? ''}', name: name, imageUrl: (img != null && img.isNotEmpty) ? img : null));
+      }
+      return (biography: info['biography'] as String?, similar: similar);
+    } catch (_) {
+      return (biography: null, similar: const <({String id, String name, String? imageUrl})>[]);
     }
   }
 

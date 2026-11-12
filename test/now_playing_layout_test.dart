@@ -58,11 +58,10 @@ void main() {
       // after the first frame; the second pump flushes one animation tick.
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pump(const Duration(seconds: 1));
-      // The lyrics lookup path arms timeouts up to 25 s. Advancing fake time
-      // past the longest one lets those futures settle (and their timers
-      // cancel) before the binding asserts that no timer is still pending.
-      await tester.pump(const Duration(seconds: 26));
-      await tester.pump();
+    // Desktop layouts start the 25 s lyrics lookup and 4 s store
+    // timers; fire them so the test ends with no pending FakeTimers.
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump(const Duration(seconds: 6));
 
       final overflows = errors.where((e) => e.exception.toString().contains('overflowed'));
       expect(

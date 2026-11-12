@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// A [GestureDetector] that shows the hand cursor over anything tappable.

@@ -485,9 +485,14 @@ class _SignalLineState extends State<_SignalLine>
   @override
   Widget build(BuildContext context) {
     final animate = onboardingMotionEnabled(context);
-    return LayoutBuilder(builder: (context, constraints) {
-      final nodeWidth =
-          (constraints.maxWidth / widget.nodes.length).clamp(44.0, 110.0);
+    // No LayoutBuilder here: the preset row sits in an IntrinsicHeight, which
+    // cannot measure a LayoutBuilder (it threw and blanked the whole step).
+    // The card's inner width is derived from the screen instead.
+    final screen = MediaQuery.sizeOf(context).width;
+    final content = (screen - 64).clamp(0.0, 1040.0);
+    final inner = (screen >= 820 ? (content - 32) / 3 : content) - 40;
+    {
+      final nodeWidth = (inner / widget.nodes.length).clamp(44.0, 110.0);
       return SizedBox(
         height: nodeWidth < 88 ? 58 : 64,
         child: AnimatedBuilder(
@@ -511,7 +516,7 @@ class _SignalLineState extends State<_SignalLine>
           ),
         ),
       );
-    });
+    }
   }
 
   Widget _connector(BuildContext context,

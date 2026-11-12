@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import '../screens/settings/settings_prefs.dart';
 
 /// Owns the native Windows/Linux app lifetime.
 ///
@@ -76,8 +77,14 @@ class DesktopLifecycle with WindowListener, TrayListener {
                   Offset(savedBounds['x']!, savedBounds['y']!));
             } catch (_) {}
           }
-          await windowManager.show();
-          await windowManager.focus();
+          await SettingsExtras.instance.restore();
+          if (SettingsExtras.instance.startMinimized) {
+            await windowManager.minimize();
+            await windowManager.show();
+          } else {
+            await windowManager.show();
+            await windowManager.focus();
+          }
         },
       );
       customChrome.value = true;
@@ -189,12 +196,24 @@ class DesktopLifecycle with WindowListener, TrayListener {
 
   @override
   void onWindowClose() {
-    if (_trayAvailable && !_quitting) unawaited(hideWindow());
+    if (_quitting) return;
+    if (_trayAvailable && SettingsExtras.instance.closeToTray) {
+      unawaited(hideWindow());
+    } else {
+      unawaited(quitApplication());
+    }
   }
 
   @override
   void onTrayIconMouseDown() {
     unawaited(showWindow());
+  }
+
+  /// Windows only forwards the right-click to Dart; the plugin never opens the
+  /// menu itself, so it has to be popped up here.
+  @override
+  void onTrayIconRightMouseDown() {
+    unawaited(trayManager.popUpContextMenu());
   }
 
   @override

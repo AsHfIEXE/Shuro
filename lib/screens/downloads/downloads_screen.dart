@@ -11,6 +11,7 @@ import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/desktop_tokens.dart';
 import '../../widgets/artwork_thumb.dart';
+import '../../widgets/click_region.dart';
 import '../../widgets/download_cards.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/state_views.dart';
@@ -21,8 +22,16 @@ const Color _cardSurface = Color(0xFF111723);
 
 /// "12. Downloads / Offline" — device storage, in-flight transfers, offline
 /// plans and the downloaded library (cards with a real selection mode).
-class DownloadsScreen extends StatelessWidget {
+class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
+
+  @override
+  State<DownloadsScreen> createState() => _DownloadsScreenState();
+}
+
+class _DownloadsScreenState extends State<DownloadsScreen> {
+  /// 0 = Downloading, 1 = Completed, 2 = Failed.
+  int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -44,47 +53,62 @@ class DownloadsScreen extends StatelessWidget {
     final failedCount =
         active.where((e) => e.value.stage == DownloadStage.failed).length;
 
+    Widget tabChip(int index, String label, int count, Color fg, Color bg) =>
+        ClickRegion(
+          onTap: () => setState(() => _tab = index),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                  color: _tab == index ? fg : Colors.transparent, width: 1.5),
+            ),
+            child: _StatusChip(
+                label: label, count: count, foreground: fg, background: bg),
+          ),
+        );
     final chips = Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          _StatusChip(
-            label: 'Downloading',
-            count: inFlightCount,
-            foreground: kVioletPale,
-            background: kBrandColor.withValues(alpha: 0.14),
-          ),
-          _StatusChip(
-            label: 'Completed',
-            count: downloadedSongs.length,
-            foreground: kGreenLight,
-            background: kGreen.withValues(alpha: 0.14),
-          ),
-          _StatusChip(
-            label: 'Failed',
-            count: failedCount,
-            foreground: Colors.redAccent,
-            background: Colors.redAccent.withValues(alpha: 0.14),
-          ),
+          tabChip(0, 'Downloading', inFlightCount, kVioletPale,
+              kBrandColor.withValues(alpha: 0.14)),
+          tabChip(1, 'Completed', downloadedSongs.length, kGreenLight,
+              kGreen.withValues(alpha: 0.14)),
+          tabChip(2, 'Failed', failedCount, Colors.redAccent,
+              Colors.redAccent.withValues(alpha: 0.14)),
         ],
       ),
     );
 
-    final activeCard = active.isEmpty
-        ? const SizedBox.shrink()
-        : _ActiveDownloadsCard(entries: active);
+    final tabEntries = active.where((e) => _tab == 2
+        ? e.value.stage == DownloadStage.failed
+        : e.value.stage != DownloadStage.failed).toList();
+    final activeCard = (_tab == 1 || tabEntries.isEmpty)
+        ? (_tab == 1
+            ? const SizedBox.shrink()
+            : _EmptyTabNote(
+                text: _tab == 2
+                    ? 'No failed downloads.'
+                    : 'Nothing is downloading right now.'))
+        : _ActiveDownloadsCard(entries: tabEntries);
     final plans = _OfflinePlansSection(
         plans: appState.offlinePlans, appState: appState, downloads: downloads);
     // Cards with metadata + a real selection mode (long-press a card, then
     // remove just the chosen ones or everything at once).
-    final completed = Column(children: const [
-      SectionHeader(title: 'Downloaded Songs'),
-      DownloadCardsSection(),
-      SizedBox(height: 24),
+    final completed = _tab != 1
+        ? const SizedBox.shrink()
+        : Column(children: [
+            _CompletedRecentSection(downloads: downloads),
+            const SectionHeader(title: 'Downloaded Songs'),
+            const DownloadCardsSection(),
+            const SizedBox(height: 24),
+          ]);
+    final storage = Column(children: const [
+      _StorageCard(),
+      _DownloadRulesCard(),
     ]);
-    final storage = const _StorageCard();
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
@@ -729,5 +753,154 @@ class _OfflinePlansSection extends StatelessWidget {
           ),
         ),
     ]);
+  }
+}
+
+class _EmptyTabNote extends StatelessWidget {
+  final String text;
+  const _EmptyTabNote({required this.text});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        child: Text(text,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kStatusText, fontSize: 13)),
+      );
+}
+
+/// "COMPLETED THIS SESSION" with Clear list. Clearing empties this list only;
+/// the downloaded files stay on the device (they remain under Downloaded
+/// Songs below). The service keeps no completion dates, so this says
+/// "this session" rather than claiming "today".
+class _CompletedRecentSection extends StatelessWidget {
+  final DownloadService downloads;
+  const _CompletedRecentSection({required this.downloads});
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = downloads.recentlyCompleted;
+    if (recent.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _cardSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kHairline),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 0, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('COMPLETED THIS SESSION',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMuted2,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1)),
+                  ),
+                  Tooltip(
+                    message: 'Only clears this list. Downloaded files are kept.',
+                    child: TextButton(
+                      onPressed: downloads.clearRecentlyCompleted,
+                      child: Text('Clear list (keeps files)',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kVioletLight, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final song in recent.take(8))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Row(children: [
+                  ArtworkThumb(
+                      gradientColors: song.gradientColors,
+                      artwork: song.artwork,
+                      size: 36,
+                      radius: 8),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kTextColor,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600)),
+                        Text(song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(currentFontFamily,
+                                color: kStatusText, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.check_circle_rounded,
+                      color: kGreen, size: 18),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "DOWNLOAD RULES": the Wi-Fi only switch, bound to the same setting as
+/// Settings > Downloads.
+class _DownloadRulesCard extends StatelessWidget {
+  const _DownloadRulesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _cardSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kHairline),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('DOWNLOAD RULES',
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMuted2,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1)),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Wi-Fi only',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kTextColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+              subtitle: Text('Never use mobile data',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kStatusText, fontSize: 12)),
+              value: appState.downloadWifiOnly,
+              activeThumbColor: kBrandColor,
+              onChanged: (v) =>
+                  appState.toggleSetting(() => appState.downloadWifiOnly = v),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../backend/subsonic_api.dart';
 import '../../models/album.dart';
+import '../../models/audio_info.dart';
 import '../../models/song.dart';
 import '../../services/download_service.dart';
 import '../../state/app_state.dart';
@@ -13,11 +14,17 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/desktop_tokens.dart';
 import '../../widgets/album_actions_sheet.dart';
+import '../../widgets/animated_favorite_icon.dart';
+import '../../widgets/album_year_card.dart';
 import '../../widgets/artwork_thumb.dart';
+import '../../widgets/cache_helpers.dart';
+import '../../widgets/click_region.dart';
+import '../../widgets/page_transitions.dart';
 import '../../widgets/desktop_context_menu.dart';
 import '../../widgets/motion.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
+import '../artist/artist_detail_screen.dart';
 
 /// "05. Albums > Album detail" — redesigned per the Album detail board.
 ///
@@ -69,6 +76,7 @@ class AlbumDetailScreen extends StatelessWidget {
     final songs = appState.songsForAlbum(album.id);
     final player = context.read<PlayerController>();
     final isFav = appState.isFavoriteAlbum(album.id);
+    final cachedIds = offlineSongIds(appState, songs);
 
     return Scaffold(
       backgroundColor: kSurfaceColor,
@@ -91,6 +99,9 @@ class AlbumDetailScreen extends StatelessWidget {
                   album: album,
                   songs: songs,
                   isFav: isFav,
+                  cachedIds: cachedIds,
+                  onCacheAlbum: () =>
+                      cacheSongsWithFeedback(context, appState, songs, album.title),
                   onPlay: () => player.playSong(songs.first, queue: songs),
                   onShuffle: () {
                     player.playSong(songs.first, queue: songs);
@@ -247,32 +258,62 @@ String _formatTrackDuration(Duration value) {
   return '$minutes:$seconds';
 }
 
+/// "FLAC 24/96" / "MP3 320 kbps" from the server-reported source info; empty
+/// when the server reported nothing.
+String _qualityLabel(AudioInfo a) {
+  final fmt = a.hasFormat ? a.format!.toUpperCase() : '';
+  String detail = '';
+  if (a.hasBitDepth && a.hasSampleRate) {
+    final khz = a.sampleRateHz! / 1000;
+    final k = khz == khz.roundToDouble() ? khz.toStringAsFixed(0) : khz.toStringAsFixed(1);
+    detail = '${a.bitDepth}/$k';
+  } else if (a.hasSampleRate) {
+    detail = a.sampleRateLabel;
+  } else if (a.hasBitrate) {
+    detail = '${a.bitrateKbps} kbps';
+  }
+  return [fmt, detail].where((e) => e.isNotEmpty).join(' ');
+}
+
+String _thousands(int n) {
+  final s = '$n';
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+    b.write(s[i]);
+  }
+  return b.toString();
+}
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /// The cover + meta header. Wide layouts put a 200 px cover beside the
 /// title block; narrow ones centre a 132 px cover over the text so the
 /// screen still reads at 360 px.
 class _AlbumHeader extends StatelessWidget {
   final Album album;
   final List<Song> songs;
+  final int cachedCount;
 
-  const _AlbumHeader({required this.album, required this.songs});
+  const _AlbumHeader(
+      {required this.album, required this.songs, this.cachedCount = 0});
 
   @override
   Widget build(BuildContext context) {
     final totalSeconds =
         songs.fold<int>(0, (sum, s) => sum + s.duration.inSeconds);
+    // Technical format info from the album's own scan — only shown when the
+    // server actually reported something.
+    final audio = songs.isNotEmpty ? songs.first.audioInfo : null;
+    final quality = audio == null ? '' : _qualityLabel(audio);
     final meta = [
       if (album.year > 0) '${album.year}',
-      '${songs.length} track${songs.length == 1 ? '' : 's'}',
+      '${songs.length} ${songs.length == 1 ? 'song' : 'songs'}',
       if (totalSeconds > 0) _formatTotal(Duration(seconds: totalSeconds)),
-    ].join('  ·  ');
-    // Technical format info from the album's own scan (kept from the old
-    // footer line, now the meta line's tail — only shown when the server
-    // actually reported something).
-    final audio = songs.isNotEmpty ? songs.first.audioInfo : null;
-    final qualityBits = [
-      if (audio?.hasBitDepth ?? false) audio!.bitDepthLabel,
-      if (audio?.hasSampleRate ?? false) audio!.sampleRateLabel,
-    ];
+      if (quality.isNotEmpty) quality,
+      if (songs.isNotEmpty) '$cachedCount of ${songs.length} cached',
+    ].join(' · ');
+    final artistModel = context.read<AppState>().artistById(album.artistId);
 
     return LayoutBuilder(builder: (context, constraints) {
       final wide = constraints.maxWidth >= 640;
@@ -298,9 +339,9 @@ class _AlbumHeader extends StatelessWidget {
               if (wide)
                 Text('ALBUM',
                     style: GoogleFonts.getFont(currentFontFamily,
-                        color: kMuted2,
+                        color: kVioletLight,
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 1.68)),
               if (wide) const SizedBox(height: 4),
               Text(album.title,
@@ -309,49 +350,41 @@ class _AlbumHeader extends StatelessWidget {
                   textAlign: centered ? TextAlign.center : TextAlign.start,
                   style: titleStyle),
               const SizedBox(height: 4),
-              Text(album.artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kPinkPale,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text(meta,
-                  style: GoogleFonts.getFont(currentFontFamily,
-                      color: kStatusText, fontSize: 13)),
-              if (audio != null && !audio.nothingReported) ...[
-                const SizedBox(height: 4),
-                Row(
+              ClickRegion(
+                onTap: artistModel == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        drillDownRoute(ArtistDetailScreen(artist: artistModel))),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (audio.hasFormat)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: kBrandColor.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(audio.formatLabel,
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: kVioletPale,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    if (qualityBits.isNotEmpty) ...[
-                      if (audio.hasFormat) const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(qualityBits.join('  ·  '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: kMuted2, fontSize: 12)),
-                      ),
-                    ],
+                    ArtworkThumb(
+                      gradientColors:
+                          artistModel?.gradientColors ?? album.gradientColors,
+                      artwork: artistModel?.artwork,
+                      size: 24,
+                      radius: 999,
+                      icon: Icons.person_rounded,
+                      iconSize: 12,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(album.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kVioletLight,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600)),
+                    ),
                   ],
                 ),
-              ],
+              ),
+              const SizedBox(height: 8),
+              Text(meta,
+                  textAlign: centered ? TextAlign.center : TextAlign.start,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kStatusText, fontSize: 13)),
             ],
           );
 
@@ -388,6 +421,8 @@ class _AlbumBody extends StatelessWidget {
   final Album album;
   final List<Song> songs;
   final bool isFav;
+  final Set<String> cachedIds;
+  final VoidCallback onCacheAlbum;
   final VoidCallback? onPlay;
   final VoidCallback? onShuffle;
   final VoidCallback onFavorite;
@@ -399,6 +434,8 @@ class _AlbumBody extends StatelessWidget {
     required this.album,
     required this.songs,
     required this.isFav,
+    required this.cachedIds,
+    required this.onCacheAlbum,
     required this.onPlay,
     required this.onShuffle,
     required this.onFavorite,
@@ -410,10 +447,24 @@ class _AlbumBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasSongs = songs.isNotEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final appState = context.watch<AppState>();
+    final more = appState.catalogAlbums
+        .where((a) => a.artistId == album.artistId && a.id != album.id)
+        .toList()
+      ..sort((a, b) => b.year.compareTo(a.year));
+    final copyright = [
+      if (album.year > 0) '© ${album.year} ${album.label ?? album.artist}',
+      if (album.added != null)
+        'Added ${album.added!.day} ${_months[album.added!.month - 1]} ${album.added!.year}',
+    ].join(' · ');
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
       children: [
-        Entrance(child: _AlbumHeader(album: album, songs: songs)),
+        Entrance(
+            child: _AlbumHeader(
+                album: album,
+                songs: songs,
+                cachedCount: cachedIds.length)),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Wrap(
@@ -429,6 +480,11 @@ class _AlbumBody extends StatelessWidget {
                   label: 'Shuffle',
                   icon: Icons.shuffle_rounded,
                   onTap: hasSongs ? onShuffle : null,
+                  glass: true),
+              _ActionPill(
+                  label: 'Cache album',
+                  icon: Icons.download_rounded,
+                  onTap: hasSongs ? onCacheAlbum : null,
                   glass: true),
               _CircleAction(
                 icon: isFav
@@ -451,21 +507,60 @@ class _AlbumBody extends StatelessWidget {
             ],
           ),
         ),
-        Expanded(
-          child: hasSongs
-              ? _DetailTrackTable(
-                  songs: songs,
-                  onPlaySong: onPlaySong,
-                  // Album tracks already name the artist in the header.
-                  showArtistColumn: false,
-                )
-              : const EmptyStateView(
-                  icon: Icons.music_off_rounded,
-                  title: 'No tracks found',
-                  subtitle:
-                      "This album has no songs on the connected server right now.",
+        if (hasSongs)
+          _DetailTrackTable(
+            songs: songs,
+            cachedIds: cachedIds,
+            onPlaySong: onPlaySong,
+            // Album tracks already name the artist in the header.
+            showArtistColumn: false,
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: EmptyStateView(
+              icon: Icons.music_off_rounded,
+              title: 'No tracks found',
+              subtitle:
+                  "This album has no songs on the connected server right now.",
+            ),
+          ),
+        if (copyright.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(copyright,
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMuted2, fontSize: 12)),
+          ),
+        if (more.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+            child: Text('MORE BY ${album.artist}'.toUpperCase(),
+                style: GoogleFonts.getFont(currentFontFamily,
+                    color: kMuted2,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2)),
+          ),
+          SizedBox(
+            height: 232,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: more.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (context, i) => Entrance(
+                delay: Entrance.stagger(i),
+                enabled: i < 12,
+                child: AlbumYearCard(
+                  album: more[i],
+                  onTap: () => Navigator.of(context)
+                      .push(drillDownRoute(AlbumDetailScreen(album: more[i]))),
                 ),
-        ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -482,6 +577,7 @@ const Color _tableCardColor = Color(0xFF111723);
 /// actions sheet on touch, and the "⋮" opens the same menu anchored.
 class _DetailTrackTable extends StatelessWidget {
   final List<Song> songs;
+  final Set<String> cachedIds;
   final void Function(Song song) onPlaySong;
 
   /// Show the Artist column on desktop (off for album/artist detail, where
@@ -491,6 +587,7 @@ class _DetailTrackTable extends StatelessWidget {
   const _DetailTrackTable({
     required this.songs,
     required this.onPlaySong,
+    this.cachedIds = const {},
     this.showArtistColumn = true,
   });
 
@@ -499,6 +596,8 @@ class _DetailTrackTable extends StatelessWidget {
     final desktop = isDesktopPlatform;
     if (songs.isEmpty) return const SizedBox.shrink();
     final rows = ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.only(bottom: desktop ? 8 : 24),
       itemCount: songs.length,
       itemBuilder: (context, i) {
@@ -512,6 +611,7 @@ class _DetailTrackTable extends StatelessWidget {
             index: i,
             desktop: desktop,
             showArtist: showArtistColumn || !desktop,
+            cached: cachedIds.contains(songs[i].id),
             onTap: () => onPlaySong(songs[i]),
           ),
         );
@@ -531,6 +631,7 @@ class _DetailTrackTable extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
               height: DesktopTokens.rowTable,
@@ -549,38 +650,66 @@ class _DetailTrackTable extends StatelessWidget {
                       flex: 4,
                       child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Text('Title',
+                          child: Text('TITLE',
                               style: TextStyle(
                                   color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.8)))),
                   if (showArtistColumn)
                     const Expanded(
                         flex: 3,
                         child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: 10),
-                            child: Text('Artist',
+                            child: Text('ARTIST',
                                 style: TextStyle(
                                     color: kMuted2,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.7)))),
-                  const SizedBox(
+                  SizedBox(
+                      width: 84,
+                      child: Text('OFFLINE',
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(
+                              color: kMuted2,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8))),
+                  SizedBox(
+                      width: 84,
+                      child: Text('PLAYS',
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(
+                              color: kMuted2,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8))),
+                  SizedBox(
+                      width: 120,
+                      child: Text('QUALITY',
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(
+                              color: kMuted2,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8))),
+                  SizedBox(
                       width: 64,
-                      child: Center(
-                          child: Text('Duration',
-                              style: TextStyle(
-                                  color: kMuted2,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.7)))),
+                      child: Text('TIME',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                              color: kMuted2,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8))),
+                  const SizedBox(width: 36),
                   const SizedBox(width: 40),
                 ],
               ),
             ),
             Divider(height: 1, color: kHairline),
-            Expanded(child: rows),
+            rows,
           ],
         ),
       ),
@@ -594,6 +723,7 @@ class _TrackRow extends StatelessWidget {
   final int index;
   final bool desktop;
   final bool showArtist;
+  final bool cached;
   final VoidCallback onTap;
 
   const _TrackRow({
@@ -602,6 +732,7 @@ class _TrackRow extends StatelessWidget {
     required this.desktop,
     required this.showArtist,
     required this.onTap,
+    this.cached = false,
   });
 
   @override
@@ -637,10 +768,11 @@ class _TrackRow extends StatelessWidget {
               SizedBox(
                 width: 44,
                 child: Center(
-                  child: Text('${index + 1}',
-                      style: GoogleFonts.getFont(currentFontFamily,
-                          color: playing ? kVioletLight : kStatusText,
-                          fontSize: 13)),
+                  child: playing
+                      ? const PlayingBars(size: 14)
+                      : Text('${index + 1}',
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kStatusText, fontSize: 13)),
                 ),
               ),
               Expanded(
@@ -679,12 +811,61 @@ class _TrackRow extends StatelessWidget {
                   ),
                 ),
               SizedBox(
+                width: 84,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: cached
+                      ? Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: kGreen.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check_rounded,
+                              size: 14, color: kGreenLight),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+              SizedBox(
+                width: 84,
+                child: Text(song.playCount > 0 ? _thousands(song.playCount) : '—',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kStatusText, fontSize: 13)),
+              ),
+              SizedBox(
+                width: 120,
+                child: Text(
+                    _qualityLabel(song.audioInfo).isEmpty
+                        ? '—'
+                        : _qualityLabel(song.audioInfo),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: kMuted2, fontSize: 13)),
+              ),
+              SizedBox(
                 width: 64,
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Text(_formatTrackDuration(song.duration),
                       style: GoogleFonts.getFont(currentFontFamily,
                           color: kStatusText, fontSize: 13)),
+                ),
+              ),
+              SizedBox(
+                width: 36,
+                child: Center(
+                  child: AnimatedFavoriteIcon(
+                    isFavorite:
+                        context.watch<AppState>().isFavoriteSong(song.id),
+                    activeColor: kPinkLight,
+                    inactiveColor: kMuted2,
+                    size: 18,
+                    onTap: () =>
+                        context.read<AppState>().toggleFavoriteSong(song.id),
+                  ),
                 ),
               ),
               menuButton(),

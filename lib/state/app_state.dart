@@ -70,6 +70,7 @@ class AppState extends ChangeNotifier {
   AppPersistence? _persistence;
   static const _kSettingsKey = 'settings_v1';
   static const _kFavSongsKey = 'fav_songs_v1';
+  static const _kFavSongDatesKey = 'fav_song_dates_v1';
   static const _kFavAlbumsKey = 'fav_albums_v1';
   static const _kFavArtistsKey = 'fav_artists_v1';
   static const _kHistoryKey = 'listening_history_v1';
@@ -128,8 +129,27 @@ class AppState extends ChangeNotifier {
               (e) => e.name == map['artworkStyle'],
               orElse: () => artworkStyle);
           lyricsOffsetMs = map['lyricsOffsetMs'] as int? ?? lyricsOffsetMs;
+          lyricsOffsetPerSong =
+              map['lyricsOffsetPerSong'] as bool? ?? lyricsOffsetPerSong;
+          final songOffsets = map['lyricsSongOffsets'];
+          if (songOffsets is Map) {
+            lyricsSongOffsets
+              ..clear()
+              ..addAll(songOffsets.map(
+                  (k, v) => MapEntry(k.toString(), (v as num).toInt())));
+          }
           lyricsAutoScroll =
               map['lyricsAutoScroll'] as bool? ?? lyricsAutoScroll;
+          scrobblePlays = map['scrobblePlays'] as bool? ?? scrobblePlays;
+          scrobbleOffServerIds
+            ..clear()
+            ..addAll(((map['scrobbleOffServerIds'] as List?) ?? const [])
+                .whereType<String>());
+          queueEnd = map['queueEnd'] as String? ??
+              (autoplay ? 'similar' : 'stop');
+          audioPreset = map['audioPreset'] as String? ?? audioPreset;
+          outputMode = map['outputMode'] as String? ?? outputMode;
+          pulseMixLength = map['pulseMixLength'] as int? ?? pulseMixLength;
         } catch (_) {
           // Malformed/old-shape JSON (a future version changed a field
           // type) — keep the in-code defaults rather than crashing startup.
@@ -137,6 +157,14 @@ class AppState extends ChangeNotifier {
       }
 
       favoriteSongIds.addAll(persistence.getStringList(_kFavSongsKey));
+      for (final line in persistence.getStringList(_kFavSongDatesKey)) {
+        final tab = line.lastIndexOf('\t');
+        if (tab <= 0) continue;
+        final ms = int.tryParse(line.substring(tab + 1));
+        if (ms != null) {
+          favoriteSongDates[line.substring(0, tab)] = DateTime.fromMillisecondsSinceEpoch(ms);
+        }
+      }
       favoriteAlbumIds.addAll(persistence.getStringList(_kFavAlbumsKey));
       favoriteArtistIds.addAll(persistence.getStringList(_kFavArtistsKey));
 
@@ -490,7 +518,15 @@ class AppState extends ChangeNotifier {
       'lyricsProvider': lyricsProvider.name,
       'artworkStyle': artworkStyle.name,
       'lyricsOffsetMs': lyricsOffsetMs,
+      'lyricsOffsetPerSong': lyricsOffsetPerSong,
+      'lyricsSongOffsets': lyricsSongOffsets,
       'lyricsAutoScroll': lyricsAutoScroll,
+      'scrobblePlays': scrobblePlays,
+      'scrobbleOffServerIds': scrobbleOffServerIds.toList(),
+      'queueEnd': queueEnd,
+      'audioPreset': audioPreset,
+      'outputMode': outputMode,
+      'pulseMixLength': pulseMixLength,
     };
     await p.setString(_kSettingsKey, jsonEncode(map));
   }
@@ -500,6 +536,10 @@ class AppState extends ChangeNotifier {
     if (p == null) return;
     await Future.wait([
       p.setStringList(_kFavSongsKey, favoriteSongIds.toList()),
+      p.setStringList(_kFavSongDatesKey, [
+        for (final e in favoriteSongDates.entries)
+          if (favoriteSongIds.contains(e.key)) '${e.key}\t${e.value.millisecondsSinceEpoch}',
+      ]),
       p.setStringList(_kFavAlbumsKey, favoriteAlbumIds.toList()),
       p.setStringList(_kFavArtistsKey, favoriteArtistIds.toList()),
     ]);
@@ -780,6 +820,7 @@ class AppState extends ChangeNotifier {
       _multi.disposeAll();
       _repository = repository;
       _librarySnapshot = snapshot;
+      lastSyncAt = DateTime.now();
 
       final id = draft.id.isNotEmpty
           ? draft.id
@@ -885,6 +926,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       final snapshot = await repository.fetchLibrary();
       _librarySnapshot = snapshot;
+      lastSyncAt = DateTime.now();
       libraryFromCache = false;
       libraryOffline = false;
       final serverId = activeServerId;
@@ -1165,12 +1207,22 @@ class AppState extends ChangeNotifier {
   final Set<String> favoriteAlbumIds = {};
   final Set<String> favoriteArtistIds = {};
 
+  /// When each favourite song was hearted (device clock, or the server's
+  /// `starred` date when merged on connect). Songs hearted before this was
+  /// tracked have no entry.
+  final Map<String, DateTime> favoriteSongDates = {};
+
   bool isFavoriteSong(String id) => favoriteSongIds.contains(id);
   bool isFavoriteAlbum(String id) => favoriteAlbumIds.contains(id);
   bool isFavoriteArtist(String id) => favoriteArtistIds.contains(id);
 
   void toggleFavoriteSong(String id) {
     final wasFav = favoriteSongIds.contains(id);
+    if (wasFav) {
+      favoriteSongDates.remove(id);
+    } else {
+      favoriteSongDates[id] = DateTime.now();
+    }
     _toggle(favoriteSongIds, id);
     undoStack.push(UndoAction(
       label: wasFav ? 'Removed a favourite' : 'Added a favourite',
@@ -1492,6 +1544,17 @@ class AppState extends ChangeNotifier {
     localFolderPaths.remove(path);
     notifyListeners();
     unawaited(_persistLocalFolders());
+  }
+
+  /// Re-scans every remembered folder source for new audio files (the Local
+  /// tab runs this when it opens). Returns how many files were added.
+  Future<int> rescanLocalFolders() async {
+    var added = 0;
+    for (final path in List<String>.of(localFolderPaths)) {
+      added += await _rescanFolder(path);
+    }
+    if (added > 0) notifyListeners();
+    return added;
   }
 
   void removeLocalSong(String songId) {
@@ -2051,7 +2114,122 @@ class AppState extends ChangeNotifier {
   LyricsProviderType lyricsProvider = LyricsProviderType.lrclib;
   ArtworkStyle artworkStyle = ArtworkStyle.rounded;
   int lyricsOffsetMs = 0;
+
+  /// "Only this song": when on, nudges are stored for the current track alone
+  /// and leave the global offset (Settings) untouched.
+  bool lyricsOffsetPerSong = true;
+  final Map<String, int> lyricsSongOffsets = <String, int>{};
+
+  /// The offset that applies to [songId]: its own correction if it has one,
+  /// else the global value.
+  int lyricsOffsetFor(String? songId) =>
+      (songId != null ? lyricsSongOffsets[songId] : null) ?? lyricsOffsetMs;
+
+  void setLyricsOffsetPerSong(bool value) {
+    lyricsOffsetPerSong = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  /// Applies a nudge from the lyrics toolbar, honouring "Only this song".
+  void nudgeLyricsOffset(String? songId, int ms, {bool reset = false}) {
+    // Board: "Only this song" (on by default) keeps the correction on the
+    // current track; with it off the nudge moves the global offset instead.
+    if (songId != null && lyricsOffsetPerSong) {
+      if (reset) {
+        lyricsSongOffsets.remove(songId);
+      } else {
+        lyricsSongOffsets[songId] = ms;
+      }
+      notifyListeners();
+      unawaited(_persistSettings());
+    } else {
+      updateLyricsOffset(reset ? 0 : ms);
+    }
+  }
   bool lyricsAutoScroll = true;
+
+  // --- Settings board additions (Playback / Servers / Audio / Pulse) -------
+  /// Report finished plays to the server. Stored here; the scrobble hook in
+  /// app.dart still has to read it (see Settings report).
+  bool scrobblePlays = true;
+
+  /// Servers the user switched scrobbling off for.
+  final Set<String> scrobbleOffServerIds = {};
+
+  /// What happens after the last track: 'stop', 'repeat' or 'similar'.
+  /// 'similar' is the existing [autoplay] behaviour; the setter keeps both in
+  /// step so the player's autoplay wiring keeps working.
+  String queueEnd = 'similar';
+
+  /// Last chosen Audio preset: 'pure', 'balanced', 'warm' or 'custom'.
+  String audioPreset = 'balanced';
+
+  /// Windows exclusive-output intent: 'system', 'match' or 'exclusive'.
+  String outputMode = 'system';
+
+  /// Length of generated Shuro Pulse mixes.
+  int pulseMixLength = 25;
+
+  /// When the library was last fetched from the server (this session).
+  DateTime? lastSyncAt;
+
+  void updateScrobblePlays(bool value) {
+    scrobblePlays = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void setServerScrobble(String serverId, bool on) {
+    if (on) {
+      scrobbleOffServerIds.remove(serverId);
+    } else {
+      scrobbleOffServerIds.add(serverId);
+    }
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void updateQueueEnd(String value) {
+    queueEnd = value;
+    autoplay = value == 'similar';
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void updateAudioPreset(String value) {
+    audioPreset = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void updateOutputMode(String value) {
+    outputMode = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  void updatePulseMixLength(int value) {
+    pulseMixLength = value;
+    notifyListeners();
+    unawaited(_persistSettings());
+  }
+
+  /// Forgets plays and the "more/less like this" taste signals.
+  void resetListeningHistory() {
+    listeningHistory.clear();
+    playLog.clear();
+    artistAffinity.clear();
+    notifyListeners();
+    unawaited(_persistHistory());
+  }
+
+  /// Forgets only the taste signals, keeping play history.
+  void resetTasteProfile() {
+    artistAffinity.clear();
+    notifyListeners();
+    unawaited(_persistHistory());
+  }
 
   void updateArtworkStyle(ArtworkStyle style) {
     artworkStyle = style;

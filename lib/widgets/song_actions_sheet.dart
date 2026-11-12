@@ -16,6 +16,9 @@ import 'artwork_thumb.dart';
 import 'build_from_this_sheet.dart';
 import 'shuro_icons.dart';
 import 'state_views.dart';
+import 'page_transitions.dart';
+import '../screens/album/album_detail_screen.dart';
+import '../screens/artist/artist_detail_screen.dart';
 import 'click_region.dart';
 
 /// The "⋮" menu every song gets, per the spec's "12. Context/action sheet".
@@ -144,8 +147,34 @@ void showSongActionsSheet(BuildContext context, Song song) {
               },
             ),
             _ActionTile(
+              icon: Icons.person_outline_rounded,
+              label: 'Go to artist',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                final artist = appState.artistById(song.artistId);
+                if (artist == null) {
+                  showErrorSnackBar(context, 'Artist not found in the library.');
+                  return;
+                }
+                pushDrillDownOnce(context, ArtistDetailScreen(artist: artist));
+              },
+            ),
+            _ActionTile(
+              icon: Icons.album_outlined,
+              label: 'Go to album',
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                final album = appState.albumById(song.albumId);
+                if (album == null) {
+                  showErrorSnackBar(context, 'Album not found in the library.');
+                  return;
+                }
+                pushDrillDownOnce(context, AlbumDetailScreen(album: album));
+              },
+            ),
+            _ActionTile(
               icon: Icons.info_outline_rounded,
-              label: 'Audio information',
+              label: 'Song info',
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 showAudioInfoSheet(context, song);

@@ -41,6 +41,22 @@ import '../../playback/audio_capability.dart';
 import '../../playback/audio_diagnostics.dart';
 import '../../widgets/motion.dart' show Entrance;
 import '../../widgets/page_transitions.dart';
+import '../../models/server_config.dart';
+import '../../state/spoken_library_state.dart';
+import '../onboarding/server_setup_screen.dart';
+import 'settings_prefs.dart';
+import '../../services/equalizer_service.dart';
+import '../../services/eq_import.dart';
+import '../../services/multi_server.dart';
+import '../../services/library_cache.dart';
+import '../../widgets/click_region.dart';
+import '../onboarding/audiobookshelf_setup_screen.dart';
+
+part 'settings_controls.dart';
+part 'settings_page_playback.dart';
+part 'settings_page_audio.dart';
+part 'settings_page_servers.dart';
+part 'settings_pages_more.dart';
 
 /// "14. Settings" — Account / Playback / Downloads / Cache / Appearance /
 /// Behavior / About, per the requested structure.
@@ -172,68 +188,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Shared with the desktop rail.
   static const List<({String id, String title, String keywords})> index = [
     (
-      id: 'account',
-      title: 'Account',
-      keywords: 'sign in server user logout connect disconnect'
+      id: 'servers',
+      title: 'Servers and sources',
+      keywords:
+          'server navidrome audiobookshelf account sign in sign out profile local files add connect'
     ),
     (
       id: 'playback',
       title: 'Playback',
-      keywords: 'crossfade fade gapless transition speed silence skip'
+      keywords:
+          'how tracks start, transition and end crossfade fade gapless replaygain pre-amp resume scrobble queue speed silence'
     ),
     (
       id: 'audio',
-      title: 'Audio & EQ',
+      title: 'Audio and EQ',
       keywords:
-          'quality stream streaming bitrate replaygain gain equalizer eq dsp signal path output volume'
+          'quality stream streaming bitrate equalizer eq dsp signal path output volume'
+    ),
+    (
+      id: 'library',
+      title: 'Library',
+      keywords:
+          'sync, folders, hidden items, sort defaults, genre display rescan health undo'
     ),
     (
       id: 'lyrics',
       title: 'Lyrics',
-      keywords: 'lyrics offset sync font auto follow'
+      keywords:
+          'source order, font size, sync offset default, translation auto-scroll'
     ),
     (
       id: 'downloads',
-      title: 'Downloads',
-      keywords: 'download offline storage save'
+      title: 'Downloads and offline',
+      keywords:
+          'quality, folder, wi-fi only, auto-download favorites offline save'
     ),
-    (id: 'cache', title: 'Cache', keywords: 'cache clear size storage free'),
     (
       id: 'appearance',
       title: 'Appearance',
-      keywords: 'theme dark light font accent colour color background immersive'
+      keywords:
+          'theme, accent, font, density, hero banner on or off dark colour color background immersive animations performance'
     ),
     (
-      id: 'behavior',
-      title: 'Behaviour',
-      keywords: 'behaviour behavior notifications headset resume pause'
+      id: 'desktop',
+      title: 'Desktop',
+      keywords:
+          'tray, start minimized, global shortcuts, media keys, window behaviour'
     ),
     (
-      id: 'server',
-      title: 'Server',
-      keywords: 'server url address navidrome connect'
+      id: 'cache',
+      title: 'Storage and cache',
+      keywords:
+          'cache size, clear cache, image cache, offline usage reset erase data'
     ),
     (
-      id: 'reset',
-      title: 'Reset',
-      keywords: 'reset delete wipe data clear everything'
+      id: 'integrations',
+      title: 'Integrations',
+      keywords:
+          'last.fm, discord presence, other links listenbrainz scrobble private listening'
     ),
     (
-      id: 'performance',
-      title: 'Performance',
-      keywords: 'performance overlay diagnostics fps jank'
-    ),
-    (
-      id: 'listenbrainz',
-      title: 'ListenBrainz',
-      keywords: 'listenbrainz scrobble token submit queue'
+      id: 'pulse',
+      title: 'Shuro Pulse',
+      keywords: 'taste profile, mix length, reset history'
     ),
     (
       id: 'about',
       title: 'About',
-      keywords: 'about version licences licenses sources report'
+      keywords:
+          'version, licenses, logs, report a problem, check for updates terms privacy'
     ),
   ];
+
+  /// The index for this platform: Desktop only exists on desktop.
+  static List<({String id, String title, String keywords})> get platformIndex =>
+      [
+        for (final e in index)
+          if (e.id != 'desktop' || _isDesktopPlatform) e,
+      ];
 
   Future<void> _jumpToSection(String id) async {
     setState(() => _highlighted = id);
@@ -257,13 +289,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Which section the desktop rail shows; also the target of a search jump.
   final ValueNotifier<String> _desktopSection =
-      ValueNotifier<String>('account');
+      ValueNotifier<String>('servers');
 
   Future<void> _openSettingsSearch(BuildContext context) async {
     final picked = await showDialog<String>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (dialogContext) => _SettingsSearchDialog(index: index),
+      builder: (dialogContext) => _SettingsSearchDialog(index: platformIndex),
     );
     if (picked != null && mounted) await _jumpToSection(picked);
   }
@@ -326,525 +358,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
 
-      _SectionLabel('ACCOUNT',
-          key: _sectionKey('account'),
-          highlighted: _highlighted == 'account',
-          subtitle: 'Your servers, sign-in and profile.'),
-      _SettingsGroupCard(
-        title: 'SERVER & SIGN-IN',
-        rows: [
-          _NavRow(
-            icon: Icons.dns_rounded,
-            label: 'Server',
-            description: appState.hasServer
-                ? 'Music streams from your Navidrome server.'
-                : 'Local files only, or a server you add.',
-            value: appState.activeServer?.name ??
-                (appState.isLocalOnly ? 'Local files only' : '—'),
-            onTap: () => Navigator.of(context)
-                .push(drillDownRoute(const ManageServersScreen())),
-          ),
-          if (appState.hasServer)
-            // No tap affordance: there's no separate "account" page to
-            // open (the server connection *is* the account), so this is
-            // honest info display rather than a dead button.
-            _NavRow(
-                icon: Icons.person_rounded,
-                label: 'Account',
-                value: appState.activeServer?.username ?? '—'),
-          _NavRow(
-            icon: Icons.photo_camera_rounded,
-            label: 'Profile photo',
-            value: appState.userAvatarBytes != null ? 'Set' : 'Default',
-            onTap: () => Navigator.of(context)
-                .push(drillDownRoute(const AvatarEditorScreen())),
-          ),
-        ],
-      ),
-      _SettingsGroupCard(
-        title: 'SESSION',
-        rows: [
-          _NavRow(
-            icon: Icons.logout_rounded,
-            // A local-only user never actually signed into anything, so
-            // the destructive action here is framed as leaving that mode
-            // (back to the Welcome screen) rather than a mismatched
-            // "sign out" that implies an account session that never
-            // existed.
-            label: appState.isLocalOnly ? 'Exit local-only mode' : 'Sign out',
-            destructive: true,
-            onTap: () =>
-                _confirmSignOut(context, isLocalOnly: appState.isLocalOnly),
-          ),
-        ],
-      ),
-
-      _SectionLabel('PLAYBACK',
-          key: _sectionKey('playback'),
-          highlighted: _highlighted == 'playback',
-          subtitle:
-              'How tracks start, transition and end. Sound shaping lives in Audio & EQ.'),
-      // Effects that change real audio, each reading PlaybackPrefs.
-      //
-      // Fade between songs is a real volume fade across the boundary.
-      // Gapless playback deliberately has no switch: the whole queue is
-      // handed to the engine as one playlist (see PlayerController
-      // _jumpTo), so consecutive tracks run into each other with no load
-      // gap by construction rather than by a setting.
-      _SettingsGroupCard(
-        title: 'TRANSITIONS & SPEED',
-        rows: [
-          _NavRow(
-            icon: Icons.graphic_eq_rounded,
-            label: 'Fade between songs',
-            description: 'Blend the end of one track into the next.',
-            value: playbackPrefs.crossfadeSeconds == 0
-                ? 'Off'
-                : '${playbackPrefs.crossfadeSeconds}s',
-            onTap: () => _pickCrossfade(context, playbackPrefs),
-          ),
-          _NavRow(
-            icon: Icons.speed_rounded,
-            label: 'Playback speed',
-            value: '${playbackPrefs.playbackSpeed.toStringAsFixed(2)}×',
-            onTap: () => _pickPlaybackSpeed(context, playbackPrefs),
-          ),
-          _ToggleRow(
-            label: 'Skip silence',
-            description: 'Trim long quiet stretches inside tracks.',
-            value: playbackPrefs.skipSilence,
-            onChanged: (v) => playbackPrefs.setSkipSilence(v),
-          ),
-        ],
-      ),
-
-      _SectionLabel('AUDIO & EQ',
-          key: _sectionKey('audio'),
-          highlighted: _highlighted == 'audio',
-          subtitle:
-              'Shape what you hear, and see exactly what reaches your device.'),
-      // SettingsAudio board: the live chain from file to output,
-      // built only from what audio_diagnostics can actually prove.
-      const _SignalPathCard(),
-      _SettingsGroupCard(
-        title: 'STREAMING FROM NAVIDROME',
-        rows: [
-          _NavRow(
-            icon: Icons.wifi_rounded,
-            label: 'Wi-Fi quality',
-            description:
-                'Original sends the file as stored. Lower caps use the server to transcode.',
-            value: appState.wifiQuality.label,
-            onTap: () async {
-              final selected = await showQualitySelectorSheet(context,
-                  title: 'Wi-Fi Streaming Quality',
-                  current: appState.wifiQuality);
-              if (selected != null) appState.updateWifiQuality(selected);
-            },
-          ),
-          _NavRow(
-            icon: Icons.signal_cellular_alt_rounded,
-            label: 'Mobile data quality',
-            description: 'A lower cap for cellular saves data.',
-            value: appState.mobileQuality.label,
-            onTap: () async {
-              final selected = await showQualitySelectorSheet(context,
-                  title: 'Mobile Data Streaming Quality',
-                  current: appState.mobileQuality);
-              if (selected != null) appState.updateMobileQuality(selected);
-            },
-          ),
-        ],
-      ),
-      _SettingsGroupCard(
-        title: 'LEVELLING & EQ',
-        rows: [
-          // This is Android's system DSP. Do not present a dead desktop
-          // control as though libmpv had received an equalizer setting.
-          if (defaultTargetPlatform == TargetPlatform.android)
-            _NavRow(
-              icon: Icons.equalizer_rounded,
-              label: 'Equalizer',
-              description:
-                  "Android's system equalizer, applied before the mixer.",
-              onTap: () => showEqualizerSheet(context),
-            ),
-          // Loudness normalisation from the server's own ReplayGain tags.
-          _ToggleRow(
-            label: 'Replay gain',
-            description:
-                'Match loudness between tracks and albums, using tags in the file.',
-            value: playbackPrefs.replayGain,
-            onChanged: (v) => playbackPrefs.setReplayGain(v),
-          ),
-        ],
-      ),
-
-      _SectionLabel('LYRICS',
-          key: _sectionKey('lyrics'),
-          highlighted: _highlighted == 'lyrics',
-          subtitle: 'How the words follow the music.'),
-      _SettingsGroupCard(
-        title: 'SYNC',
-        rows: [
-          _ToggleRow(
-              label: 'Auto-scroll',
-              value: appState.lyricsAutoScroll,
-              onChanged: appState.updateLyricsAutoScroll),
-          _NavRow(
-            icon: Icons.sync_rounded,
-            label: 'Sync adjustment',
-            value: appState.lyricsOffsetMs == 0
-                ? 'On time'
-                : '${appState.lyricsOffsetMs > 0 ? '+' : ''}${appState.lyricsOffsetMs} ms',
-            onTap: () => _adjustLyricsSync(context, appState),
-          ),
-        ],
-      ),
-
-      _SectionLabel('DOWNLOADS',
-          key: _sectionKey('downloads'),
-          highlighted: _highlighted == 'downloads',
-          subtitle: 'Offline copies: what quality, where they land, and when.'),
-      _SettingsGroupCard(
-        title: 'DOWNLOADS & OFFLINE',
-        rows: [
-          _NavRow(
-            icon: Icons.download_rounded,
-            label: 'Download quality',
-            value: appState.downloadQuality.label,
-            onTap: () async {
-              final selected = await showQualitySelectorSheet(context,
-                  title: 'Download Quality', current: appState.downloadQuality);
-              if (selected != null) appState.updateDownloadQuality(selected);
-            },
-          ),
-          _ToggleRow(
-              label: 'Wi-Fi only',
-              description: 'Save data by never downloading over cellular.',
-              value: appState.downloadWifiOnly,
-              onChanged: (v) =>
-                  appState.toggleSetting(() => appState.downloadWifiOnly = v)),
-          // Wired to the real download service: opens the system folder
-          // picker, and the chosen folder becomes where downloads are saved.
-          // "App storage" means the default documents dir (which survives
-          // app updates).
-          _NavRow(
-            icon: Icons.folder_rounded,
-            label: 'Storage location',
-            value: context.watch<DownloadService>().customLocation == null
-                ? 'App storage'
-                : 'Custom folder',
-            onTap: () => _pickDownloadLocation(context),
-          ),
-          _NavRow(
-            icon: Icons.delete_outline_rounded,
-            label: 'Clear downloads',
-            description: 'Downloaded songs are removed from this device.',
-            destructive: true,
-            onTap: () => _confirmClear(
-              context,
-              title: 'Clear all downloads?',
-              message:
-                  "You'll need to download songs again to play them offline.",
-              onConfirm: () async {
-                final downloads = context.read<DownloadService>();
-                for (final song in downloads.songs) {
-                  await downloads.remove(song.id);
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-
-      _SectionLabel('CACHE',
-          key: _sectionKey('cache'),
-          highlighted: _highlighted == 'cache',
-          subtitle: 'What is stored on this device, and how to free it.'),
-      const _CacheSection(),
-
-      _SettingsGroupCard(
-        title: 'LIBRARY',
-        rows: [
-          _NavRow(
-            icon: Icons.health_and_safety_outlined,
-            label: 'Library health',
-            description: 'Artwork, tags and duplicates, checked on device.',
-            value: 'Open',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                  builder: (_) => const LibraryHealthScreen()),
-            ),
-          ),
-        ],
-      ),
-      _SectionLabel('APPEARANCE',
-          key: _sectionKey('appearance'),
-          highlighted: _highlighted == 'appearance',
-          subtitle: 'The look of the app, and of Now Playing and Lyrics.'),
-      _SettingsGroupCard(
-        title: 'THEME & TYPE',
-        rows: [
-          // No tap affordance: Shuro is deliberately dark-only (part of
-          // its brand identity, not an oversight), so there's no picker
-          // to open — this states that rather than pretending to offer one.
-          _NavRow(
-              icon: Icons.dark_mode_rounded,
-              label: 'Theme',
-              description:
-                  'Dark is the identity — there is no light mode to switch to.',
-              value: 'Dark'),
-          _NavRow(
-              icon: Icons.text_fields_rounded,
-              label: 'Font',
-              value: appState.fontFamily,
-              onTap: () => showFontPickerSheet(context)),
-          _ToggleRow(
-              label: 'Dynamic colors',
-              description: 'Tint surfaces from the current artwork.',
-              value: appState.dynamicColors,
-              onChanged: (v) =>
-                  appState.toggleSetting(() => appState.dynamicColors = v)),
-          _NavRow(
-            icon: Icons.grid_view_rounded,
-            label: 'Artwork style',
-            value: appState.artworkStyle.label,
-            onTap: () async {
-              final selected =
-                  await showArtworkStyleSheet(context, appState.artworkStyle);
-              if (selected != null) appState.updateArtworkStyle(selected);
-            },
-          ),
-        ],
-      ),
-      _SettingsGroupCard(
-        title: 'NOW PLAYING & LYRICS',
-        rows: [
-          // Two looks for Now Playing / Lyrics: the animated blurred artwork, or
-          // a static gradient from the same artwork-extracted palette. The
-          // static option is genuinely cheaper per frame, so it doubles as the
-          // low-end-device choice.
-          _NavRow(
-            icon: Icons.blur_on_rounded,
-            label: 'Now Playing background',
-            value: appearance.backgroundStyleLabel,
-            onTap: () => _pickBackgroundStyle(context, appearance),
-          ),
-          // User-tuned blur strength and idle motion — the backdrop is the
-          // surface people stare at longest, so both are preferences, not
-          // constants.
-          _NavRow(
-            icon: Icons.blur_linear_rounded,
-            label: 'Background blur',
-            value: appearance.backdropBlurLabel,
-            onTap: () => _pickBackdropBlur(context, appearance),
-          ),
-          _NavRow(
-            icon: Icons.animation_rounded,
-            label: 'Background motion',
-            value: appearance.backdropMotionLabel,
-            onTap: () => _pickBackdropMotion(context, appearance),
-          ),
-          // Word-by-word karaoke or plain line-by-line highlighting — a real
-          // preference, and line mode is the honest one when only line
-          // timings exist.
-          _NavRow(
-            icon: Icons.lyrics_rounded,
-            label: 'Lyrics highlight',
-            value: appearance.lyricsHighlightLabel,
-            onTap: () => _pickLyricsHighlight(context, appearance),
-          ),
-          // Hides the status/navigation bars on Now Playing and Lyrics only —
-          // deliberately scoped, so the rest of the app keeps its bars.
-          _ToggleRow(
-            label: 'Immersive screens',
-            value: appearance.immersiveScreens,
-            onChanged: appearance.setImmersiveScreens,
-          ),
-          _ToggleRow(
-              label: 'Reduce animations',
-              description: 'Also respects the system reduce-motion setting.',
-              value: appState.reduceAnimations,
-              onChanged: appState.updateReduceAnimations),
-        ],
-      ),
-
-      _SectionLabel('BEHAVIOUR',
-          key: _sectionKey('behavior'),
-          highlighted: _highlighted == 'behavior',
-          subtitle:
-              'Small habits: what Shuro remembers, and what it keeps to itself.'),
-      _SettingsGroupCard(
-        title: 'BEHAVIOUR',
-        rows: [
-          _NavRow(
-            icon: Icons.undo_rounded,
-            label: 'Undo last edit',
-            value: appState.undoStack.canUndo
-                ? appState.undoStack.lastLabel
-                : 'Nothing to undo',
-            onTap: appState.undoStack.canUndo
-                ? () async {
-                    final label = await appState.undoStack.undo();
-                    if (label != null && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Undone: $label')),
-                      );
-                    }
-                  }
-                : null,
-          ),
-          _ToggleRow(
-            label: 'Private listening',
-            value: appState.privateListening,
-            onChanged: appState.setPrivateListening,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Text(
-              'Session only. New listening history and Last.fm activity stay off; downloads and playback still work.',
-              style: GoogleFonts.getFont(
-                currentFontFamily,
-                color: kStatusText,
-                fontSize: 12,
-                height: 16 / 12,
-              ),
-            ),
-          ),
-          _ToggleRow(
-              label: 'Autoplay',
-              value: appState.autoplay,
-              onChanged: (v) =>
-                  appState.toggleSetting(() => appState.autoplay = v)),
-          _ToggleRow(
-              label: 'Remember queue',
-              value: appState.rememberQueue,
-              onChanged: (v) =>
-                  appState.toggleSetting(() => appState.rememberQueue = v)),
-          _ToggleRow(
-              label: 'Resume playback',
-              value: appState.resumePlayback,
-              onChanged: (v) =>
-                  appState.toggleSetting(() => appState.resumePlayback = v)),
-        ],
-      ),
-
-      _SectionLabel('SERVER',
-          key: _sectionKey('server'),
-          highlighted: _highlighted == 'server',
-          subtitle: 'Housekeeping on the connected server.'),
-      _SettingsGroupCard(
-        title: 'MAINTENANCE',
-        rows: [
-          _NavRow(
-            icon: Icons.sync_rounded,
-            label: 'Rescan server library',
-            description: 'Ask Navidrome to look for new files.',
-            onTap: () => _rescanServer(context),
-          ),
-        ],
-      ),
-
-      _SectionLabel('RESET',
-          key: _sectionKey('reset'),
-          highlighted: _highlighted == 'reset',
-          subtitle: 'The one door that erases everything local.'),
-      _SettingsGroupCard(
-        title: 'DANGER ZONE',
-        rows: [
-          _NavRow(
-            icon: Icons.restart_alt_rounded,
-            label: 'Reset app data',
-            value: 'Erase everything',
-            destructive: true,
-            onTap: () => _confirmResetApp(context),
-          ),
-        ],
-      ),
-      const _Note(
-        'Signs out, forgets servers, favorites, playlists, downloads and every setting, '
-        'then closes the app. Nothing on your Navidrome server is touched.',
-      ),
-
-      _SectionLabel('PERFORMANCE',
-          key: _sectionKey('performance'),
-          highlighted: _highlighted == 'performance',
-          subtitle: 'One preset that tunes rendering to this device.'),
-      _SettingsGroupCard(
-        title: 'RENDER PRESET',
-        rows: const [_PerformanceTile()],
-      ),
-
-      _SectionLabel('LISTENBRAINZ',
-          key: _sectionKey('listenbrainz'),
-          highlighted: _highlighted == 'listenbrainz',
-          subtitle: 'Scrobble finished plays to your ListenBrainz account.'),
-      _SettingsGroupCard(
-        title: 'LINK YOUR ACCOUNT',
-        rows: [
-          _NavRow(
-            icon: Icons.graphic_eq_rounded,
-            label: 'ListenBrainz',
-            value: ListenBrainzService.instance.token == null
-                ? 'Not linked'
-                : 'Linked',
-            onTap: () => showListenBrainzSheet(context),
-          ),
-        ],
-      ),
-      _SectionLabel('ABOUT',
-          key: _sectionKey('about'),
-          highlighted: _highlighted == 'about',
-          subtitle: 'What this app is, what it owes, and who it talks to.'),
-      const _AboutBlock(),
-      _SettingsGroupCard(
-        title: 'APP DETAILS',
-        rows: [
-          _NavRow(
-              icon: Icons.info_outline_rounded,
-              label: 'Version',
-              value: kAppVersion),
-          // Play Store reviewers and screen-reader users both get real
-          // value here: the exact facts the consent screen discloses, in
-          // plain sight.
-          _NavRow(
-            icon: Icons.phone_android_rounded,
-            label: 'Device & app info',
-            onTap: () => _showDeviceInfoSheet(context),
-          ),
-          _NavRow(
-            icon: Icons.gavel_rounded,
-            label: 'Terms & privacy',
-            onTap: () => _showTermsSheet(context),
-          ),
-          _NavRow(
-            icon: Icons.bug_report_rounded,
-            label: 'Report a problem',
-            onTap: () => _showReportSheet(context),
-          ),
-          // Flutter collects licence text for every package the app links
-          // (pub packages plus engine components) into one OBS-compliant
-          // page — this is the standard, complete way to satisfy the MIT/BSD
-          // "reproduce the copyright notice" clauses.
-          _NavRow(
-            icon: Icons.source_rounded,
-            label: 'Open source licenses',
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'Shuro',
-              applicationVersion: kAppVersion,
-            ),
-          ),
-          // The web services Shuro talks to are not pub packages, so they
-          // never show up in showLicensePage — they get their own page.
-          _NavRow(
-            icon: Icons.public_rounded,
-            label: 'Services & data sources',
-            onTap: () => _showServiceAttributions(context),
-          ),
-        ],
-      ),
+      ...serversSection(context, appState),
+      ...playbackSection(context, appState, playbackPrefs),
+      ...audioSection(context, appState),
+      ...librarySection(context, appState),
+      ...lyricsSection(context, appState, appearance),
+      ...downloadsSection(context, appState),
+      ...appearanceSection(context, appState, appearance),
+      if (_isDesktopPlatform) ...desktopSection(context),
+      ...storageSection(context),
+      ...integrationsSection(context, appState),
+      ...pulseSection(context, appState),
+      ...aboutSection(context),
       const SizedBox(height: 32),
     ];
 
@@ -2439,7 +1964,7 @@ class _BoardSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final duration =
-        reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 120);
+        reduceMotionEnabled ? Duration.zero : const Duration(milliseconds: 200);
     return Semantics(
       toggled: value,
       button: true,
@@ -2633,7 +2158,7 @@ class _TwoPaneSettings extends StatefulWidget {
 
 class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
   String _query = '';
-  String _selected = 'account';
+  String _selected = 'servers';
 
   @override
   void initState() {
@@ -2690,40 +2215,98 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
 
   /// Fixed order of the settings rail: sections live in groups, destructive
   /// items last.
-  static const _railGroups = <(String, List<String>)>[
-    ('User', ['account']),
-    ('Look & feel', ['appearance', 'lyrics', 'behavior']),
-    ('Playback & audio', ['playback', 'audio']),
-    ('Library & server', ['downloads', 'cache', 'server']),
-    ('System', ['performance', 'listenbrainz', 'about', 'reset']),
+  /// The settings map is one flat list (no group headings).
+  static const _railOrder = <String>[
+    'servers',
+    'playback',
+    'audio',
+    'library',
+    'lyrics',
+    'downloads',
+    'appearance',
+    'desktop',
+    'cache',
+    'integrations',
+    'pulse',
+    'about',
   ];
 
   /// Rail icons per section (Settings board nav).
   static const _sectionIcons = <String, IconData>{
-    'account': Icons.person_rounded,
+    'servers': Icons.dns_rounded,
     'playback': Icons.play_arrow_rounded,
     'audio': Icons.graphic_eq_rounded,
+    'library': Icons.library_music_rounded,
     'lyrics': Icons.lyrics_rounded,
     'downloads': Icons.download_rounded,
-    'cache': Icons.storage_rounded,
     'appearance': Icons.palette_rounded,
-    'behavior': Icons.tune_rounded,
-    'server': Icons.dns_rounded,
-    'reset': Icons.restart_alt_rounded,
-    'performance': Icons.speed_rounded,
-    'listenbrainz': Icons.query_stats_rounded,
+    'desktop': Icons.desktop_windows_rounded,
+    'cache': Icons.storage_rounded,
+    'integrations': Icons.extension_rounded,
+    'pulse': Icons.bolt_rounded,
     'about': Icons.info_outline_rounded,
   };
+
+  /// Does [w] contain [q] (lowercase) in a label, description or title?
+  static bool _widgetMatches(Widget w, String q) {
+    bool has(String? t) => t != null && t.toLowerCase().contains(q);
+    if (w is _ControlRow) return has(w.label) || has(w.description);
+    if (w is _NavRow) return has(w.label) || has(w.description) || has(w.value);
+    if (w is _ToggleRow) return has(w.label) || has(w.description);
+    if (w is _SettingsGroupCard) {
+      return has(w.title) || w.rows.any((r) => _widgetMatches(r, q));
+    }
+    return false;
+  }
+
+  /// Rows of the page content that survive the search [q]; whole cards stay
+  /// when the page itself matched by title/keywords but no row did.
+  List<Widget> _filterPage(List<Widget> page, String q, bool pageMatched) {
+    if (q.isEmpty) return page;
+    final anyRow = page.any((w) => _widgetMatches(w, q));
+    if (!anyRow) return pageMatched ? page : const [];
+    return [
+      for (final w in page)
+        if (w is _SectionLabel)
+          w
+        else if (w is _SettingsGroupCard)
+          if (w.rows.any((r) => _widgetMatches(r, q)))
+            _SettingsGroupCard(
+                title: w.title,
+                rows: [
+                  for (final r in w.rows)
+                    if (_widgetMatches(r, q) || has(w.title, q)) r,
+                ])
+          else
+            ...const <Widget>[]
+        else if (pageMatched)
+          w,
+    ];
+  }
+
+  static bool has(String t, String q) => t.toLowerCase().contains(q);
 
   @override
   Widget build(BuildContext context) {
     final (header, groups) = _split();
-    final entries = _SettingsScreenState.index.where((entry) {
-      if (_query.isEmpty) return true;
-      final q = _query.toLowerCase();
-      return entry.title.toLowerCase().contains(q) ||
-          entry.keywords.contains(q);
+    final q = _query.toLowerCase();
+    final pages = <String, List<Widget>>{};
+    final entries = _SettingsScreenState.platformIndex.where((entry) {
+      if (!groups.containsKey(entry.id)) return false;
+      if (q.isEmpty) {
+        pages[entry.id] = groups[entry.id]!;
+        return true;
+      }
+      final pageMatched =
+          entry.title.toLowerCase().contains(q) || entry.keywords.contains(q);
+      final rows = _filterPage(groups[entry.id]!, q, pageMatched);
+      if (rows.isEmpty) return false;
+      pages[entry.id] = rows;
+      return true;
     }).toList();
+    if (entries.isNotEmpty && !entries.any((e) => e.id == _selected)) {
+      _selected = entries.first.id;
+    }
     if (!groups.containsKey(_selected) && groups.isNotEmpty) {
       _selected = groups.keys.first;
     }
@@ -2739,7 +2322,7 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 220,
+                width: 236,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -2777,88 +2360,72 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
                       child: ListView(
                         padding: const EdgeInsets.only(bottom: 24),
                         children: [
-                          // The rail is organised in fixed groups (native-app
-                          // convention); search filters within them.
-                          for (final group in _railGroups)
-                            if (entries
-                                .any((e) => group.$2.contains(e.id))) ...[
+                          // One flat list in the order of the settings map;
+                          // search filters it.
+                          for (final entry in entries)
                               Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                                child: Text(group.$1.toUpperCase(),
-                                    style: GoogleFonts.getFont(
-                                        currentFontFamily,
-                                        color: kMuted2,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.8)),
-                              ),
-                              for (final entry in entries)
-                                if (group.$2.contains(entry.id))
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 1),
-                                    child: Material(
-                                      color: entry.id == _selected
-                                          ? kBrandColor.withValues(alpha: 0.18)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(10),
-                                        onTap: () => _select(entry.id),
-                                        child: Container(
-                                          height: 38,
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8),
-                                          child: Row(
-                                            children: [
-                                              // Active marker: the 3x20 violet bar
-                                              // from the sidebar boards.
-                                              Container(
-                                                width: 3,
-                                                height: 20,
-                                                decoration: BoxDecoration(
-                                                  color: entry.id == _selected
-                                                      ? kBrandColor
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Icon(
-                                                _sectionIcons[entry.id] ??
-                                                    Icons.settings_rounded,
-                                                size: 18,
-                                                color: entry.id == _selected
-                                                    ? kVioletLight
-                                                    : kMuted2,
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(entry.title,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: GoogleFonts.getFont(
-                                                        currentFontFamily,
-                                                        color: entry.id ==
-                                                                _selected
-                                                            ? Colors.white
-                                                            : kNavText,
-                                                        fontSize: 14,
-                                                        fontWeight: entry.id ==
-                                                                _selected
-                                                            ? FontWeight.w600
-                                                            : FontWeight.w500)),
-                                              ),
-                                            ],
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 1),
+                                child: Material(
+                                  color: entry.id == _selected
+                                      ? kBrandColor.withValues(alpha: 0.18)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(10),
+                                    onTap: () => _select(entry.id),
+                                    child: Container(
+                                      height: 38,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      child: Row(
+                                        children: [
+                                          // Active marker: the 3x20 violet bar
+                                          // from the sidebar boards.
+                                          Container(
+                                            width: 3,
+                                            height: 20,
+                                            decoration: BoxDecoration(
+                                              color: entry.id == _selected
+                                                  ? kBrandColor
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                            ),
                                           ),
-                                        ),
+                                          const SizedBox(width: 8),
+                                          Icon(
+                                            _sectionIcons[entry.id] ??
+                                                Icons.settings_rounded,
+                                            size: 18,
+                                            color: entry.id == _selected
+                                                ? kVioletLight
+                                                : kMuted2,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(entry.title,
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                style: GoogleFonts.getFont(
+                                                    currentFontFamily,
+                                                    color: entry.id ==
+                                                            _selected
+                                                        ? Colors.white
+                                                        : kNavText,
+                                                    fontSize: 14,
+                                                    fontWeight: entry.id ==
+                                                            _selected
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w500)),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                            ], // close group spread
+                                ),
+                              ),
                         ],
                       ),
                     ),
@@ -2878,7 +2445,7 @@ class _TwoPaneSettingsState extends State<_TwoPaneSettings> {
                         // enters with the motion kit's staggered entrance
                         // (one-shot; settled under reduced motion).
                         for (final (i, section)
-                            in (groups[_selected] ?? const <Widget>[]).indexed)
+                            in (pages[_selected] ?? const <Widget>[]).indexed)
                           Entrance(
                             key: ValueKey('$_selected-$i'),
                             delay: Entrance.stagger(i),
@@ -2949,7 +2516,10 @@ class _SettingsGroupCard extends StatelessWidget {
   }
 
   static bool _isRow(Widget w) =>
-      w is _NavRow || w is _ToggleRow || w is _PerformanceTile;
+      w is _NavRow ||
+      w is _ToggleRow ||
+      w is _ControlRow ||
+      w is _PerformanceTile;
 }
 
 /// SettingsAudio board: the live signal-path card. A vertical chain

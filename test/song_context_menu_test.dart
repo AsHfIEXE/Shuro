@@ -80,16 +80,16 @@ void main() {
 
     // Every action must survive the route: this is what silently broke when
     // the entries were plain widgets instead of PopupMenuEntry.
-    expect(find.text('Play'), findsOneWidget);
+    expect(find.text('Play now'), findsOneWidget);
     expect(find.text('Play next'), findsOneWidget);
     expect(find.text('Add to queue'), findsOneWidget);
-    expect(find.text('Add to favourites'), findsOneWidget);
+    expect(find.text('Favorite'), findsOneWidget);
 
-    await tester.tap(find.text('Add to favourites'));
+    await tester.tap(find.text('Favorite'));
     await tester.pumpAndSettle();
 
     expect(state.favoriteSongIds.contains('song-1'), isTrue);
-    expect(find.text('Add to favourites'), findsNothing);
+    expect(find.text('Favorite'), findsNothing);
     expect(find.byType(SongTile), findsOneWidget,
         reason: 'only the popup route may close, never the page under it');
   });

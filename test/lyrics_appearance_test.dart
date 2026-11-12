@@ -34,18 +34,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(appearance.lyricsAlignCenter, isFalse);
 
-    // Glow off.
-    await tester.tap(find.byType(Switch));
+    // Glow off. The sheet's own 44x26 violet switch (a second, frozen
+    // instance previews the look, so target the real one).
+    await tester.tap(find.byType(LyricsSwitch).first);
     await tester.pumpAndSettle();
     expect(appearance.lyricsGlow, isFalse);
 
-    // Size: drag right grows the scale within the clamp.
-    final slider = find.byType(Slider);
+    // Size: the sheet's private gradient slider (4 px pink-violet track,
+    // 5% steps). Tap the far right of the track to land near 100% no
+    // matter how wide the sheet rendered.
+    final slider = find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_GradientSlider');
     expect(slider, findsOneWidget);
-    await tester.drag(slider, const Offset(120, 0));
+    final track = tester.getRect(slider);
+    await tester.tapAt(Offset(track.right - 8, track.center.dy));
     await tester.pumpAndSettle();
     expect(appearance.lyricsFontScale, greaterThan(1.0));
     expect(appearance.lyricsFontScale, lessThanOrEqualTo(1.5));
+
+    // Drain the sheet's one-shot timers (4 s preview, 25 s lookup
+    // timeout) so the test ends with nothing pending.
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump(const Duration(seconds: 6));
   });
 
   test('setters clamp the font scale to the honest range', () async {

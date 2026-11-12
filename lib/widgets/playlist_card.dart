@@ -30,7 +30,7 @@ class PlaylistCard extends StatelessWidget {
         : playlist.songIds.length;
     return ContextMenuRegion(
       items: playlistContextMenuItems(context, playlist),
-      child: ListTile(
+      child: Material(type: MaterialType.transparency, child: ListTile(
       onTap: onTap,
       // Hold-to-open is touch-only now; desktop right-clicks.
       onLongPress: isDesktopPlatform
@@ -45,7 +45,7 @@ class PlaylistCard extends StatelessWidget {
           style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
       subtitle: Text(playlist.smartPreset != null ? '$count songs · updates itself' : '$count songs',
           style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor, fontSize: 12)),
-    ),
+    )),
     );
   }
 }

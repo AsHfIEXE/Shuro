@@ -9,6 +9,8 @@ import '../../models/song.dart';
 import '../../services/lrc_tools.dart';
 import '../../services/lyrics_edit_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/click_region.dart';
+import 'lyrics_appearance_sheet.dart' show LyricsPanel;
 
 /// Create or revise the on-device lyric edit for one song (roadmap #21).
 ///
@@ -23,12 +25,9 @@ Future<void> showLyricsEditSheet(
   String? currentText,
   VoidCallback? onSaved,
 }) {
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: kSurfaceColor,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    barrierColor: Colors.black.withValues(alpha: 0.5),
     builder: (sheetContext) => _LyricsEditSheet(
       song: song,
       store: store,
@@ -113,106 +112,129 @@ class _LyricsEditSheetState extends State<_LyricsEditSheet> {
     HapticFeedback.selectionClick();
   }
 
+  Widget _pill(String label, VoidCallback? onTap) => ClickRegion(
+        onTap: onTap,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(label,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFE8E8F0))),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final hasEdit = widget.initialText.trim().isNotEmpty;
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.82,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Edit lyrics',
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 2),
-                        Text(widget.song.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: Colors.white38, fontSize: 11.5)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Import .lrc / .txt',
-                    onPressed: _busy ? null : _importFile,
-                    icon: const Icon(Icons.file_open_rounded,
-                        color: Colors.white70),
-                  ),
-                  IconButton(
-                    tooltip: 'Save',
-                    onPressed: _busy ? null : _save,
-                    icon: const Icon(Icons.check_rounded, color: kBrandColor),
-                  ),
-                ],
+    final style = GoogleFonts.getFont(currentFontFamily);
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.all(16),
+      child: SingleChildScrollView(
+        child: LyricsPanel(
+          label: 'EDIT LYRICS',
+          width: 436,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Transform.translate(
+                offset: const Offset(0, -8),
+                child: Text('${widget.song.title} · ${widget.song.artist}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFE8E8F0))),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Row(
-                children: [
-                  Text(_isLrc ? 'Timestamped (LRC)' : 'Plain text',
-                      style: GoogleFonts.getFont(currentFontFamily,
-                          color: Colors.white30, fontSize: 11)),
-                  const Spacer(),
-                  if (_isLrc) ...[
-                    TextButton(
-                      onPressed: () => _shift(const Duration(milliseconds: -500)),
-                      child: const Text('−0.5s'),
-                    ),
-                    TextButton(
-                      onPressed: () => _shift(const Duration(milliseconds: 500)),
-                      child: const Text('+0.5s'),
-                    ),
-                  ],
-                  if (hasEdit)
-                    TextButton(
-                      onPressed: _busy ? null : _removeEdit,
-                      child: const Text('Remove edit',
-                          style: TextStyle(color: Colors.redAccent)),
-                    ),
-                ],
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34D399).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(_isLrc ? 'Timestamped (LRC)' : 'Plain text',
+                    style: style.copyWith(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF6EE7B7))),
               ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              const SizedBox(height: 14),
+              Container(
+                height: 210,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0B0F14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: TextField(
                   controller: _controller,
                   maxLines: null,
                   expands: true,
+                  onChanged: (_) => setState(() {}),
                   textAlignVertical: TextAlignVertical.top,
                   style: GoogleFonts.jetBrainsMono(
-                      color: Colors.white, fontSize: 12.5, height: 1.5),
+                      color: const Color(0xFFB4BBCB), fontSize: 12, height: 1.6),
                   decoration: InputDecoration(
-                    filled: true,
-                    fillColor: kCardColor,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none),
-                    hintText:
-                        'Paste or type lyrics here.\n\n'
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    hintText: 'Paste or type lyrics here.\n\n'
                         'Lines like [01:23.45] text are treated as synced.',
-                    hintStyle: GoogleFonts.getFont(currentFontFamily,
-                        color: Colors.white24, fontSize: 12.5),
+                    hintStyle: style.copyWith(
+                        color: Colors.white24, fontSize: 12),
                   ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 14),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                if (_isLrc) ...[
+                  _pill('−0.5 s',
+                      () => _shift(const Duration(milliseconds: -500))),
+                  _pill('+0.5 s',
+                      () => _shift(const Duration(milliseconds: 500))),
+                ],
+                _pill('Import .lrc', _busy ? null : _importFile),
+              ]),
+              const SizedBox(height: 18),
+              Row(children: [
+                ClickRegion(
+                  onTap: _busy ? null : _save,
+                  child: Container(
+                    height: 34,
+                    width: 120,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED),
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    child: Text('Save',
+                        style: style.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                  ),
+                ),
+                const Spacer(),
+                if (hasEdit)
+                  ClickRegion(
+                    onTap: _busy ? null : _removeEdit,
+                    child: Text('Remove edit',
+                        style: style.copyWith(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFFCA5A5))),
+                  ),
+              ]),
+            ],
+          ),
         ),
       ),
     );

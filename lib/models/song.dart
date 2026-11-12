@@ -17,6 +17,9 @@ class Song {
   final AudioInfo audioInfo;
   final String? localFilePath;
 
+  /// Server play count (Subsonic `playCount`), 0 when unreported.
+  final int playCount;
+
   const Song({
     required this.id,
     required this.title,
@@ -28,6 +31,7 @@ class Song {
     this.artwork,
     this.audioInfo = const AudioInfo(),
     this.localFilePath,
+    this.playCount = 0,
   });
 
   bool get isLocal => localFilePath != null;
