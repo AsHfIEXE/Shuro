@@ -281,10 +281,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   late final StreamController<Duration> _smoothCtl =
       StreamController<Duration>.broadcast(
     onListen: _attachSmooth,
-    onCancel: () {
-      _smoothSub?.cancel();
-      _smoothSub = null;
-    },
+    // NOTE: no onCancel on purpose - just_audio caches one position stream
+    // per player and a cancelled stream cannot be re-listened, which froze
+    // lyric sync after the first lyrics open. The feed stays attached for
+    // the controller's lifetime; _attachSmooth re-creates it only when the
+    // engine is rebuilt (new player, fresh stream).
   );
   StreamSubscription<Duration>? _smoothSub;
 
