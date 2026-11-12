@@ -1,4 +1,5 @@
 ## 2.6.2
+- Now Playing desktop + full-screen Lyrics match the marked boards: header glass circles (cast "This computer" chip, info, "..."), pane toolbar (Aa, translate, Sync chip, edit, expand) with the green "Word-synced" dot chip, hover rows (white 8%, r14, play glyph + gutter timestamp), and on wide screens a left-aligned 32 px lyric column with pink cue bar, centred LYRICS/Title · Artist header with translate/edit/Aa circles, and a floating glass transport pill with nested Sync - 0.0 s + Reset and a pink→violet progress line (replaces the separate sync bar and attribution on that layout).
 - EQ response chart is now interactive: drag any band point (or click the chart) to edit gains; the sliders stay in sync.
 - Library: Cached stat cards no longer throw (stretched Row in a ListView) and blank the table underneath; the tab underline follows the active tab.
 - Board 'Playing now' pill (35 x 30, animated bars) on artwork of the playing song/album; small thumbs get a dim scrim with bars.

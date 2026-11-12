@@ -1233,23 +1233,56 @@ class _Header extends StatelessWidget {
               // the transport - a second one in the header was clutter.)
               if (sleepActive)
                 Icon(Icons.bedtime_rounded, color: accent, size: 18),
-              if (onAudioInfo != null)
-                IconButton(
-                  visualDensity: density,
-                  onPressed: onAudioInfo,
-                  icon: const Icon(Icons.info_outline_rounded,
-                      color: Colors.white70),
-                  tooltip: 'Audio information',
-                ),
-              IconButton(
-                visualDensity: density,
-                onPressed: onMore,
-                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-                tooltip: 'More options',
-              ),
+              // Board: 32 px glass circles (info, more) next to the output pill.
+              if (onAudioInfo != null) ...[
+                _HeaderGlassCircle(
+                    icon: Icons.info_outline_rounded,
+                    tooltip: 'Audio information',
+                    onTap: onAudioInfo),
+                const SizedBox(width: 8),
+              ],
+              _HeaderGlassCircle(
+                  icon: Icons.more_horiz_rounded,
+                  tooltip: 'More options',
+                  onTap: onMore),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 32 px white-8% circle on a hairline: the Now Playing header's info and
+/// "..." buttons.
+class _HeaderGlassCircle extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _HeaderGlassCircle(
+      {required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.08),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            ),
+            child: Icon(icon, size: 16, color: Colors.white70),
+          ),
+        ),
       ),
     );
   }
@@ -2552,8 +2585,7 @@ class _OutputChipState extends State<_OutputChip> {
     final isPhone = defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     var label = widget.defaultLabel;
-    var icon =
-        isPhone ? Icons.smartphone_rounded : Icons.computer_rounded;
+    var icon = isPhone ? Icons.smartphone_rounded : Icons.cast_rounded;
     final report = _report;
     if (report != null && report.routeKind != RouteKind.unknown) {
       final name = (report.routeLabel ?? '').trim();

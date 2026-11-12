@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -666,8 +667,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
                           dimmed: !isSynced,
                           // A side pane keeps its own alignment; the full
                           // screen follows the user's centre/left choice.
+                          wide: _wideFull,
                           textAlign: widget.textAlign ??
-                              (appearance.lyricsAlignCenter
+                              (_wideFull
+                                  ? TextAlign.left
+                                  : appearance.lyricsAlignCenter
                                   ? TextAlign.center
                                   : TextAlign.left),
                           fontScale: appearance.lyricsFontScale,
@@ -743,17 +747,26 @@ class _LyricsScreenState extends State<LyricsScreen> {
     }
   }
 
+  /// Wide full-screen lyrics (desktop board): left-aligned column, big type,
+  /// floating transport pill. Phones and the embedded pane keep their layouts.
+  bool get _wideFull =>
+      !widget.embedded &&
+      !widget.compact &&
+      MediaQuery.sizeOf(context).width >= 900;
+
   Widget _shell(
       {required Color accent,
       required Widget child,
       Song? song,
       List<Color>? colors}) {
+    final wide = _wideFull;
     final content = Column(
       children: [
         if (!widget.embedded)
           _Header(
               song: song,
               accent: accent,
+              wide: wide,
               onEditLyrics: _openLyricsEditor,
               onAppearance: () => showLyricsAppearanceSheet(context)),
         // Desktop pane chrome (the redesign right column): LYRICS label,
@@ -766,27 +779,38 @@ class _LyricsScreenState extends State<LyricsScreen> {
               onAppearance: () => showLyricsAppearanceSheet(context),
               onToggleSync: () =>
                   setState(() => _showSyncPane = !_showSyncPane),
-              onEdit: _song == null ? null : _openLyricsEditor),
+              onEdit: _song == null ? null : _openLyricsEditor,
+              onExpand: song == null
+                  ? null
+                  : () => openLyricsScreen(context, song)),
         if (widget.embedded && !widget.compact && _showSyncPane)
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
               songId: song?.id ?? _song?.id,
               enabled: _track?.hasTiming ?? false),
-        Expanded(child: child),
+        Expanded(
+            child: wide
+                ? Padding(
+                    // Board: the column starts at x~210 of a 1190 canvas.
+                    padding: EdgeInsets.only(
+                        left: MediaQuery.sizeOf(context).width * 0.176 + 64,
+                        right: 96),
+                    child: child)
+                : child),
         // Attribution shows in the embedded pane too: the desktop lyrics
         // column is a full lyrics surface, and "where did these words come
         // from" is not a phone-only question.
-        if (!widget.compact && _loadedView?.track != null)
+        if (!widget.compact && !wide && _loadedView?.track != null)
           _AttributionFooter(
               track: _loadedView!.track!, detail: _loadedView!.detail),
-        if (!widget.compact && !widget.embedded)
+        if (!widget.compact && !widget.embedded && !wide)
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
               songId: song?.id ?? _song?.id,
               enabled: _track?.hasTiming ?? false),
-        if (!widget.embedded && song != null)
+        if (!widget.embedded && !wide && song != null)
           MiniTransportBar(song: song, accentColor: accent),
       ],
     );
@@ -815,6 +839,22 @@ class _LyricsScreenState extends State<LyricsScreen> {
             child: _LyricsScrubRail(controller: _scroll),
           ),
         SafeArea(child: content),
+        // Board: the transport floats over the lyrics as one glass pill with
+        // the sync control nested inside it (replaces the separate sync bar
+        // and attribution footer on the wide full-screen layout).
+        if (wide && song != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 24,
+            child: Center(
+              child: _FloatingTransportPill(
+                song: song,
+                offsetMs: _offset.inMilliseconds,
+                syncEnabled: _track?.hasTiming ?? false,
+              ),
+            ),
+          ),
       ],
     );
     return widget.embedded
@@ -853,6 +893,11 @@ class _LyricsLineView extends StatefulWidget {
   final double fontScale;
   final bool glow;
 
+  /// Desktop full-screen board layout: 32 px type (34 on the sung line via
+  /// the 1.06 scale), pink cue bar outside the text, hover row with a play
+  /// glyph at the right and the timestamp in the left gutter.
+  final bool wide;
+
   const _LyricsLineView({
     super.key,
     required this.line,
@@ -866,6 +911,7 @@ class _LyricsLineView extends StatefulWidget {
     required this.onTap,
     this.onContextMenu,
     this.fontScale = 1.0,
+    this.wide = false,
     this.glow = true,
   });
 
@@ -893,7 +939,7 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
     final textAlign = widget.textAlign;
     final baseStyle = GoogleFonts.getFont(
       currentFontFamily,
-      fontSize: 21 * widget.fontScale,
+      fontSize: (widget.wide ? 32 : 21) * widget.fontScale,
       height: 1.5,
       // Constant size for every line: emphasis comes from colour, weight and
       // a paint-time scale, so switching lines never re-measures the list.
@@ -951,6 +997,26 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
     // under the centred text otherwise.
     final Widget cued = !isCurrent
         ? painted
+        : widget.wide
+            ? Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  painted,
+                  // 3 px pink cue bar hanging in the gutter, left of the text.
+                  Positioned(
+                    left: -18,
+                    top: 12,
+                    bottom: 12,
+                    width: 3,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _kLyricsPink,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ],
+              )
         : textAlign == TextAlign.left
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -988,7 +1054,7 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
       child: AnimatedScale(
         // A 1.06 read as focus; the old 1.10 bounced.
         scale: isCurrent ? 1.06 : 1.0,
-        alignment: Alignment.center,
+        alignment: widget.wide ? Alignment.centerLeft : Alignment.center,
         duration: ShuroMotion.lineChange,
         curve: ShuroMotion.std,
         child: cued,
@@ -999,49 +1065,81 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
     // so those platforms keep the plain tappable line.
     if (!isDesktopPlatform) return tappable;
     final menuCallback = widget.onContextMenu;
+    final showHover = _hovered && !widget.dimmed;
+    final row = AnimatedContainer(
+      // Board hover row: white 8% wash, r14. The timestamp says when the
+      // line is sung (right edge in the pane, left gutter full screen) and
+      // a play glyph says "click to seek". The InkWell below still seeks.
+      duration: const Duration(milliseconds: 120),
+      decoration: BoxDecoration(
+        color: _hovered
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ClickRegion(
+              onSecondaryTapUp: menuCallback == null
+                  ? null
+                  : (d) => menuCallback(d.globalPosition),
+              child: tappable,
+            ),
+          ),
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 120),
+            opacity: showHover ? 1.0 : 0.0,
+            child: ExcludeSemantics(
+              excluding: !showHover,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8, right: 14),
+                child: widget.wide
+                    ? const Icon(Icons.play_arrow_rounded,
+                        size: 22, color: Colors.white70)
+                    : Text(
+                        _formatClock(line.start),
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kStatusText, fontSize: 11),
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        // A 5% white wash over the row answers "can I click this?" the
-        // moment the cursor lands; the trailing timestamp says when the
-        // line is sung. Clicking still seeks - the InkWell below owns that.
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          color: _hovered
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: ClickRegion(
-                onSecondaryTapUp: menuCallback == null
-                    ? null
-                    : (d) => menuCallback(d.globalPosition),
-                child: tappable,
-              ),
-            ),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 120),
-              opacity: _hovered && !widget.dimmed ? 1.0 : 0.0,
-              child: ExcludeSemantics(
-                excluding: !(_hovered && !widget.dimmed),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 4),
-                  child: Text(
-                    _formatClock(line.start),
-                    style: GoogleFonts.getFont(currentFontFamily,
-                        color: kStatusText, fontSize: 11),
+      child: !widget.wide
+          ? row
+          : Stack(
+              clipBehavior: Clip.none,
+              children: [
+                row,
+                Positioned(
+                  left: -76,
+                  top: 0,
+                  bottom: 0,
+                  width: 52,
+                  child: IgnorePointer(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 120),
+                        opacity: showHover ? 1.0 : 0.0,
+                        child: Text(
+                          _formatClock(line.start),
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kStatusText, fontSize: 12),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1141,16 +1239,19 @@ class _KaraokeFill extends StatelessWidget {
 class _Header extends StatelessWidget {
   final Song? song;
   final Color accent;
+  final bool wide;
   final VoidCallback? onEditLyrics;
   final VoidCallback? onAppearance;
   const _Header(
       {required this.song,
       required this.accent,
+      this.wide = false,
       this.onEditLyrics,
       this.onAppearance});
 
   @override
   Widget build(BuildContext context) {
+    if (wide) return _buildWide(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
       child: Row(
@@ -1210,7 +1311,112 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+
+  /// Desktop board header: 32 px chevron circle at the left, centred
+  /// "LYRICS" over "Title · Artist", and translate / edit / Aa circles at the
+  /// right.
+  Widget _buildWide(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+      child: Row(
+        children: [
+          _LyricsCircleButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: 'Back',
+            onTap: () => Navigator.of(context).maybePop(),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text('LYRICS',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white.withValues(alpha: 0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.8)),
+                const SizedBox(height: 2),
+                Text(
+                  song == null
+                      ? 'Nothing playing'
+                      : '${song!.title} \u00b7 ${song!.artist}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          _LyricsCircleButton(
+            icon: Icons.translate_rounded,
+            tooltip: 'Translate (not available yet)',
+            onTap: () => ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                const SnackBar(
+                    content: Text('Lyrics translation is not available yet'))),
+          ),
+          const SizedBox(width: 8),
+          _LyricsCircleButton(
+            icon: Icons.edit_rounded,
+            tooltip: 'Edit lyrics',
+            onTap: song == null ? null : onEditLyrics,
+          ),
+          const SizedBox(width: 8),
+          _LyricsCircleButton(
+            label: 'Aa',
+            tooltip: 'Lyrics appearance',
+            onTap: onAppearance,
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+/// 32 px glass circle used by the full-screen lyrics header (icon or text).
+class _LyricsCircleButton extends StatelessWidget {
+  final IconData? icon;
+  final String? label;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _LyricsCircleButton(
+      {this.icon, this.label, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: ClickRegion(
+          onTap: onTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.08),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.10)),
+            ),
+            child: icon != null
+                ? Icon(icon, size: 18, color: Colors.white70)
+                : Text(label ?? '',
+                    style: GoogleFonts.getFont(currentFontFamily,
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const Color _kLyricsPink = Color(0xFFEC4899);
 
 /// Chrome for the embedded desktop pane (Now Playing's right column):
 /// "LYRICS" label, a "Word-synced" chip when the track really carries word
@@ -1225,8 +1431,10 @@ class _EmbeddedPaneHeader extends StatelessWidget {
   /// Expands/collapses the inline [_SyncBar] under this header.
   final VoidCallback onToggleSync;
   final VoidCallback? onEdit;
+  final VoidCallback? onExpand;
 
   const _EmbeddedPaneHeader({
+    this.onExpand,
     required this.track,
     required this.offsetMs,
     required this.onAppearance,
@@ -1271,11 +1479,22 @@ class _EmbeddedPaneHeader extends StatelessWidget {
                           color: kGreen.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(999),
                         ),
-                        child: Text('Word-synced',
-                            style: GoogleFonts.getFont(currentFontFamily,
-                                color: kGreen,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                    color: kGreen, shape: BoxShape.circle)),
+                            const SizedBox(width: 6),
+                            Text('Word-synced',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: kGreen,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
                       ),
                     ],
                   ],
@@ -1310,6 +1529,19 @@ class _EmbeddedPaneHeader extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w600)),
                 ),
+                IconButton(
+                  tooltip: 'Translate (not available yet)',
+                  onPressed: () => ScaffoldMessenger.maybeOf(context)
+                      ?.showSnackBar(const SnackBar(
+                          content: Text(
+                              'Lyrics translation is not available yet'))),
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.translate_rounded,
+                      size: 16, color: Colors.white70),
+                ),
                 TextButton(
                   onPressed: onToggleSync,
                   style: TextButton.styleFrom(
@@ -1333,6 +1565,17 @@ class _EmbeddedPaneHeader extends StatelessWidget {
                   icon: const Icon(Icons.edit_rounded,
                       size: 16, color: Colors.white70),
                 ),
+                if (onExpand != null)
+                  IconButton(
+                    tooltip: 'Full-screen lyrics',
+                    onPressed: onExpand,
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: const EdgeInsets.all(4),
+                    icon: const Icon(Icons.open_in_full_rounded,
+                        size: 15, color: Colors.white70),
+                  ),
               ],
             ),
           ),
@@ -1841,6 +2084,247 @@ class MiniTransportBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Board transport for the wide full-screen lyrics: a 560 x 56 glass pill
+/// with the ring-art, title/artist, prev / play / next, the nested sync
+/// control (Sync - 0.0 s + Reset) and a 2 px pink-to-violet progress line.
+class _FloatingTransportPill extends StatelessWidget {
+  final Song song;
+  final int offsetMs;
+  final bool syncEnabled;
+  const _FloatingTransportPill(
+      {required this.song, required this.offsetMs, required this.syncEnabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final player = context.watch<PlayerController>();
+    final appState = context.watch<AppState>();
+    final isActive = player.currentSong?.id == song.id;
+    final playing = isActive && player.isPlaying;
+    final label = '${offsetMs > 0 ? '+' : ''}${(offsetMs / 1000).toStringAsFixed(1)} s';
+    final maxW = MediaQuery.sizeOf(context).width - 160;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxW.clamp(420.0, 600.0)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 56,
+            decoration: BoxDecoration(
+              color: const Color(0xCC0B0F14),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: SmoothPositionBuilder(
+                          builder: (context, p, position, progress) =>
+                              ArtworkRing(
+                            song: song,
+                            progress: isActive ? progress : 0,
+                            colors: song.gradientColors,
+                            size: 40,
+                            strokeWidth: 2.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(song.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                            Text(song.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Colors.white60, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const ShuroIcon(ShuroGlyph.previous,
+                            size: 20, color: Colors.white70),
+                        onPressed: player.previous,
+                        tooltip: 'Previous',
+                      ),
+                      ClickRegion(
+                        onTap: () => isActive
+                            ? player.togglePlayPause()
+                            : player.playSong(song),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                              shape: BoxShape.circle, color: Colors.white),
+                          child: Center(
+                            child: ShuroIcon(
+                              playing ? ShuroGlyph.pause : ShuroGlyph.play,
+                              color: const Color(0xFF0B0F14),
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const ShuroIcon(ShuroGlyph.next,
+                            size: 20, color: Colors.white70),
+                        onPressed: player.next,
+                        tooltip: 'Next',
+                      ),
+                      const SizedBox(width: 4),
+                      // Nested sync control.
+                      Container(
+                        height: 32,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Sync',
+                                style: GoogleFonts.getFont(currentFontFamily,
+                                    color: Colors.white54, fontSize: 11)),
+                            const SizedBox(width: 6),
+                            _SyncNudge(
+                              icon: Icons.remove_rounded,
+                              tooltip: 'Shift lyrics 0.1 s earlier',
+                              onTap: syncEnabled
+                                  ? () => appState.nudgeLyricsOffset(
+                                      song.id, offsetMs - 100)
+                                  : null,
+                            ),
+                            ClickRegion(
+                              onTap: syncEnabled
+                                  ? () => showLyricsSyncCard(context,
+                                      songId: song.id)
+                                  : null,
+                              child: SizedBox(
+                                width: 40,
+                                child: Text(label,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.getFont(
+                                        currentFontFamily,
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600)),
+                              ),
+                            ),
+                            _SyncNudge(
+                              icon: Icons.add_rounded,
+                              tooltip: 'Shift lyrics 0.1 s later',
+                              onTap: syncEnabled
+                                  ? () => appState.nudgeLyricsOffset(
+                                      song.id, offsetMs + 100)
+                                  : null,
+                            ),
+                            const SizedBox(width: 6),
+                            ClickRegion(
+                              onTap: offsetMs == 0
+                                  ? null
+                                  : () => appState.nudgeLyricsOffset(
+                                      song.id, 0,
+                                      reset: true),
+                              child: Text('Reset',
+                                  style: GoogleFonts.getFont(
+                                      currentFontFamily,
+                                      color: offsetMs == 0
+                                          ? const Color(0x66A78BFA)
+                                          : const Color(0xFFA78BFA),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 2 px pink -> violet progress line along the bottom edge.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 2,
+                  child: SmoothPositionBuilder(
+                    builder: (context, p, position, progress) =>
+                        Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor:
+                            isActive ? progress.clamp(0.0, 1.0) : 0.0,
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                                colors: [_kLyricsPink, kBrandColor]),
+                          ),
+                          child: SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 18 px circular -/+ button inside the transport pill's sync control.
+class _SyncNudge extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _SyncNudge({required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: ClickRegion(
+          onTap: onTap,
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white
+                  .withValues(alpha: onTap == null ? 0.05 : 0.12),
+            ),
+            child: Icon(icon,
+                size: 12,
+                color: onTap == null ? Colors.white30 : Colors.white),
+          ),
+        ),
       ),
     );
   }
