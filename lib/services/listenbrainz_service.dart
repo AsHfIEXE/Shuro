@@ -17,6 +17,11 @@ class ListenBrainzService extends ChangeNotifier {
   static final ListenBrainzService instance = ListenBrainzService._();
 
   static const String _kToken = 'shuro_lb_token_v1';
+
+  /// Plain-prefs copy used ONLY when flutter_secure_storage is unavailable
+  /// on the machine (its Windows backend can fail silently). Distinct key so
+  /// the legacy migration never deletes it.
+  static const String _kTokenFallback = 'shuro_lb_token_fb_v1';
   static const String _kUsername = 'shuro_lb_username_v1';
   static const String _kQueue = 'shuro_lb_queue_v1';
   static const int _queueCap = 500;
@@ -56,18 +61,30 @@ class ListenBrainzService extends ChangeNotifier {
       try {
         _token = await _secure.read(key: _kToken);
       } catch (_) {
-        _token = null; // secure storage unavailable: ask for the token again
+        _token = null; // secure storage unavailable: fall through
+      }
+      if (_token == null || _token!.isEmpty) {
+        // _persistToken keeps a plain copy when the secure write fails, so a
+        // working connection survives restarts on those machines.
+        _token = prefs.getString(_kTokenFallback);
       }
       // One-time migration of tokens saved by earlier builds in plain prefs.
       final legacy = prefs.getString(_kToken);
       if (legacy != null) {
         if (_token == null || _token!.isEmpty) {
           _token = legacy;
+          var migrated = false;
           try {
             await _secure.write(key: _kToken, value: legacy);
+            migrated = true;
           } catch (_) {}
+          if (!migrated) {
+            // Secure storage is broken here: keep the token in the plain
+            // fallback instead of deleting the only surviving copy.
+            await prefs.setString(_kTokenFallback, legacy);
+          }
         }
-        await prefs.remove(_kToken);
+        if (_token != legacy) await prefs.remove(_kToken);
       }
       _username = prefs.getString(_kUsername);
       _enabled = prefs.getBool('shuro_lb_enabled_v1') ?? (_token != null);
@@ -210,17 +227,33 @@ class ListenBrainzService extends ChangeNotifier {
   }
 
   Future<void> _persistToken() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (_token != null) {
+    final prefs = await SharedPreferences.getInstance();
+    if (_token != null) {
+      var secureOk = true;
+      try {
         await _secure.write(key: _kToken, value: _token!);
-        if (_username != null) await prefs.setString(_kUsername, _username!);
-      } else {
-        await _secure.delete(key: _kToken);
-        await prefs.remove(_kUsername);
+      } catch (_) {
+        secureOk = false;
       }
-      await prefs.remove(_kToken); // never leave a clear-text copy behind
-    } catch (_) {}
+      if (secureOk) {
+        // Secure copy is the source of truth; drop any plain fallback.
+        await prefs.remove(_kTokenFallback);
+      } else {
+        // Secure storage failed on this machine (it does on some Windows
+        // setups). The token already transits every scrobble request, so a
+        // plain copy is not a new exposure class - and a connection that
+        // survives a restart beats a login that silently evaporates.
+        await prefs.setString(_kTokenFallback, _token!);
+      }
+      if (_username != null) await prefs.setString(_kUsername, _username!);
+    } else {
+      try {
+        await _secure.delete(key: _kToken);
+      } catch (_) {}
+      await prefs.remove(_kTokenFallback);
+      await prefs.remove(_kUsername);
+    }
+    await prefs.remove(_kToken); // never leave a clear-text copy behind
   }
 
   Future<void> _persistQueue() async {
