@@ -9,4 +9,5 @@
 
     <!-- Launcher adaptive-icon background: the app's own dark surface. -->
     <color name="ic_launcher_background">#FF0B0F14</color>
+    <color name="shuro_launcher_bg">#FF0B0F14</color>
 </resources>

@@ -19,6 +19,7 @@ import 'playback/playback_engine.dart';
 import 'services/app_persistence.dart';
 import 'services/audio_cache.dart';
 import 'services/desktop_lifecycle.dart';
+import 'services/discord_rpc_service.dart';
 import 'services/download_service.dart';
 import 'services/local_tag_enrichment.dart';
 import 'services/metadata/lastfm_client.dart';
@@ -596,6 +597,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       };
       player.metadataResolver = appState.nowPlayingMetadataFor;
 
+      // Desktop: Discord Rich Presence. The service gates itself to
+      // Windows/Linux and no-ops until a real Discord Application ID is
+      // compiled in, so this wiring costs nothing on other platforms. The
+      // seek listener is attached regardless of the toggle — it just
+      // forwards into the active service — which is what lets the Settings
+      // toggle start presence live without re-running this block.
+      player.addListener(_rpcOnSeek);
+      try {
+        final rpcPersistence = await AppPersistence.load();
+        DiscordRpcService.initFromPersistence(
+            rpcPersistence.getBool(DiscordRpcService.kEnabledKey));
+      } catch (_) {
+        // No persistence on this platform: default-on applies in memory.
+      }
+      DiscordRpcService.startFor(player);
+
       // §3.1 / §6 of the playback plan: the source policy the request is built
       // from, and the resolver that turns everything the app knows into the
       // diagnostics model the Audio Information panel renders.
@@ -858,6 +875,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _maybeReconnect();
   }
 
+  /// Forwards a completed seek to the Discord Rich Presence service — a
+  /// scrub moves the progress bar but changes nothing in the service's
+  /// change signature, so it needs this explicit nudge. Null-safe no-op
+  /// unless the desktop service is running.
+  void _rpcOnSeek() => DiscordRpcService.active?.onSeek();
+
   @override
   void dispose() {
     _disposeLyricsPrefetch?.call();
@@ -867,6 +890,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _boundPlayer?.removeListener(_recordListeningHistory);
     _boundPlayer?.removeListener(_showPlaybackErrors);
     _boundPlayer?.removeListener(_trackScrobbles);
+    _boundPlayer?.removeListener(_rpcOnSeek);
+    unawaited(DiscordRpcService.shutdownActive());
     super.dispose();
   }
 

@@ -433,12 +433,26 @@ extension _MorePages on _SettingsScreenState {
             description: 'Linking a Last.fm account is not available yet.',
             value: 'Not available yet',
           ),
-          const _NavRow(
-            icon: Icons.chat_bubble_outline_rounded,
-            label: 'Discord presence',
-            description: 'Showing what you play on Discord is not available yet.',
-            value: 'Not available yet',
-          ),
+          if (DiscordRpcService.supported)
+            ValueListenableBuilder<bool>(
+              valueListenable: DiscordRpcService.toggle,
+              builder: (context, on, _) => _ToggleRow(
+                label: 'Discord presence',
+                value: on,
+                onChanged: (v) =>
+                    unawaited(DiscordRpcService.setEnabled(v)),
+                description:
+                    'Shows what you play on Discord while Shuro runs: track, artist, album art and progress. Presence is cleared when Discord is closed or this is off.',
+              ),
+            )
+          else
+            const _NavRow(
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'Discord presence',
+              description:
+                  'Showing what you play on Discord is a Windows and Linux feature.',
+              value: 'Desktop only',
+            ),
           _ToggleRow(
             label: 'Private listening',
             value: appState.privateListening,

@@ -19,6 +19,7 @@ import '../../playback/event_log.dart';
 import '../../backend/subsonic_api.dart';
 import '../../services/server_secret_store.dart';
 import '../../services/device_profile.dart';
+import '../../services/discord_rpc_service.dart';
 import '../../services/listenbrainz_service.dart';
 import '../../services/download_service.dart';
 import '../../services/playback_prefs.dart';

@@ -65,6 +65,7 @@ dependencies:
   window_manager: ^0.5.2
   tray_manager: ^0.5.3
   just_audio_platform_interface: any
+  dart_discord_presence: ^1.2.1
 
 dev_dependencies:
   flutter_test:

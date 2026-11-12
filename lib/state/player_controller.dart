@@ -240,6 +240,13 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
   // real listen" bar: past half the track, or past four minutes for very
   // long tracks — then the server counts a play (scrobble submission).
   void Function(Song song)? onTrackStarted;
+
+  /// Wired from app.dart — fired after a seek lands (the immediate path in
+  /// [seekTo], or the pending-seek replay once the load finishes). Status
+  /// surfaces like the desktop Discord RPC service don't include position in
+  /// their change signature, so they need this explicit nudge to re-render
+  /// the progress bar.
+  void Function()? onUserSeeked;
   void Function(Song song)? onListenThresholdReached;
   bool _listenThresholdDone = true;
 
@@ -1068,6 +1075,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       } catch (_) {
         // A seek that fails here isn't worth failing the whole load over.
       }
+      onUserSeeked?.call();
     }
 
     try {
@@ -1352,6 +1360,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     await _audioPlayer.seek(t);
     _lastNotifiedSecond = -1;
     notifyListeners();
+    onUserSeeked?.call();
   }
 
   Future<void> seekToProgress(double value) {
