@@ -613,6 +613,16 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       }
       DiscordRpcService.startFor(player);
 
+      // "Listen along" button target: the active Navidrome server's web UI,
+      // so a friend clicking the button lands in the same library. A
+      // local-only session leaves it null and the card shows only the
+      // project button.
+      DiscordRpcService.listenUrlResolver = () {
+        final server = appState.activeServer;
+        if (server == null) return null;
+        return Uri.tryParse(server.url);
+      };
+
       // §3.1 / §6 of the playback plan: the source policy the request is built
       // from, and the resolver that turns everything the app knows into the
       // diagnostics model the Audio Information panel renders.

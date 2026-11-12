@@ -29,13 +29,13 @@ class DiscordRpcService {
   /// is compiled in below.
   static const String kEnabledKey = 'discord_rpc_enabled';
 
-  /// TODO(user): create an application named "Shuro" at
-  /// https://discord.com/developers/applications, copy its Application ID
-  /// here, and upload Rich Presence art assets with the keys `shuro_logo`,
-  /// `play_icon`, `pause_icon` (optional — album art is sent as a URL and
-  /// works without any portal assets). Until a real ID is compiled in, the
-  /// service refuses to connect: no error spam, no presence.
-  static const String _clientId = 'YOUR_DISCORD_APPLICATION_ID';
+  /// Application ID of the "Shuro" application on
+  /// https://discord.com/developers/applications. Rich Presence art assets
+  /// with the keys `shuro_logo`, `play_icon`, `pause_icon` can still be
+  /// uploaded there (optional — album art is sent as a URL and works without
+  /// any portal assets; until they exist the small play/pause glyph and the
+  /// logo fallback simply don't render).
+  static const String _clientId = '1570562227600367746';
 
   static bool get _configured =>
       _clientId.isNotEmpty && !_clientId.contains('YOUR_');
@@ -44,6 +44,13 @@ class DiscordRpcService {
   /// also supports macOS, but Shuro only ships Windows/Linux.
   static bool get supported =>
       !kIsWeb && (Platform.isWindows || Platform.isLinux);
+
+  /// "Listen along" button target — wired from app.dart to the active
+  /// Navidrome server's web UI. Null (local-only session) → that button is
+  /// omitted and only the project button shows.
+  static Uri? Function()? listenUrlResolver;
+
+  static const String _projectUrl = 'https://github.com/AsHfIEXE/Shuro';
 
   // ---- static registry: Settings needs live access without Provider ----
 
@@ -188,7 +195,9 @@ class DiscordRpcService {
         state: song.artist,
         largeAsset: (meta?.artUri != null)
             ? DiscordAsset.fromUrl(meta!.artUri!.toString(),
-                text: meta.albumTitle ?? song.artist)
+                text: meta.albumTitle == null
+                    ? song.artist
+                    : '${meta.albumTitle} · ${song.artist}')
             : DiscordAsset.fromKey('shuro_logo',
                 text: meta?.albumTitle ?? 'Shuro'),
         smallAsset: DiscordAsset.fromKey(
@@ -207,9 +216,24 @@ class DiscordRpcService {
                 maxSize: queueLength,
               )
             : null,
+        buttons: _buttons,
       ),
       sig,
     );
+  }
+
+  /// Both widget slots Discord offers. Buttons always need http(s) targets:
+  /// "Listen along" opens the active server's web player (same library, no
+  /// extra hosting needed), "Get Shuro" links the project page.
+  List<DiscordButton> get _buttons {
+    final buttons = <DiscordButton>[];
+    final listen = listenUrlResolver?.call();
+    if (listen != null &&
+        (listen.scheme == 'http' || listen.scheme == 'https')) {
+      buttons.add(DiscordButton(label: 'Listen along', url: listen.toString()));
+    }
+    buttons.add(const DiscordButton(label: 'Get Shuro', url: _projectUrl));
+    return buttons;
   }
 
   void _send(DiscordPresence? presence, String signature) {
