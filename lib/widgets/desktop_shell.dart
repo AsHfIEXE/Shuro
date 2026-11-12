@@ -28,6 +28,7 @@ import 'app_logo.dart';
 import 'playlist_collage_art.dart';
 import 'page_transitions.dart';
 import 'player_bar_extras.dart';
+import 'queue_panel.dart';
 import 'shuro_icons.dart';
 
 /// Windows/Linux workspace. All content screens and the mobile shell remain
@@ -358,7 +359,7 @@ class _DesktopShellState extends State<DesktopShell> {
                   onLyrics: _toggleLyrics,
                   onLyricsPage: () => _openContentPage(
                       LyricsScreen(initialSong: song, embedded: false)),
-                  onQueuePage: () => _openContentPage(const QueueScreen()),
+                  onQueuePage: () => unawaited(showQueuePanel(context)),
                 ),
               ],
             ),

@@ -36,6 +36,7 @@ import 'lyrics_screen.dart';
 import 'queue_screen.dart';
 import '../../widgets/click_region.dart';
 import '../../widgets/player_bar_extras.dart';
+import '../../widgets/queue_panel.dart';
 
 /// At or above this width the screen switches from the phone stack to a
 /// two-pane layout (artwork beside the controls). 1024 also happens to be the
@@ -885,7 +886,7 @@ class _PhoneNowPlayingState extends State<_PhoneNowPlaying> {
               if (i == 2) {
                 // The queue keeps its own screen (save-as-playlist and the
                 // rest of its toolbar), so the segment launches the route.
-                pushRisingOnce(context, const QueueScreen());
+                showQueuePanel(context);
               } else {
                 setState(() => _tab = i);
               }
@@ -2275,11 +2276,11 @@ class _NpvActionRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           QueuePeekButton(
-            onOpen: () => pushRisingOnce(context, const QueueScreen()),
+            onOpen: () => showQueuePanel(context),
             child: _CircleAction(
               icon: Icons.queue_music_rounded,
               tooltip: 'Queue (hold to peek)',
-              onTap: () => pushRisingOnce(context, const QueueScreen()),
+              onTap: () => showQueuePanel(context),
             ),
           ),
           if (!desktop) ...[
