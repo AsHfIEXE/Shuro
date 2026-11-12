@@ -738,6 +738,25 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
                 runSpacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  if (e.eqPresets.isNotEmpty)
+                    _SelectControl(
+                      options: [for (final n in e.eqPresets.keys) (n, n)],
+                      value: e.eqPresets.containsKey(e.eqPresetName)
+                          ? e.eqPresetName
+                          : e.eqPresets.keys.first,
+                      onChanged: (n) {
+                        _audioChange(e, () {
+                          final saved = e.eqPresets[n];
+                          if (saved == null || saved.length != 10) return;
+                          final g = e.eqGains;
+                          for (var i = 0; i < 10; i++) {
+                            g[i] = saved[i];
+                          }
+                          e.eqPresetName = n;
+                        });
+                        unawaited(_applyEqToDevice(e));
+                      },
+                    ),
                   _SegmentedControl(
                     options: const [
                       ('graphic', 'Graphic · 10'),
@@ -777,31 +796,29 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
                       unawaited(_applyEqToDevice(e));
                     },
                   ),
-                  if (e.eqPresets.isNotEmpty)
-                    _SelectControl(
-                      options: [for (final n in e.eqPresets.keys) (n, n)],
-                      value: e.eqPresets.containsKey(e.eqPresetName)
-                          ? e.eqPresetName
-                          : e.eqPresets.keys.first,
-                      onChanged: (n) {
-                        _audioChange(e, () {
-                          final saved = e.eqPresets[n];
-                          if (saved == null || saved.length != 10) return;
-                          final g = e.eqGains;
-                          for (var i = 0; i < 10; i++) {
-                            g[i] = saved[i];
-                          }
-                          e.eqPresetName = n;
-                        });
-                        unawaited(_applyEqToDevice(e));
-                      },
-                    ),
                 ],
               ),
               const SizedBox(height: 4),
               Text('Slot ${e.eqSlot.toUpperCase()}: A/B flips between two curves so you can compare by ear.',
                   style: _rowHelperStyle()),
               const SizedBox(height: 12),
+              // Board: response curve over the 10 bands, +12 .. -12 dB.
+              Container(
+                height: 150,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0B0F14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CustomPaint(
+                    size: Size.infinite,
+                    painter: _EqCurvePainter(
+                        List<double>.of(gains), e.eqOn),
+                  ),
+                ),
+              ),
               SizedBox(
                 height: 190,
                 child: Row(
@@ -932,8 +949,7 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
         ),
         _selectRow(
           label: 'Transcode format',
-          description:
-              'Used only when a cap is set. Empty = the server picks. Original streams are never transcoded.',
+          description: 'Used only when a cap is set and the server supports it.',
           options: const [
             ('', 'Server default'),
             ('opus', 'Opus'),
@@ -1025,4 +1041,101 @@ class _PresetTile extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Smooth response curve through the band gains with a violet fill, dB
+/// gridlines at +12 / +6 / 0 / -6 / -12 and the band frequencies underneath.
+class _EqCurvePainter extends CustomPainter {
+  _EqCurvePainter(this.gains, this.on);
+  final List<double> gains;
+  final bool on;
+
+  static const _freqs = [
+    '31', '62', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const left = 28.0, right = 12.0, top = 12.0, bottom = 20.0;
+    final w = size.width - left - right;
+    final h = size.height - top - bottom;
+    double yOf(double db) => top + h * (1 - (db.clamp(-12.0, 12.0) + 12) / 24);
+    final grid = Paint()
+      ..color = Colors.white.withValues(alpha: 0.07)
+      ..strokeWidth = 1;
+    for (final db in const [12, 6, 0, -6, -12]) {
+      final y = yOf(db.toDouble());
+      canvas.drawLine(Offset(left, y), Offset(size.width - right, y), grid);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: db > 0 ? '+$db' : '$db',
+          style: const TextStyle(color: Color(0xFF6F7890), fontSize: 8),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(left - tp.width - 4, y - tp.height / 2));
+    }
+    if (gains.length < 2) return;
+    final n = gains.length;
+    final pts = <Offset>[
+      for (var i = 0; i < n; i++)
+        Offset(left + w * i / (n - 1), yOf(on ? gains[i] : 0)),
+    ];
+    for (var i = 0; i < n; i++) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: i < _freqs.length ? _freqs[i] : '',
+          style: const TextStyle(color: Color(0xFF6F7890), fontSize: 8),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas,
+          Offset(pts[i].dx - tp.width / 2, size.height - bottom + 5));
+    }
+    // Catmull-Rom -> cubic Bezier.
+    final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (var i = 0; i < n - 1; i++) {
+      final p0 = i == 0 ? pts[i] : pts[i - 1];
+      final p1 = pts[i];
+      final p2 = pts[i + 1];
+      final p3 = i + 2 < n ? pts[i + 2] : p2;
+      line.cubicTo(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+        p2.dx,
+        p2.dy,
+      );
+    }
+    final fill = Path.from(line)
+      ..lineTo(pts.last.dx, yOf(-12))
+      ..lineTo(pts.first.dx, yOf(-12))
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF7C3AED).withValues(alpha: on ? 0.35 : 0.12),
+            const Color(0xFF7C3AED).withValues(alpha: 0),
+          ],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = on ? const Color(0xFFA78BFA) : Colors.white38
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_EqCurvePainter old) =>
+      old.on != on || !listEquals(old.gains, gains);
 }

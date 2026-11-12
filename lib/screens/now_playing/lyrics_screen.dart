@@ -804,6 +804,16 @@ class _LyricsScreenState extends State<LyricsScreen> {
               style: BlurBackdropStyle.lyrics,
             ),
           ),
+        // Board scrub rail: the ticked scroll/position indicator on the
+        // right edge of the full-screen lyrics.
+        if (!widget.embedded)
+          Positioned(
+            right: 10,
+            top: 140,
+            bottom: 150,
+            width: 24,
+            child: _LyricsScrubRail(controller: _scroll),
+          ),
         SafeArea(child: content),
       ],
     );
@@ -1842,4 +1852,82 @@ String _formatClock(Duration value) {
   final minutes = value.inMinutes;
   final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
   return '$minutes:$seconds';
+}
+
+/// Board scrub rail: tick marks down the right edge (every ~12 px, 14 px
+/// long, white 35%) with a lighter thumb block showing where the viewport
+/// sits. Dragging jumps the scroll; a short list shows a full-height thumb
+/// and ignores drags.
+class _LyricsScrubRail extends StatelessWidget {
+  final ScrollController controller;
+
+  const _LyricsScrubRail({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    // AnimatedBuilder: the controller is a Listenable, so the thumb tracks
+    // autoscroll too, not just user drags.
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return LayoutBuilder(builder: (context, box) {
+          final h = box.maxHeight;
+          final hasClients = controller.hasClients;
+          final max =
+              hasClients ? controller.position.maxScrollExtent : 0.0;
+          final extent = hasClients
+              ? controller.position.viewportDimension
+              : h;
+          final ratio =
+              max > 0 ? (controller.offset / max).clamp(0.0, 1.0) : 0.0;
+          final thumbH = max > 0
+              ? (extent / (max + extent) * h).clamp(48.0, h)
+              : h;
+          final thumbTop = (h - thumbH) * ratio;
+          final ticks = (h / 12).floor();
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragUpdate: max > 0
+                ? (d) {
+                    final local =
+                        d.localPosition.dy.clamp(0.0, h);
+                    controller.jumpTo((local / h) * max);
+                  }
+                : null,
+            child: Stack(
+              children: [
+                for (var i = 0; i < ticks; i++)
+                  Positioned(
+                    right: 6,
+                    top: i * 12.0 + 2,
+                    child: Container(
+                      width: 14,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color:
+                            Colors.white.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 4,
+                  top: thumbTop,
+                  child: Container(
+                    width: 18,
+                    height: thumbH,
+                    decoration: BoxDecoration(
+                      color:
+                          Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
 }
