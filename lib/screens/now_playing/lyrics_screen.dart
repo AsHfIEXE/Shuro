@@ -801,10 +801,10 @@ class _LyricsScreenState extends State<LyricsScreen> {
         // Attribution shows in the embedded pane too: the desktop lyrics
         // column is a full lyrics surface, and "where did these words come
         // from" is not a phone-only question.
-        if (!widget.compact && !wide && _loadedView?.track != null)
+        if (!widget.compact  && _loadedView?.track != null)
           _AttributionFooter(
               track: _loadedView!.track!, detail: _loadedView!.detail),
-        if (!widget.compact && !widget.embedded && !wide)
+        if (!widget.compact && !widget.embedded)
           _SyncBar(
               accent: accent,
               offsetMs: _offset.inMilliseconds,
@@ -839,22 +839,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
             child: _LyricsScrubRail(controller: _scroll),
           ),
         SafeArea(child: content),
-        // Board: the transport floats over the lyrics as one glass pill with
-        // the sync control nested inside it (replaces the separate sync bar
-        // and attribution footer on the wide full-screen layout).
-        if (wide && song != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 24,
-            child: Center(
-              child: _FloatingTransportPill(
-                song: song,
-                offsetMs: _offset.inMilliseconds,
-                syncEnabled: _track?.hasTiming ?? false,
-              ),
-            ),
-          ),
+        // (No floating transport pill on the full-screen lyrics: the
+        // standard sync bar and attribution stay, per review.)
       ],
     );
     return widget.embedded
