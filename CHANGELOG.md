@@ -1,4 +1,7 @@
 ## 2.6.2
+- EQ response chart is now interactive: drag any band point (or click the chart) to edit gains; the sliders stay in sync.
+- Library: Cached stat cards no longer throw (stretched Row in a ListView) and blank the table underneath; the tab underline follows the active tab.
+- Board 'Playing now' pill (35 x 30, animated bars) on artwork of the playing song/album; small thumbs get a dim scrim with bars.
 - Lyrics tools rebuilt to the board: Appearance card (text size slider, Left/Centre, Word/Line, glow, translation, backdrop), Sync offset card (±0.5 s, Only this song, Reset), Edit lyrics card (LRC chip, editor, shift, Import .lrc, Save, Remove edit); No lyrics / Instrumental / Lookup paused states use the 80 px disc layout.
 - Shuro Pulse stat card 'Top genre' (share of plays); playlist detail gets the dashed 'Find songs to add' row.
 - Onboarding: the Sound step no longer renders blank (its signal-line used a LayoutBuilder inside an IntrinsicHeight, which threw); the Navidrome step has a Material/Scaffold again (no white background or yellow debug underlines).

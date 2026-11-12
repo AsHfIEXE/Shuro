@@ -547,15 +547,19 @@ class _StatCards extends StatelessWidget {
 
     return LayoutBuilder(builder: (context, c) {
       if (c.maxWidth >= 900) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(flex: 5, child: usage),
-            const SizedBox(width: 16),
-            Expanded(flex: 4, child: offline),
-            const SizedBox(width: 16),
-            Expanded(flex: 4, child: settings),
-          ],
+        // A stretched Row in a ListView has unbounded height: without
+        // IntrinsicHeight this threw and blanked everything under it.
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 5, child: usage),
+              const SizedBox(width: 16),
+              Expanded(flex: 4, child: offline),
+              const SizedBox(width: 16),
+              Expanded(flex: 4, child: settings),
+            ],
+          ),
         );
       }
       return Column(children: [

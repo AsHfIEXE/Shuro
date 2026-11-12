@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/dynamic_theme.dart';
+import 'motion.dart';
 
 /// Rounded gradient thumbnail used as artwork placeholder anywhere a real
 /// image isn't provided. Pass [size] for a fixed-size usage (list rows, the
@@ -19,6 +20,11 @@ class ArtworkThumb extends StatelessWidget {
   final IconData icon;
   final double iconSize;
 
+  /// Board "Playing now": a dim 35 x 30 pill with animated bars pinned to the
+  /// artwork's lower left (10 px in). Thumbs under 64 px get the bars centred
+  /// on a dim scrim instead, since the pill would cover them.
+  final bool playing;
+
   const ArtworkThumb({
     super.key,
     required this.gradientColors,
@@ -27,6 +33,7 @@ class ArtworkThumb extends StatelessWidget {
     this.radius = 10,
     this.icon = Icons.music_note_rounded,
     this.iconSize = 20,
+    this.playing = false,
   });
 
   @override
@@ -73,9 +80,28 @@ class ArtworkThumb extends StatelessWidget {
       });
     }
 
+    final small = size != null && size! < 64;
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(effectiveRadius),
-      child: artwork != null ? image() : placeholder(),
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          artwork != null ? image() : placeholder(),
+          if (playing && small)
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0xFF0B0F14).withValues(alpha: 0.55),
+                child: const Center(child: PlayingBars(size: 14)),
+              ),
+            ),
+          if (playing && !small)
+            const Positioned(
+              left: 10,
+              bottom: 10,
+              child: _PlayingNowPill(),
+            ),
+        ],
+      ),
     );
     if (size == null) return content;
     return SizedBox(width: size, height: size, child: content);
@@ -101,4 +127,21 @@ ImageProvider _sizedForTransfer(ImageProvider provider, int neededPx) {
     scale: provider.scale,
     headers: provider.headers,
   );
+}
+
+/// 35 x 30, radius 15, rgba(11,15,20,.75) with the animated bars (board).
+class _PlayingNowPill extends StatelessWidget {
+  const _PlayingNowPill();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 35,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xBF0B0F14),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: const PlayingBars(size: 14),
+      );
 }

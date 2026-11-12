@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../models/album.dart';
+import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
 import 'album_actions_sheet.dart';
@@ -56,6 +58,8 @@ class AlbumCard extends StatelessWidget {
                     gradientColors: album.gradientColors,
                     artwork: album.artwork,
                     radius: 12,
+                    playing: context.select<PlayerController, bool>((p) =>
+                        p.isPlaying && p.currentSong?.albumId == album.id),
                     icon: Icons.album_rounded,
                     iconSize: 32,
                   ),

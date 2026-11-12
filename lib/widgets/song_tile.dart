@@ -113,6 +113,7 @@ class _SongTileState extends State<SongTile> {
                       artwork: song.artwork,
                       size: 46,
                       radius: 8,
+                      playing: playing,
                     ),
               title: Text(
                 song.title,

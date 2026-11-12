@@ -64,6 +64,16 @@ class _LibraryScreenState extends State<LibraryScreen>
   _SongSort _sort = _SongSort.titleAz;
 
   @override
+  void initState() {
+    super.initState();
+    // The tab row reads _tabController.index; without this the underline
+    // stayed on the old tab after a click or swipe.
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _tabController.dispose();
     super.dispose();

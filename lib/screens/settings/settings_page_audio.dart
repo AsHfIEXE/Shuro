@@ -90,6 +90,8 @@ class _AudioEqBody extends StatefulWidget {
 
 class _AudioEqBodyState extends State<_AudioEqBody> {
   String? _lastDevice;
+  int? _eqDragBand; // band being dragged on the response chart
+  Offset? _eqLastPos;
 
   @override
   void initState() {
@@ -803,8 +805,10 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
                   style: _rowHelperStyle()),
               const SizedBox(height: 12),
               // Board: response curve over the 10 bands, +12 .. -12 dB.
+              // Drag any point (or click anywhere on the chart) to shape the
+              // curve; it edits the same band gains as the sliders below.
               Container(
-                height: 150,
+                height: 170,
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0B0F14),
@@ -812,11 +816,39 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter: _EqCurvePainter(
-                        List<double>.of(gains), e.eqOn),
-                  ),
+                  child: LayoutBuilder(builder: (context, box) {
+                    void edit(Offset p, {required bool commit}) {
+                      _eqLastPos = p;
+                      final geo = _EqCurvePainter.geometry(box.biggest);
+                      final n = e.eqGains.length;
+                      var band = (((p.dx - geo.left) / geo.w) * (n - 1))
+                          .round()
+                          .clamp(0, n - 1);
+                      if (_eqDragBand != null) band = _eqDragBand!;
+                      _eqDragBand = commit ? null : band;
+                      final f = ((p.dy - geo.top) / geo.h).clamp(0.0, 1.0);
+                      final db = ((12 - f * 24) * 2).round() / 2;
+                      _audioChange(e, () => e.eqGains[band] = db,
+                          persist: commit);
+                      if (commit) unawaited(_applyEqToDevice(e));
+                    }
+
+                    return ClickRegion(
+                      onTapDown: (d) => edit(d.localPosition, commit: false),
+                      onTapUp: (d) => edit(d.localPosition, commit: true),
+                      onPanStart: (d) => edit(d.localPosition, commit: false),
+                      onPanUpdate: (d) =>
+                          edit(d.localPosition, commit: false),
+                      onPanEnd: (_) => edit(
+                          _eqLastPos ?? Offset.zero,
+                          commit: true),
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _EqCurvePainter(
+                            List<double>.of(gains), e.eqOn),
+                      ),
+                    );
+                  }),
                 ),
               ),
               SizedBox(
@@ -1055,11 +1087,21 @@ class _EqCurvePainter extends CustomPainter {
     '31', '62', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'
   ];
 
+  static ({double left, double top, double w, double h}) geometry(Size size) {
+    const left = 28.0, right = 12.0, top = 12.0, bottom = 20.0;
+    return (
+      left: left,
+      top: top,
+      w: size.width - left - right,
+      h: size.height - top - bottom,
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    const left = 28.0, right = 12.0, top = 12.0, bottom = 20.0;
-    final w = size.width - left - right;
-    final h = size.height - top - bottom;
+    final geo = geometry(size);
+    final left = geo.left, top = geo.top, w = geo.w, h = geo.h;
+    const right = 12.0, bottom = 20.0;
     double yOf(double db) => top + h * (1 - (db.clamp(-12.0, 12.0) + 12) / 24);
     final grid = Paint()
       ..color = Colors.white.withValues(alpha: 0.07)
@@ -1133,6 +1175,14 @@ class _EqCurvePainter extends CustomPainter {
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round,
     );
+    // Drag handles on every band.
+    if (on) {
+      for (final pt in pts) {
+        canvas.drawCircle(pt, 6.5,
+            Paint()..color = const Color(0xFF7C3AED).withValues(alpha: 0.35));
+        canvas.drawCircle(pt, 4.5, Paint()..color = Colors.white);
+      }
+    }
   }
 
   @override
