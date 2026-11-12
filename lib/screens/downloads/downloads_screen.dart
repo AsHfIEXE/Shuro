@@ -115,9 +115,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       appBar: AppBar(
           backgroundColor: kSurfaceColor,
           elevation: 0,
+          toolbarHeight: 52,
+          titleSpacing: 16,
           title: Text('Downloads',
-              style: GoogleFonts.getFont(currentFontFamily,
-                  color: Colors.white, fontSize: 16))),
+                style: headingFont(color: kTextColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7))),
       // Wide windows get the board layout: transfers and the completed list
       // scroll in a left column while the storage card sits in a 352 px
       // right column. Narrow windows stack the same sections.

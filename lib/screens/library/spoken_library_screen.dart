@@ -78,7 +78,13 @@ class _SpokenLibraryScreenState extends State<SpokenLibraryScreen> {
         backgroundColor: kSurfaceColor,
         appBar: AppBar(
             backgroundColor: kSurfaceColor,
-            title: const Text('Books & podcasts'),
+            toolbarHeight: 52,
+            titleSpacing: 16,
+            title: Text('Books & podcasts',
+                style: headingFont(color: kTextColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7)),
             actions: [
               IconButton(
                   tooltip: 'Refresh libraries',

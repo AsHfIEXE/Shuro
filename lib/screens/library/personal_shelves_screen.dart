@@ -28,9 +28,13 @@ class PersonalShelvesScreen extends StatelessWidget {
       backgroundColor: kSurfaceColor,
       appBar: AppBar(
         backgroundColor: kSurfaceColor,
+        toolbarHeight: 52,
+        titleSpacing: 16,
         title: Text('Personal shelves',
-            style: headingFont(
-                color: kTextColor, fontSize: 20, fontWeight: FontWeight.w600)),
+            style: headingFont(color: kTextColor,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.7)),
         actions: [
           IconButton(
             tooltip: 'Create shelf',

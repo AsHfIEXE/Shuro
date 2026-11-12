@@ -323,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // shows one section at a time, mobile keeps the single scroll.
     final allSections = <Widget>[
       Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
         child: Row(
           children: [
             if (Navigator.of(context).canPop()) ...[

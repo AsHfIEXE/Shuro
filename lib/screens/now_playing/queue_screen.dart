@@ -57,9 +57,13 @@ class _QueueScreenState extends State<QueueScreen> {
       appBar: AppBar(
         backgroundColor: kSurfaceColor,
         elevation: 0,
+        toolbarHeight: 52,
+        titleSpacing: 16,
         title: Text('Queue',
-            style: GoogleFonts.getFont(currentFontFamily,
-                color: Colors.white, fontSize: 16)),
+                style: headingFont(color: kTextColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7)),
         actions: [
           if (upNext.isNotEmpty)
             TextButton(
