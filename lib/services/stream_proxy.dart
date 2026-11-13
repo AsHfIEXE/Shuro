@@ -44,6 +44,17 @@ class StreamProxy {
       _setDohEnabled(false);
       return;
     }
+    // Windows: never engage the DoH connector. Measured in the wild: a flaky
+    // boot-time lookup of the health-check host flips DoH on, and every
+    // HttpClient created afterwards (stream upstream, artwork, lyrics,
+    // server API) routes through the manual connector, whose TLS path breaks
+    // on some Windows network stacks — whole sessions where nothing connects
+    // while the platform resolver works fine (diagnostics 2026-11-13/14:
+    // stream, artwork and all three lyrics sources timing out together).
+    if (Platform.isWindows) {
+      _setDohEnabled(false);
+      return;
+    }
     try {
       final result =
           await InternetAddress.lookup('one.one.one.one').timeout(const Duration(seconds: 4));

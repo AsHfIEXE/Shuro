@@ -492,11 +492,14 @@ class DiscordRpcService {
     client.userAgent = _userAgent;
     client.connectionTimeout = const Duration(seconds: 5);
     try {
+      final artistQ = _q(_primaryArtist(song.artist));
       final recordingIds = await _searchReleaseGroups(
         client,
         '/ws/2/recording',
-        'recording:"${_q(song.title)}" AND artist:"${_q(song.artist)}"',
+        'recording:"${_q(song.title)}" AND artist:"$artistQ"',
         itemsKey: 'recordings',
+        expectArtist: artistQ,
+        expectTitle: song.title,
       );
       for (final id in recordingIds.take(6)) {
         final url = await _caaFrontIfReal(client, id);
@@ -509,8 +512,10 @@ class DiscordRpcService {
         final albumIds = await _searchReleaseGroups(
           client,
           '/ws/2/release-group',
-          'releasegroup:"${_q(album)}" AND artist:"${_q(song.artist)}"',
+          'releasegroup:"${_q(album)}" AND artist:"$artistQ"',
           itemsKey: 'release-groups',
+          expectArtist: artistQ,
+          expectTitle: album,
         );
         for (final id in albumIds.take(4)) {
           final url = await _caaFrontIfReal(client, id);
@@ -526,6 +531,38 @@ class DiscordRpcService {
   /// Quotes break the Lucene query; strip them instead of failing the lookup.
   String _q(String s) => s.replaceAll('"', ' ').trim();
 
+  /// Multi-artist tags arrive as "Zedd • Katy Perry" or "A, B & C". The
+  /// MusicBrainz query (and the result check) want the primary artist alone -
+  /// searching the joined string mostly returns noise.
+  String _primaryArtist(String artist) {
+    final split =
+        RegExp(r'\s*[•,;&/]\s+|\s+[x&]\s+|\s+feat\.?\s+|\s+with\s+', caseSensitive: false);
+    for (final part in artist.split(split)) {
+      final p = part.trim();
+      if (p.isNotEmpty) return p;
+    }
+    return artist.trim();
+  }
+
+  /// Join an artist-credit structure ("names" plus join phrases) to text.
+  String _creditNames(dynamic credit) {
+    if (credit is List) {
+      return credit
+          .map((c) => c is Map ? (c['name'] as String? ?? '') : '')
+          .join(' ');
+    }
+    if (credit is Map) return (credit['name'] as String? ?? '');
+    return '';
+  }
+
+  /// Either-way containment on normalized text - "Katy Perry" matches
+  /// "katy perry", "NF" matches "nf", "Zedd" does NOT match "katy perry".
+  bool _looseMatch(String a, String b) {
+    final na = _norm(a), nb = _norm(b);
+    if (na.isEmpty || nb.isEmpty) return false;
+    return na.contains(nb) || nb.contains(na);
+  }
+
   /// Runs a MusicBrainz search and returns unique release-group ids,
   /// best-scored first. [itemsKey] is 'recordings' (ids nested under each
   /// recording's releases) or 'release-groups' (ids at the top level).
@@ -534,6 +571,8 @@ class DiscordRpcService {
     String path,
     String lucene, {
     required String itemsKey,
+    String? expectArtist,
+    String? expectTitle,
   }) async {
     final query = Uri.https('musicbrainz.org', path, {
       'query': lucene,
@@ -554,6 +593,17 @@ class DiscordRpcService {
     if (items is! List) return ids;
     for (final item in items) {
       if (item is! Map<String, dynamic>) continue;
+      // MusicBrainz' Lucene search is loose: the top results for a query can
+      // still be a different artist's song with the same-ish title. Taking
+      // the first one with a cover is exactly how wrong album art ended up
+      // on Discord - so every candidate is verified against the song's own
+      // (primary) artist and title before its art is considered.
+      if (expectArtist != null || expectTitle != null) {
+        final itemTitle = (item['title'] as String?) ?? '';
+        final credit = _creditNames(item['artist-credit']);
+        if (expectArtist != null && !_looseMatch(credit, expectArtist)) continue;
+        if (expectTitle != null && !_looseMatch(itemTitle, expectTitle)) continue;
+      }
       if (itemsKey == 'recordings') {
         final releases = item['releases'];
         if (releases is! List) continue;
