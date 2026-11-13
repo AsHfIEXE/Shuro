@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import '../app_info.dart';
 import '../models/lyrics.dart';
+import 'image_disk_cache.dart' show rawHttpClient;
 import 'lyrics_disk_cache.dart';
 import 'lyrics_parser.dart';
 
@@ -115,7 +117,10 @@ class LyricsService {
     'Accept': 'application/json',
   };
 
-  static final http.Client _client = http.Client();
+  // Direct dart:io client (bypasses the image-cache wrapper): LRCLIB
+  // serves JSON only, and the wrapped path stalls on some machines
+  // while direct clients work (RPC art fetcher).
+  static final http.Client _client = IOClient(rawHttpClient());
   static DateTime _lastRequestAt = DateTime.fromMillisecondsSinceEpoch(0);
   static DateTime? _blockedUntil;
 

@@ -88,6 +88,25 @@ class ImageDiskCache {
 
 /// Installs the caching client for every `NetworkImage`/HTTP image fetch.
 /// Call once from main() before runApp: `HttpOverrides.global = CachingHttpOverrides();`
+/// A plain dart:io HttpClient that BYPASSES the global image-cache
+/// wrapper (constructed while overrides are briefly null). Lyrics fetch
+/// tiny JSON/TTML that is never cached as artwork, and on some machines the
+/// wrapped path stalls while direct dart:io clients (the RPC art fetcher)
+/// sail through - so the lyrics services use this instead.
+HttpClient rawHttpClient({Duration connectionTimeout = const Duration(seconds: 8)}) {
+  // The factory consults HttpOverrides.global; briefly remove it so this
+  // client is a plain platform client, outside the image-cache wrapper.
+  // (Restoring a fresh wrapper instance: the getter for the previous one was
+  // removed from the SDK, and CachingHttpOverrides is stateless apart from
+  // its statics, so an equivalent instance is a safe restore.)
+  HttpOverrides.global = null;
+  try {
+    return HttpClient()..connectionTimeout = connectionTimeout;
+  } finally {
+    HttpOverrides.global = CachingHttpOverrides();
+  }
+}
+
 class CachingHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {

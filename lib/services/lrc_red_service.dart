@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/io_client.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_info.dart';
 import '../models/lyrics.dart';
+import 'image_disk_cache.dart' show rawHttpClient;
 import 'lyrics_service.dart';
 import 'ttml_parser.dart';
 
@@ -39,7 +41,9 @@ class LrcRedService {
       {'User-Agent': userAgent, 'X-Client-ID': userAgent, 'Accept': 'application/json'};
 
   @visibleForTesting
-  static http.Client client = http.Client();
+  static http.Client client = IOClient(rawHttpClient());
+  // (Still injectable for tests; the default bypasses the image-cache
+  // HTTP wrapper - see rawHttpClient.)
 
   static DateTime _lastRequestAt = DateTime.fromMillisecondsSinceEpoch(0);
   static DateTime? _blockedUntil;
