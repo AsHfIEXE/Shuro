@@ -352,13 +352,7 @@ class _SpokenCover extends StatelessWidget {
       child: Stack(fit: StackFit.expand, children: [
         DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: item.isBook
-                  ? const [kAccentColor, kBrandColor]
-                  : kBrandGradient,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: item.isBook ? kAccentColor : kBrandColor,
           ),
           child: Icon(icon, color: Colors.white70, size: iconSize),
         ),

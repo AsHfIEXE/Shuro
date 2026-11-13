@@ -278,7 +278,7 @@ class _SavedServers extends StatelessWidget {
                         height: 36,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: LinearGradient(colors: kBrandGradient),
+                          color: kBrandColor,
                         ),
                         child: connectingId == server.id
                             ? const Padding(

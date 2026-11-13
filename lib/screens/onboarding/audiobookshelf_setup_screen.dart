@@ -335,11 +335,7 @@ class _BenefitsPanel extends StatelessWidget {
                       height: 36,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(11),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFFF59E0B), Color(0xFFBE123C)],
-                        ),
+                        color: const Color(0xFFF59E0B),
                       ),
                       child: const Icon(Icons.menu_book_rounded,
                           size: 19, color: Colors.white),

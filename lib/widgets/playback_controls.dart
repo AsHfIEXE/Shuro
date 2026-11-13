@@ -353,13 +353,7 @@ class PlaybackControls extends StatelessWidget {
                         blurRadius: 18,
                         offset: const Offset(0, 6)),
                   ]
-                : [
-                    BoxShadow(
-                        color:
-                            accentColor.withValues(alpha: isPlaying ? 0.65 : 0.4),
-                        blurRadius: isPlaying ? 32 : 20,
-                        spreadRadius: 1),
-                  ],
+                : null,
           ),
           child: AnimatedSwitcher(
             // docs/02 motion: play/pause glyph cross-fades in 160 ms.

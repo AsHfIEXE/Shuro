@@ -306,10 +306,7 @@ class _ServerBlockState extends State<_ServerBlock> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: kBrandGradient,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight),
+                        color: kBrandColor,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.dns_rounded,

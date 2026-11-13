@@ -453,11 +453,7 @@ class _LibraryPreview extends StatelessWidget {
                       height: 36,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(11),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [kSecondaryColor, kBrandColor],
-                        ),
+                        color: kBrandColor,
                       ),
                       child: const Icon(Icons.music_note_rounded,
                           size: 19, color: Colors.white),

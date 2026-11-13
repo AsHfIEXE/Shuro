@@ -10,10 +10,7 @@ import '../../theme/app_theme.dart';
 /// home screen feels fresh without the user choosing.
 enum HomeBannerStyle {
   auto('Auto (changes daily)', 'A different banner each day'),
-  classic('Classic discs', 'Violet wash with three gradient discs'),
-  aurora('Aurora', 'Soft drifting colour clouds'),
   vinyl('Vinyl', 'A spinning-record look using the song colours'),
-  sunset('Sunset', 'Warm gradient with a low sun and stripes'),
   equalizer('Equalizer', 'Glowing level bars along the base'),
   cover('Cover art', 'Blurred artwork with a tilted cover'),
   minimal('Minimal', 'Quiet card with a single ring');
@@ -25,7 +22,7 @@ enum HomeBannerStyle {
   /// The concrete look to draw (resolves [auto]).
   HomeBannerStyle resolve([DateTime? now]) {
     if (this != auto) return this;
-    const pool = [aurora, vinyl, sunset, equalizer, cover, classic, minimal];
+    const pool = [vinyl, equalizer, cover, minimal];
     final d = now ?? DateTime.now();
     final dayOfYear = d.difference(DateTime(d.year)).inDays;
     return pool[dayOfYear % pool.length];
@@ -35,7 +32,7 @@ enum HomeBannerStyle {
       HomeBannerStyle.values[(index + 1) % HomeBannerStyle.values.length];
 }
 
-/// Decorative layer for a non-classic banner. Never interactive.
+/// Decorative layer for a banner. Never interactive.
 class HeroBackdrop extends StatelessWidget {
   final HomeBannerStyle style;
   final Song song;
@@ -50,9 +47,7 @@ class HeroBackdrop extends StatelessWidget {
     final b = c.length > 1 ? c.last : kSecondaryColor;
     return IgnorePointer(
       child: switch (style) {
-        HomeBannerStyle.aurora => _aurora(a, b),
         HomeBannerStyle.vinyl => _vinyl(a, b),
-        HomeBannerStyle.sunset => _sunset(),
         HomeBannerStyle.equalizer => _equalizer(a, b),
         HomeBannerStyle.cover => _cover(a, b),
         HomeBannerStyle.minimal => _minimal(),
@@ -60,25 +55,6 @@ class HeroBackdrop extends StatelessWidget {
       },
     );
   }
-
-  Widget _blob(Color color, Alignment at, double radius) => Positioned.fill(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: RadialGradient(
-                center: at,
-                radius: radius,
-                colors: [color, Colors.transparent]),
-          ),
-        ),
-      );
-
-  Widget _aurora(Color a, Color b) => Stack(children: [
-        const Positioned.fill(child: ColoredBox(color: Color(0xFF0E1220))),
-        _blob(kBrandColor.withValues(alpha: 0.55), const Alignment(-0.7, -0.8), 1.0),
-        _blob(kSecondaryColor.withValues(alpha: 0.35), const Alignment(0.2, 1.0), 1.0),
-        _blob(kAccentColor.withValues(alpha: 0.40), const Alignment(1.0, -0.4), 0.9),
-        _blob(a.withValues(alpha: 0.25), const Alignment(0.6, 0.6), 0.7),
-      ]);
 
   Widget _vinyl(Color a, Color b) {
     final size = wide ? 380.0 : 220.0;
@@ -111,45 +87,8 @@ class HeroBackdrop extends StatelessWidget {
     ]);
   }
 
-  Widget _sunset() => Stack(children: [
-        const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF1B0F3D),
-                    Color(0xFF7C3AED),
-                    Color(0xFFEC4899),
-                    Color(0xFFF59E0B)
-                  ],
-                  stops: [0, 0.45, 0.78, 1]),
-            ),
-          ),
-        ),
-        Positioned(
-          right: wide ? 120 : -40,
-          bottom: wide ? -120 : -80,
-          child: Container(
-            width: wide ? 340 : 200,
-            height: wide ? 340 : 200,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFFDE68A), Color(0xFFF97316)]),
-              boxShadow: [BoxShadow(color: Color(0x66F59E0B), blurRadius: 90)],
-            ),
-          ),
-        ),
-        Positioned.fill(child: CustomPaint(painter: _StripePainter())),
-      ]);
-
   Widget _equalizer(Color a, Color b) => Stack(children: [
         const Positioned.fill(child: ColoredBox(color: Color(0xFF0B0F1A))),
-        _blob(kBrandColor.withValues(alpha: 0.30), const Alignment(0.8, 1.0), 1.2),
         Positioned(
           left: wide ? 340 : 0,
           right: 0,
@@ -286,23 +225,6 @@ class _VinylPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_VinylPainter old) => old.a != a || old.b != b;
-}
-
-class _StripePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = Colors.black.withValues(alpha: 0.10);
-    var y = size.height * 0.62;
-    var h = 3.0;
-    while (y < size.height) {
-      canvas.drawRect(Rect.fromLTWH(0, y, size.width, h), p);
-      y += h + 7;
-      h += 1.2;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_StripePainter old) => false;
 }
 
 class _BarsPainter extends CustomPainter {

@@ -275,8 +275,7 @@ class _ServerCard extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: [kSecondaryColor, kBrandColor]),
+                        color: kBrandColor,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(Icons.dns_rounded,

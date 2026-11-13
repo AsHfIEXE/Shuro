@@ -106,7 +106,7 @@ class _ArtworkStyleRow extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: kBrandGradient),
+                color: kBrandColor,
                 borderRadius: style == ArtworkStyle.square
                     ? BorderRadius.zero
                     : style == ArtworkStyle.circle

@@ -2178,7 +2178,6 @@ class DesktopNowPlaying extends StatelessWidget {
 
 
 
-                    boxShadow: [BoxShadow(color: accent.withValues(alpha: isPlaying ? 0.5 : 0.3), blurRadius: 24)],
 
 
 

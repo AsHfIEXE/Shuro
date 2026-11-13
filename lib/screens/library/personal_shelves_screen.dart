@@ -440,7 +440,7 @@ class _ShelfCoverArt extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size * .25),
-          gradient: const LinearGradient(colors: kBrandGradient),
+          color: kBrandColor,
         ),
         child: cover == null
             ? Icon(Icons.auto_awesome_rounded,

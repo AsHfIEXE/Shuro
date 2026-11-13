@@ -297,7 +297,7 @@ class _FavoritesHero extends StatelessWidget {
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [kAccentColor, kBrandColor]),
+                      color: kAccentColor,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 28),

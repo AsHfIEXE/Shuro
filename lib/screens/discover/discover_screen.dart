@@ -410,7 +410,7 @@ class _TonightsFlowCard extends StatelessWidget {
           height: 128,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: kBrandGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+            color: kBrandColor,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(

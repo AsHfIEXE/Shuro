@@ -40,7 +40,7 @@ class SmartPlaylistsScreen extends StatelessWidget {
               leading: Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), gradient: const LinearGradient(colors: kBrandGradient)),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: kBrandColor),
                 child: Icon(preset.icon, color: Colors.white),
               ),
               title: Text(preset.label, style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),

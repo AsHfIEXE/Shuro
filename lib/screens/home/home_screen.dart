@@ -539,33 +539,12 @@ class _ContinueHero extends StatelessWidget {
     required this.onShuffleAll,
   });
 
-  // Board backdrop: violet (#1B0F3D) fading down into the app surface.
-  static final LinearGradient _backdrop = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [kBrandColor.withValues(alpha: 0.35), kSurfaceColor],
-  );
-  // Ambient brand washes behind the discs (pink high-right, cyan low-mid).
-  static final RadialGradient _pinkWash = RadialGradient(
-    center: const Alignment(0.9, -0.15),
-    radius: 1.1,
-    colors: [kPinkLight.withValues(alpha: 0.30), Colors.transparent],
-  );
-  static final RadialGradient _cyanWash = RadialGradient(
-    center: const Alignment(0.45, 0.95),
-    radius: 1.2,
-    colors: [kSecondaryColor.withValues(alpha: 0.22), Colors.transparent],
-  );
-
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 800;
     final titleSize = wide ? 56.0 : 36.0;
-    // The discs shrink on phone-width heroes instead of drowning the copy.
-    final discScale = wide ? 1.0 : 0.5;
     final appearance = context.watch<AppearanceSettings>();
     final banner = appearance.homeBanner.resolve();
-    final classic = banner == HomeBannerStyle.classic;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
@@ -577,76 +556,8 @@ class _ContinueHero extends StatelessWidget {
             alignment: Alignment.centerLeft,
             children: [
               // --- decorative layer -------------------------------------
-              if (!classic)
                 Positioned.fill(
                     child: HeroBackdrop(style: banner, song: song, wide: wide)),
-              if (classic)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Stack(
-                    children: [
-                      // Board backdrop first, washes and discs over it.
-                      Positioned.fill(
-                          child: DecoratedBox(
-                              decoration: BoxDecoration(gradient: _backdrop))),
-                      Positioned.fill(
-                          child: DecoratedBox(
-                              decoration:
-                                  BoxDecoration(gradient: _pinkWash))),
-                      Positioned.fill(
-                          child: DecoratedBox(
-                              decoration:
-                                  BoxDecoration(gradient: _cyanWash))),
-                      // The board's three rotated "albums", done as soft
-                      // gradient discs (palette tokens only).
-                      Positioned(
-                        top: wide ? 72 : -34,
-                        right: wide ? 96 : -52,
-                        child: _HeroDisc(
-                          size: 320 * discScale,
-                          gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [kAccentColor, kBrandColor]),
-                          glow: kAccentColor,
-                        ),
-                      ),
-                      Positioned(
-                        bottom: wide ? 48 : -30,
-                        right: wide ? 320 : -20,
-                        child: Transform.rotate(
-                          angle: -0.09,
-                          child: _HeroDisc(
-                            size: 200 * discScale,
-                            gradient: const LinearGradient(
-                                begin: Alignment.topRight,
-                                end: Alignment.bottomLeft,
-                                colors: [kSecondaryColor, kBrandColor]),
-                            glow: kSecondaryColor,
-                          ),
-                        ),
-                      ),
-                      // Third disc is desktop-only: on a phone it sat under the
-                      // body copy and the buttons.
-                      if (wide)
-                      Positioned(
-                        top: 264,
-                        right: 28,
-                        child: Transform.rotate(
-                          angle: 0.14,
-                          child: _HeroDisc(
-                            size: 110 * discScale,
-                            gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomLeft,
-                                colors: [kSecondaryColor, kBrandColor]),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               // --- content -----------------------------------------------
               Padding(
                 padding: wide
@@ -811,39 +722,6 @@ class _HeroPill extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// A soft decorative disc for the hero backdrop. Gradient + shadows only —
-/// never interactive, never animated.
-class _HeroDisc extends StatelessWidget {
-  final double size;
-  final Gradient gradient;
-
-  /// Optional outer glow in the disc's own tint.
-  final Color? glow;
-
-  const _HeroDisc({required this.size, required this.gradient, this.glow});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: gradient,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 48,
-              offset: const Offset(0, 24)),
-          if (glow != null)
-            BoxShadow(
-                color: glow!.withValues(alpha: 0.30), blurRadius: 90),
-        ],
       ),
     );
   }
