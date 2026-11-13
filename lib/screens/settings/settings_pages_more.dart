@@ -493,7 +493,10 @@ extension _MorePages on _SettingsScreenState {
           _ExtrasScope(
             builder: (context, extras) => _PublicUrlRow(
               value: extras.rpcPublicServerUrl,
-              onCommit: (v) => extras.update(() => extras.rpcPublicServerUrl = v),
+              onCommit: (v) {
+                extras.update(() => extras.rpcPublicServerUrl = v);
+                DiscordRpcService.active?.clearArtCache();
+              },
             ),
           ),
           _ToggleRow(

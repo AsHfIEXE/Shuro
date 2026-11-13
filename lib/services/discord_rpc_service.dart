@@ -132,6 +132,14 @@ class DiscordRpcService {
   /// shuro_logo key). Absent = not resolved yet.
   final Map<String, String?> _artCache = <String, String?>{};
 
+  /// Drops every cached artwork decision so the next presence re-resolves
+  /// - called when the public server URL setting changes, so songs that
+  /// were already resolved (or definitively missed) get another chance
+  /// against the new source.
+  void clearArtCache() {
+    _artCache.clear();
+  }
+
   // ---- smart artwork fetcher ----
   // MusicBrainz allows ~1 request per second sustained; burst past that and
   // it answers 503. A skip-heavy session could easily do worse, so every
