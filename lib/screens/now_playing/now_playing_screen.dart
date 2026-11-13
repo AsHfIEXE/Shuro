@@ -53,17 +53,17 @@ const double kNowPlayingWideBreakpoint = 1024;
 const double _kPhoneBodyChrome = 300;
 
 
-/// "09. Now Playing" â€” artwork, metadata, a drag-to-seek progress ring,
+/// "09. Now Playing" — artwork, metadata, a drag-to-seek progress ring,
 /// transport controls, and quick access to Queue / Lyrics / Audio info.
 ///
 /// It follows [PlayerController.currentSong] for its entire life; the song it is
 /// opened with is only the starting point (see the class doc's history in the
-/// analyzer notes â€” the old version kept the constructor's song and described
+/// analyzer notes — the old version kept the constructor's song and described
 /// the wrong track).
 ///
 /// **Dimension-proof by construction.** Two things used to make this screen
 /// fragile: the ring was sized from width alone (`width * 0.79`, clamped to
-/// 220â€“320), and the layout was a rigid `Column` of fixed-height blocks with
+/// 220–320), and the layout was a rigid `Column` of fixed-height blocks with
 /// `Spacer`s. On a 1920Ã—1080 window that combination asked for more height than
 /// the viewport had and Flutter drew "BOTTOM OVERFLOWED BY 33 PIXELS" over the
 /// transport controls. Now:
@@ -74,7 +74,7 @@ const double _kPhoneBodyChrome = 300;
 ///    `spaceBetween` instead of `Spacer`s so a scrolling column stays valid;
 ///  * wide windows get a real two-pane layout rather than a stretched phone one.
 class NowPlayingScreen extends StatelessWidget {
-  /// Only the starting point â€” see the class doc.
+  /// Only the starting point — see the class doc.
   final Song? initialSong;
 
   const NowPlayingScreen({super.key, this.initialSong});
@@ -89,7 +89,7 @@ class NowPlayingScreen extends StatelessWidget {
     if (song == null || (current == null && player.everHadSong)) {
       // Never played anything: the placeholder track renders for the first
       // frames. Queue emptied while open: the mini player hides itself, so
-      // a ghost track here would disagree with it (audit finding F5-1) â€”
+      // a ghost track here would disagree with it (audit finding F5-1) —
       // show the empty state instead.
       return Scaffold(
         backgroundColor: kSurfaceColor,
@@ -106,7 +106,7 @@ class NowPlayingScreen extends StatelessWidget {
     }
 
     final isCurrent = current?.id == song.id;
-    // Live only when the engine has audio for THIS song loaded â€” during the
+    // Live only when the engine has audio for THIS song loaded — during the
     // load window the engine still reports the outgoing track's position and
     // duration, which must not render under the new title (audit finding
     // F6-1, the "progress ring jumping on track change" symptom).
@@ -126,7 +126,7 @@ class NowPlayingScreen extends StatelessWidget {
         cacheKey: song.id,
         builder: (context, colors) {
           final accent = colors.last;
-          // Plain arrow keys nudge the position Â±5 s (docs/02 interaction
+          // Plain arrow keys nudge the position ±5 s (docs/02 interaction
           // table). Space and L are the shell's global bindings and are
           // deliberately NOT re-wired here. The Focus node gives the route a
           // primary focus so the bindings work without a prior tap.
@@ -160,7 +160,7 @@ class NowPlayingScreen extends StatelessWidget {
                   child: IgnorePointer(child: _MeshBlobs()),
                 ),
                 // The right pane's darkening lives HERE, full-screen, so it is
-                // vertically uniform across the whole viewport â€” painting it
+                // vertically uniform across the whole viewport — painting it
                 // inside the pane started abruptly at the header's bottom edge
                 // and drew a hard horizontal seam (reported on Android + web).
                 Positioned.fill(
@@ -185,7 +185,7 @@ class NowPlayingScreen extends StatelessWidget {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       // Two-pane on tablets/desktop (>=1024) AND on landscape
-                      // phones (wider than tall, >=600 wide) â€” a phone rotated
+                      // phones (wider than tall, >=600 wide) — a phone rotated
                       // sideways used to get the portrait stack, which cramped
                       // into its scroll fallback with a 160 px ring; the split
                       // layout is the correct landscape composition at any size.
@@ -1318,7 +1318,7 @@ class _RoundCollapseButton extends StatelessWidget {
   }
 }
 
-/// "1:26 Â· -2:44" (docs/02): elapsed, then NEGATIVE remaining, 13 px with
+/// "1:26 · -2:44" (docs/02): elapsed, then NEGATIVE remaining, 13 px with
 /// tabular figures so the digits don't jitter as the position ticks. The
 /// optional [format] keeps the compact landscape cluster's existing call.
 class _TimesRow extends StatelessWidget {
@@ -1345,7 +1345,7 @@ class _TimesRow extends StatelessWidget {
       children: [
         Text(fmt(position), style: style),
         const SizedBox(width: 8),
-        Text('Â·',
+        Text('·',
             style: style.copyWith(
                 color: kMuted3, fontFeatures: const [])),
         const SizedBox(width: 8),
@@ -1357,7 +1357,7 @@ class _TimesRow extends StatelessWidget {
 
 /// The thin progress line under the landscape artwork (the reference layout),
 /// with the elapsed/total times split to its edges. The ring around the
-/// artwork remains the primary progress display â€” this is its large-screen
+/// artwork remains the primary progress display — this is its large-screen
 /// companion, not a replacement.
 // Superseded by the ring/seek layout; removal is tracked separately.
 // ignore: unused_element
@@ -1497,8 +1497,8 @@ class _PageTabs extends StatelessWidget {
 }
 
 /// The quality chip label from the audio-info data source (docs/02):
-/// "FLAC Â· 24-bit / 96 kHz Â· Lossless" for a tagged lossless file,
-/// "MP3 Â· 320 kbps" for a lossy one. Null = hide the chip (the server
+/// "FLAC · 24-bit / 96 kHz · Lossless" for a tagged lossless file,
+/// "MP3 · 320 kbps" for a lossy one. Null = hide the chip (the server
 /// reported nothing technical about the file) - never a guess.
 String? qualityChipLabel(Song song) {
   final info = song.audioInfo;
@@ -1515,11 +1515,11 @@ String? qualityChipLabel(Song song) {
     parts.add('Lossless');
   }
   if (parts.isEmpty) return null;
-  return parts.join(' Â· ');
+  return parts.join(' · ');
 }
 
 /// Board playbar chip: just the format ("FLAC", "MP3"); the full
-/// "format Â· depth/rate Â· Lossless" string stays in [qualityChipLabel]
+/// "format · depth/rate · Lossless" string stays in [qualityChipLabel]
 /// and the signal-path popover. Null = hide, same honesty rule.
 String? qualityChipShortLabel(Song song) {
   final info = song.audioInfo;
@@ -1527,7 +1527,7 @@ String? qualityChipShortLabel(Song song) {
   return info.format!.toUpperCase();
 }
 
-/// Title + "Artist Â· Album Â· Year" + quality chip (docs/02 metadata block):
+/// Title + "Artist · Album · Year" + quality chip (docs/02 metadata block):
 /// the artist is #F9A8D4 (kPinkPale) w600, the album/year muted. The whole
 /// block swaps as one animated unit when the track changes.
 class _MetaBlock extends StatelessWidget {
@@ -1551,7 +1551,7 @@ class _MetaBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final album = appState.albumById(song.albumId);
     final albumTitle = album?.title;
-    // Year 0 is the model's "unknown" - omit it rather than show "Â· 0".
+    // Year 0 is the model's "unknown" - omit it rather than show "· 0".
     final year = (album?.year ?? 0) > 0 ? album!.year.toString() : null;
     final quality = qualityChipLabel(song);
     return AnimatedSwitcher(
@@ -1602,8 +1602,8 @@ class _MetaBlock extends StatelessWidget {
                       color: kPinkPale, fontWeight: FontWeight.w600),
                 ),
                 if (albumTitle != null && albumTitle.trim().isNotEmpty)
-                  TextSpan(text: ' Â· $albumTitle'),
-                if (year != null) TextSpan(text: ' Â· $year'),
+                  TextSpan(text: ' · $albumTitle'),
+                if (year != null) TextSpan(text: ' · $year'),
               ],
             ),
             textAlign: TextAlign.center,
@@ -1676,7 +1676,7 @@ class _LyricsBar extends StatelessWidget {
 /// armed with the time it will pause.
 Future<void> showSleepTimerSheet(
     BuildContext context, PlayerController player) async {
-  // The fade preference persists (the timer itself never does â€” spec rule).
+  // The fade preference persists (the timer itself never does — spec rule).
   final prefs = await SharedPreferences.getInstance();
   var fade = prefs.getBool('shuro_sleep_fade') ?? true;
 
@@ -1746,7 +1746,7 @@ Future<void> showSleepTimerSheet(
                 ),
               ListTile(
                 leading: const Icon(Icons.schedule_rounded, color: kBrandColor),
-                title: Text('Custom timeâ€¦',
+                title: Text('Custom time…',
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: Colors.white, fontSize: 13.5)),
                 subtitle: Text('Pause at a specific clock time',
@@ -1766,7 +1766,7 @@ Future<void> showSleepTimerSheet(
                   // A clock time, not a duration: 12:17 AM means "at 12:17",
                   // and if that moment has already passed today it means
                   // tomorrow. (The old code read the picked hour/minute as
-                  // h*60+m minutes â€” picking 12:17 scheduled +17 minutes,
+                  // h*60+m minutes — picking 12:17 scheduled +17 minutes,
                   // which is exactly why a 12:17 setting fired at 12:33.)
                   var target = DateTime(
                       now.year, now.month, now.day, picked.hour, picked.minute);
@@ -1846,7 +1846,7 @@ Future<void> showSleepTimerSheet(
 /// Volume control, available in every mode (the slider used to exist only
 /// inline in the landscape column, so portrait and web users had NO volume
 /// control at all). System media volume when the platform allows it; a real
-/// player-volume fallback otherwise â€” never a fake.
+/// player-volume fallback otherwise — never a fake.
 Future<void> showVolumeSheet(BuildContext context, PlayerController player) {
   return showModalBottomSheet<void>(
     context: context,
@@ -2013,7 +2013,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: kBrandColor)),
                 const SizedBox(width: 12),
-                Text('Reading system volumeâ€¦',
+                Text('Reading system volume…',
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: kMutedTextColor, fontSize: 12.5)),
               ],
@@ -2021,7 +2021,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
           )
         else ...[
           // The smart control: a pill track that breathes taller while you
-          // drag, a white translucent fill, NO thumb â€” the fill edge IS the
+          // drag, a white translucent fill, NO thumb — the fill edge IS the
           // handle. A floating percentage bubble rides the edge and fades
           // away on release. Accent stays reserved for the seek bar.
           LayoutBuilder(
@@ -2139,8 +2139,8 @@ class _VolumeSheetState extends State<_VolumeSheet> {
             _useSystem
                 ? 'System media volume'
                 : (kIsWeb
-                    ? 'Player volume â€” in a browser the tab/speaker volume is the system control'
-                    : 'Shuro volume â€” does not change other applications'),
+                    ? 'Player volume — in a browser the tab/speaker volume is the system control'
+                    : 'Shuro volume — does not change other applications'),
             style: GoogleFonts.getFont(currentFontFamily,
                 color: kMutedTextColor, fontSize: 11.5),
           ),
@@ -2166,7 +2166,7 @@ class _VolumeSheetState extends State<_VolumeSheet> {
   }
 }
 
-/// Small icon button with a tactile scale-down on press â€” used by the
+/// Small icon button with a tactile scale-down on press — used by the
 /// volume sheet's mute control.
 class _VolumeIconButton extends StatefulWidget {
   final IconData icon;
@@ -2269,7 +2269,7 @@ class _NpvActionRow extends StatelessWidget {
           _CircleAction(
             icon: Icons.bedtime_rounded,
             tooltip: sleepArmed
-                ? 'Sleep timer running Â· ${formatSleepCountdown(player.sleepUntil!.difference(DateTime.now()))}'
+                ? 'Sleep timer running · ${formatSleepCountdown(player.sleepUntil!.difference(DateTime.now()))}'
                 : 'Sleep timer',
             color: sleepArmed ? kVioletLight : Colors.white70,
             onTap: () => showSleepTimerSheet(context, player),
@@ -2665,7 +2665,7 @@ class _HintLine extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
-        'Drag the ring to seek Â· Space play Â· â† â†’ Â±5 s Â· L lyrics',
+        'Drag the ring to seek · Space play · ← → ±5 s · L lyrics',
         textAlign: TextAlign.center,
         style: GoogleFonts.getFont(currentFontFamily,
             color: Colors.white.withValues(alpha: 0.45), fontSize: 11),

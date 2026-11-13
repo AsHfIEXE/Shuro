@@ -14,7 +14,7 @@ class MultiConnectOutcome {
   /// answered. Empty when none did.
   final MusicLibrarySnapshot merged;
 
-  /// Each online server's raw (unqualified) snapshot â€” the cache writer and
+  /// Each online server's raw (unqualified) snapshot — the cache writer and
   /// the legacy-id migration both need the per-server originals.
   final Map<String, MusicLibrarySnapshot> rawByServer;
 
@@ -49,7 +49,7 @@ class MultiConnectOutcome {
 /// combined library actually work: which server a song streams from, whose
 /// lyrics extension answers, whose HTTP pool gets disposed.
 ///
-/// Failure model: servers connect in PARALLEL and independently â€” one down
+/// Failure model: servers connect in PARALLEL and independently — one down
 /// server never blocks or empties the library from the others ("no conflict"
 /// includes partial availability). The merge itself is [MultiServerLibrary].
 class MultiServerSession {
@@ -129,7 +129,7 @@ class MultiServerSession {
   }
 
   /// Embedded lyrics for [song] from its own server. Null when that server is
-  /// offline or has nothing embedded â€” either way the lyrics UI falls through
+  /// offline or has nothing embedded — either way the lyrics UI falls through
   /// to LRCLIB, exactly as in single-server mode.
   Future<LyricsTrack?> embeddedLyrics(Song song) async {
     final serverId = MultiServerLibrary.serverIdOf(song.id);

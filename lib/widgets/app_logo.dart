@@ -2,7 +2,7 @@
 import '../theme/app_theme.dart';
 import 'page_transitions.dart' show reduceMotionEnabled;
 
-/// Shuro's brand mark: two rounded diagonal bars, offset into an "S" â€”
+/// Shuro's brand mark: two rounded diagonal bars, offset into an "S" —
 /// violet at top, shading to cyan at bottom. Pure vector (CustomPainter),
 /// crisp at any size, no image asset to ship. This is the single source
 /// of truth for the mark; every place it appears (splash, Welcome) uses
@@ -10,7 +10,7 @@ import 'page_transitions.dart' show reduceMotionEnabled;
 ///
 /// [progress] (0..1) plays the entrance from docs/03-splash-brand-motion:
 /// the top pill slides in from the upper-right and the bottom pill from
-/// the lower-left â€” each from Â±0.35 Ã— size away â€” fading in as it settles.
+/// the lower-left — each from ±0.35 × size away — fading in as it settles.
 /// Windows are the spec's seconds on its 1.4 s entrance scale, so
 /// progress 0..1 == 0..1.4 s: top pill 0.00-0.70 s, bottom pill
 /// 0.15-0.85 s, fades complete early (by 0.45 s / 0.60 s). Defaults to 1
@@ -49,17 +49,17 @@ class _AppLogoPainter extends CustomPainter {
 
   _AppLogoPainter({required this.progress, required this.showBackground});
 
-  static const double _rotation = -0.85; // radians, ~-49Â°
+  static const double _rotation = -0.85; // radians, ~-49°
 
   // Entrance windows in progress-space = spec seconds Ã· 1.4 (the spec's
   // entrance scale). Slides run on ShuroMotion.std; each pill's fade
   // completes well before its slide does, so it is seen settling rather
   // than popping in.
-  static const double _topSlideEnd = 0.70 / 1.4; // 0.50 â€” top settles at 0.70 s
-  static const double _topFadeEnd = 0.45 / 1.4; // 0.32 â€” top visible by 0.45 s
+  static const double _topSlideEnd = 0.70 / 1.4; // 0.50 — top settles at 0.70 s
+  static const double _topFadeEnd = 0.45 / 1.4; // 0.32 — top visible by 0.45 s
   static const double _bottomStart = 0.15 / 1.4; // bottom held off until 0.15 s
-  static const double _bottomSlideEnd = 0.85 / 1.4; // 0.61 â€” bottom settles at 0.85 s
-  static const double _bottomFadeEnd = 0.60 / 1.4; // 0.43 â€” bottom visible by 0.60 s
+  static const double _bottomSlideEnd = 0.85 / 1.4; // 0.61 — bottom settles at 0.85 s
+  static const double _bottomFadeEnd = 0.60 / 1.4; // 0.43 — bottom visible by 0.60 s
 
   /// Slide-in distance as a fraction of size: the top pill drops in from
   /// the upper-right, the bottom pill rises in from the lower-left.
@@ -122,7 +122,7 @@ class _AppLogoPainter extends CustomPainter {
     canvas.save();
     // The slide offset is applied *before* the mark's rotation, so it reads
     // in screen space (from the upper-right / lower-left) rather than along
-    // the bars' own axis. No clip anywhere â€” callers must leave the mark's
+    // the bars' own axis. No clip anywhere — callers must leave the mark's
     // container unclipped (see splash_screen.dart) or this offset gets cut.
     canvas.translate(slideOffset.dx * (1 - slideT), slideOffset.dy * (1 - slideT));
     canvas.translate(size.width / 2, size.height / 2);
