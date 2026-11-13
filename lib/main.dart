@@ -62,6 +62,22 @@ Future<void> main() async {
   // throwing stub — skip all of it there (Chrome testing path).
   if (!kIsWeb) {
     HttpOverrides.global = CachingHttpOverrides();
+    // The owner's network has a flaky system resolver: the FIRST lookup of a
+    // host can stall ~20 s (then the OS caches it and everything is fast) -
+    // which is exactly "first lyrics lookup dies, the retry is instant".
+    // Warm the public hosts in the background while the splash shows.
+    unawaited(() async {
+      for (final host in [
+        'lrclib.net',
+        'lrc.red',
+        'musicbrainz.org',
+        'coverartarchive.org',
+      ]) {
+        unawaited(InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 25))
+            .then((_) {}, onError: (_) {}));
+      }
+    }());
 
     // DNS health check BEFORE any request goes out: decides whether the DoH
     // fallback connector engages this session. On a healthy device resolver it

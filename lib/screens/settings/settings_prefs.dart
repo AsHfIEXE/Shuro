@@ -108,6 +108,11 @@ class SettingsExtras extends ChangeNotifier {
   /// Check the file's own (embedded / server) lyrics before lrc.red and LRCLIB.
   bool lyricsPreferEmbedded = false;
 
+  /// Public base URL of the user's server (e.g. https://music.example.com)
+  /// used to serve Discord artwork when the LAN address is unreachable
+  /// from Discord's clients. Empty = MusicBrainz/Cover Art Archive only.
+  String rpcPublicServerUrl = '';
+
   bool closeToTray = true;
   bool startMinimized = false;
 
@@ -185,6 +190,8 @@ class SettingsExtras extends ChangeNotifier {
       lyricsUseEmbedded = map['lyricsUseEmbedded'] as bool? ?? lyricsUseEmbedded;
       lyricsPreferEmbedded =
           map['lyricsPreferEmbedded'] as bool? ?? lyricsPreferEmbedded;
+      rpcPublicServerUrl =
+          (map['rpcPublicServerUrl'] as String? ?? '').trim();
       closeToTray = map['closeToTray'] as bool? ?? closeToTray;
       startMinimized = map['startMinimized'] as bool? ?? startMinimized;
       notifyListeners();
@@ -233,6 +240,7 @@ class SettingsExtras extends ChangeNotifier {
           'lyricsUseLrclib': lyricsUseLrclib,
           'lyricsUseEmbedded': lyricsUseEmbedded,
           'lyricsPreferEmbedded': lyricsPreferEmbedded,
+          'rpcPublicServerUrl': rpcPublicServerUrl,
           'closeToTray': closeToTray,
           'startMinimized': startMinimized,
         }),

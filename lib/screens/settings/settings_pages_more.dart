@@ -486,6 +486,16 @@ extension _MorePages on _SettingsScreenState {
                   'Showing what you play on Discord is a Windows and Linux feature.',
               value: 'Desktop only',
             ),
+          // Discord fetches artwork from a PUBLIC url - a LAN server address
+          // is unreachable from Discord's clients. Users who expose their
+          // server publicly can enter that base url here and their own
+          // artwork is used before any online database.
+          _ExtrasScope(
+            builder: (context, extras) => _PublicUrlRow(
+              value: extras.rpcPublicServerUrl,
+              onCommit: (v) => extras.update(() => extras.rpcPublicServerUrl = v),
+            ),
+          ),
           _ToggleRow(
             label: 'Private listening',
             value: appState.privateListening,
@@ -632,5 +642,63 @@ extension _MorePages on _SettingsScreenState {
         ],
       ),
     ];
+  }
+}
+
+/// Text row for the optional public server URL used by Discord artwork.
+class _PublicUrlRow extends StatefulWidget {
+  final String value;
+  final ValueChanged<String> onCommit;
+
+  const _PublicUrlRow({required this.value, required this.onCommit});
+
+  @override
+  State<_PublicUrlRow> createState() => _PublicUrlRowState();
+}
+
+class _PublicUrlRowState extends State<_PublicUrlRow> {
+  late final TextEditingController _controller = TextEditingController(text: widget.value);
+  late final FocusNode _focus = FocusNode()..addListener(_onFocus);
+
+  void _onFocus() {
+    if (!_focus.hasFocus) widget.onCommit(_controller.text.trim());
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Public server URL',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _controller,
+            focusNode: _focus,
+            style: GoogleFonts.getFont(currentFontFamily, color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'https://music.example.com',
+              isDense: true,
+            ),
+            onSubmitted: (v) => widget.onCommit(v.trim()),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Optional. Discord fetches album art from a public address; enter your server\'s public URL to use your own covers. Leave empty to use online databases.',
+            style: GoogleFonts.getFont(currentFontFamily, color: kStatusText, fontSize: 12),
+          ),
+        ],
+      ),
+    );
   }
 }

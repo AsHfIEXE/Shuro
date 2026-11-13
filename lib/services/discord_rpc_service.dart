@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'app_persistence.dart';
 import '../models/song.dart';
 import '../playback/event_log.dart';
+import '../screens/settings/settings_prefs.dart';
 import '../state/player_controller.dart';
 
 /// Desktop Discord Rich Presence for Shuro.
@@ -492,6 +493,27 @@ class DiscordRpcService {
     client.userAgent = _userAgent;
     client.connectionTimeout = const Duration(seconds: 5);
     try {
+      // The user's own public server first: their covers, their choice
+      // (Discord cannot reach a LAN address). Verified with a HEAD before
+      // use; any failure falls through to MusicBrainz and finally the
+      // shuro_logo asset.
+      final publicBase = SettingsExtras.instance.rpcPublicServerUrl;
+      if (publicBase.isNotEmpty && !song.id.startsWith('local_')) {
+        final base = Uri.tryParse(publicBase);
+        if (base != null && base.hasScheme && base.host.isNotEmpty) {
+          final art = base.replace(
+            path: (base.path.endsWith('/') ? base.path : '${base.path}/') + 'rest/getCoverArt',
+            queryParameters: {'id': 'so-${song.id}', 'v': '1.16.1', 'c': 'Shuro', 'f': 'json'},
+          );
+          try {
+            final check = await (await client
+                    .headUrl(art))
+                .close()
+                .timeout(const Duration(seconds: 5));
+            if (check.statusCode >= 200 && check.statusCode < 400) return art.toString();
+          } catch (_) {}
+        }
+      }
       final artistQ = _q(_primaryArtist(song.artist));
       final recordingIds = await _searchReleaseGroups(
         client,
