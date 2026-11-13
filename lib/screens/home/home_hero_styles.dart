@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../models/album.dart';
 import '../../models/song.dart';
 import '../../theme/app_theme.dart';
 
@@ -10,6 +12,8 @@ import '../../theme/app_theme.dart';
 /// home screen feels fresh without the user choosing.
 enum HomeBannerStyle {
   auto('Auto (changes daily)', 'A different banner each day'),
+  spotlight('Album spotlight', 'Your albums, one at a time, with the cover up front'),
+  wall('Album wall', 'A tilted wall of your real album covers that keeps changing'),
   vinyl('Vinyl', 'A spinning-record look using the song colours'),
   equalizer('Equalizer', 'Glowing level bars along the base'),
   cover('Cover art', 'Blurred artwork with a tilted cover'),
@@ -22,7 +26,7 @@ enum HomeBannerStyle {
   /// The concrete look to draw (resolves [auto]).
   HomeBannerStyle resolve([DateTime? now]) {
     if (this != auto) return this;
-    const pool = [vinyl, equalizer, cover, minimal];
+    const pool = [spotlight, wall, cover, vinyl, equalizer, minimal];
     final d = now ?? DateTime.now();
     final dayOfYear = d.difference(DateTime(d.year)).inDays;
     return pool[dayOfYear % pool.length];
@@ -37,17 +41,35 @@ class HeroBackdrop extends StatelessWidget {
   final HomeBannerStyle style;
   final Song song;
   final bool wide;
+
+  /// Real albums from the library (recently played first). The album styles
+  /// cycle through these; other styles ignore them.
+  final List<Album> albums;
+  final void Function(Album album)? onOpenAlbum;
   const HeroBackdrop(
-      {super.key, required this.style, required this.song, required this.wide});
+      {super.key,
+      required this.style,
+      required this.song,
+      required this.wide,
+      this.albums = const [],
+      this.onOpenAlbum});
 
   @override
   Widget build(BuildContext context) {
     final c = song.gradientColors;
     final a = c.isNotEmpty ? c.first : kBrandColor;
     final b = c.length > 1 ? c.last : kSecondaryColor;
+    if (style == HomeBannerStyle.spotlight && albums.isNotEmpty) {
+      return _AlbumSpotlight(
+          albums: albums, wide: wide, onOpenAlbum: onOpenAlbum);
+    }
+    if (style == HomeBannerStyle.wall && albums.length >= 4) {
+      return IgnorePointer(child: _AlbumWall(albums: albums, wide: wide));
+    }
     return IgnorePointer(
       child: switch (style) {
         HomeBannerStyle.vinyl => _vinyl(a, b),
+        HomeBannerStyle.spotlight || HomeBannerStyle.wall => _cover(a, b),
         HomeBannerStyle.equalizer => _equalizer(a, b),
         HomeBannerStyle.cover => _cover(a, b),
         HomeBannerStyle.minimal => _minimal(),
@@ -256,4 +278,240 @@ class _BarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BarsPainter old) => false;
+}
+
+bool _reduceMotion(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context);
+
+Widget _albumArt(Album album, {double? radius, BoxFit fit = BoxFit.cover}) {
+  final art = album.artwork;
+  final c = album.gradientColors;
+  return DecoratedBox(
+    key: ValueKey(album.id),
+    decoration: BoxDecoration(
+      borderRadius: radius == null ? null : BorderRadius.circular(radius),
+      gradient: art == null
+          ? LinearGradient(colors: c.length > 1 ? c : [kBrandColor, kSecondaryColor])
+          : null,
+      image: art == null ? null : DecorationImage(image: art, fit: fit),
+    ),
+    child: const SizedBox.expand(),
+  );
+}
+
+/// One real album at a time: blurred cover as the backdrop, the cover itself
+/// up front with its title, swapping every few seconds. Tap opens the album.
+class _AlbumSpotlight extends StatefulWidget {
+  final List<Album> albums;
+  final bool wide;
+  final void Function(Album album)? onOpenAlbum;
+  const _AlbumSpotlight(
+      {required this.albums, required this.wide, this.onOpenAlbum});
+
+  @override
+  State<_AlbumSpotlight> createState() => _AlbumSpotlightState();
+}
+
+class _AlbumSpotlightState extends State<_AlbumSpotlight> {
+  int _i = 0;
+  Timer? _timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _timer?.cancel();
+    if (!_reduceMotion(context) && widget.albums.length > 1) {
+      _timer = Timer.periodic(const Duration(seconds: 8), (_) {
+        if (mounted) setState(() => _i = (_i + 1) % widget.albums.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final album = widget.albums[_i % widget.albums.length];
+    final size = widget.wide ? 260.0 : 130.0;
+    return Stack(children: [
+      Positioned.fill(
+        child: IgnorePointer(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 420),
+            child: SizedBox.expand(
+              key: ValueKey('bg-${album.id}'),
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                child: _albumArt(album),
+              ),
+            ),
+          ),
+        ),
+      ),
+      Positioned.fill(
+          child: IgnorePointer(
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.58)))),
+      Positioned(
+        right: widget.wide ? 70 : 16,
+        top: widget.wide ? 0 : 16,
+        bottom: widget.wide ? 0 : null,
+        child: Align(
+          alignment: widget.wide ? Alignment.centerRight : Alignment.topRight,
+          child: GestureDetector(
+            onTap: widget.onOpenAlbum == null
+                ? null
+                : () => widget.onOpenAlbum!(album),
+            child: MouseRegion(
+              cursor: widget.onOpenAlbum == null
+                  ? MouseCursor.defer
+                  : SystemMouseCursors.click,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: const [
+                        BoxShadow(
+                            color: Color(0x99000000),
+                            blurRadius: 40,
+                            offset: Offset(0, 20))
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 420),
+                        child: _albumArt(album),
+                      ),
+                    ),
+                  ),
+                  if (widget.wide) ...[
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: size),
+                      child: Text(
+                        '${album.title} · ${album.artist}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// A tilted wall of real album covers; one tile at a time swaps to another
+/// album, so the banner keeps changing without a big motion.
+class _AlbumWall extends StatefulWidget {
+  final List<Album> albums;
+  final bool wide;
+  const _AlbumWall({required this.albums, required this.wide});
+
+  @override
+  State<_AlbumWall> createState() => _AlbumWallState();
+}
+
+class _AlbumWallState extends State<_AlbumWall> {
+  static const int _cols = 4, _rows = 3;
+  late final List<int> _slot =
+      List.generate(_cols * _rows, (i) => i % widget.albums.length);
+  int _next = 0;
+  int _cursor = _cols * _rows;
+  Timer? _timer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _timer?.cancel();
+    if (!_reduceMotion(context) && widget.albums.length > _cols * _rows ~/ 2) {
+      _timer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
+        if (!mounted) return;
+        setState(() {
+          _slot[_next] = _cursor % widget.albums.length;
+          _cursor++;
+          _next = (_next + 5) % (_cols * _rows);
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = widget.wide ? 132.0 : 78.0;
+    const gap = 12.0;
+    final w = _cols * tile + (_cols - 1) * gap;
+    final h = _rows * tile + (_rows - 1) * gap;
+    return Stack(children: [
+      const Positioned.fill(child: ColoredBox(color: Color(0xFF0B0F14))),
+      Positioned(
+        right: widget.wide ? -20 : -40,
+        top: widget.wide ? 20 : -10,
+        child: Transform.rotate(
+          angle: -0.14,
+          child: SizedBox(
+            width: w,
+            height: h,
+            child: Stack(children: [
+              for (var i = 0; i < _cols * _rows; i++)
+                Positioned(
+                  left: (i % _cols) * (tile + gap),
+                  top: (i ~/ _cols) * (tile + gap),
+                  width: tile,
+                  height: tile,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 420),
+                      child: _albumArt(widget.albums[_slot[i]]),
+                    ),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ),
+      // Scrim so the copy on the left stays readable over the covers.
+      Positioned.fill(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                const Color(0xFF0B0F14),
+                const Color(0xFF0B0F14).withValues(alpha: 0.82),
+                Colors.transparent
+              ],
+              stops: [0.0, widget.wide ? 0.42 : 0.55, 1.0],
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
 }

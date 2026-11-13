@@ -196,6 +196,18 @@ class HomeScreen extends StatelessWidget {
     // and the greeting header above stands alone.
     final heroQueue = appState.recentlyPlayedSongs();
     final heroSong = heroQueue.isNotEmpty ? heroQueue.first : null;
+    // Banner albums: what you played lately, then newly added, real covers
+    // first (an album without artwork still shows its colour gradient).
+    final heroAlbums = <Album>[];
+    {
+      final seen = <String>{};
+      for (final a in [...recentAlbums, ...appState.recentlyAddedAlbums()]) {
+        if (seen.add(a.id)) heroAlbums.add(a);
+      }
+      heroAlbums.sort((x, y) =>
+          (y.artwork != null ? 1 : 0).compareTo(x.artwork != null ? 1 : 0));
+      if (heroAlbums.length > 16) heroAlbums.removeRange(16, heroAlbums.length);
+    }
     final heroIsCurrent =
         heroSong != null && player.currentSong?.id == heroSong.id;
     final heroPausedAt = (heroIsCurrent &&
@@ -370,6 +382,7 @@ class HomeScreen extends StatelessWidget {
                             builder: (greeting) => _ContinueHero(
                               greeting: greeting,
                               song: heroSong,
+                              albums: heroAlbums,
                               subtitle: heroSubtitle!,
                               onResume: () =>
                                   _resumePlayback(player, heroSong, heroQueue),
@@ -531,7 +544,11 @@ class _ContinueHero extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onShuffleAll;
 
+  /// Real albums the banner looks cycle through.
+  final List<Album> albums;
+
   const _ContinueHero({
+    this.albums = const [],
     required this.greeting,
     required this.song,
     required this.subtitle,
@@ -557,7 +574,13 @@ class _ContinueHero extends StatelessWidget {
             children: [
               // --- decorative layer -------------------------------------
                 Positioned.fill(
-                    child: HeroBackdrop(style: banner, song: song, wide: wide)),
+                    child: HeroBackdrop(
+                        style: banner,
+                        song: song,
+                        wide: wide,
+                        albums: albums,
+                        onOpenAlbum: (album) => Navigator.of(context).push(
+                            drillDownRoute(AlbumDetailScreen(album: album))))),
               // --- content -----------------------------------------------
               Padding(
                 padding: wide
