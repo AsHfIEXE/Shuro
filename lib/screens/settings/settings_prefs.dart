@@ -98,6 +98,16 @@ class SettingsExtras extends ChangeNotifier {
   int absSkipForwardSeconds = 30;
 
   // --- Desktop -------------------------------------------------------------
+  // --- Lyrics sources ------------------------------------------------------
+  // Your own edits and imported .lrc files always win; these control the
+  // automatic sources behind them.
+  bool lyricsUseLrcRed = true;
+  bool lyricsUseLrclib = true;
+  bool lyricsUseEmbedded = true;
+
+  /// Check the file's own (embedded / server) lyrics before lrc.red and LRCLIB.
+  bool lyricsPreferEmbedded = false;
+
   bool closeToTray = true;
   bool startMinimized = false;
 
@@ -170,6 +180,11 @@ class SettingsExtras extends ChangeNotifier {
       absSkipBackSeconds = map['absSkipBackSeconds'] as int? ?? absSkipBackSeconds;
       absSkipForwardSeconds =
           map['absSkipForwardSeconds'] as int? ?? absSkipForwardSeconds;
+      lyricsUseLrcRed = map['lyricsUseLrcRed'] as bool? ?? lyricsUseLrcRed;
+      lyricsUseLrclib = map['lyricsUseLrclib'] as bool? ?? lyricsUseLrclib;
+      lyricsUseEmbedded = map['lyricsUseEmbedded'] as bool? ?? lyricsUseEmbedded;
+      lyricsPreferEmbedded =
+          map['lyricsPreferEmbedded'] as bool? ?? lyricsPreferEmbedded;
       closeToTray = map['closeToTray'] as bool? ?? closeToTray;
       startMinimized = map['startMinimized'] as bool? ?? startMinimized;
       notifyListeners();
@@ -214,6 +229,10 @@ class SettingsExtras extends ChangeNotifier {
           'absSpeed': absSpeed,
           'absSkipBackSeconds': absSkipBackSeconds,
           'absSkipForwardSeconds': absSkipForwardSeconds,
+          'lyricsUseLrcRed': lyricsUseLrcRed,
+          'lyricsUseLrclib': lyricsUseLrclib,
+          'lyricsUseEmbedded': lyricsUseEmbedded,
+          'lyricsPreferEmbedded': lyricsPreferEmbedded,
           'closeToTray': closeToTray,
           'startMinimized': startMinimized,
         }),

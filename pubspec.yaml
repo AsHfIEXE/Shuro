@@ -25,6 +25,8 @@ dependencies:
   http: ^1.2.2
   # TTML (lrc.red word/syllable lyrics) parsing: services/ttml_parser.dart.
   xml: ^7.0.1
+  # Opens the lrc.red credit link (their terms require a visible link back).
+  url_launcher: ^6.3.1
   crypto: ^3.0.6
   # (Local-file tag reading is a small pure-Dart ID3/Vorbis parser in
   # services/local_tag_enrichment.dart — audiotags was evaluated and rejected:

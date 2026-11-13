@@ -707,6 +707,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       BackgroundStyle.animatedBlur => 'Animated blur',
                       BackgroundStyle.animatedGradient => 'Animated gradient',
                       BackgroundStyle.staticArtwork => 'Static artwork colours',
+                      BackgroundStyle.flowingArtwork => 'Flowing artwork',
                     },
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: Colors.white,
@@ -721,6 +722,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'The cover\'s colours, slowly drifting — alive without any image processing',
                       BackgroundStyle.staticArtwork =>
                         'A still gradient from the cover\'s own colours — cheapest to render',
+                      BackgroundStyle.flowingArtwork =>
+                        'Big blurred copies of the cover drifting at different speeds',
                     },
                     style: GoogleFonts.getFont(currentFontFamily,
                         color: kMutedTextColor, fontSize: 12),

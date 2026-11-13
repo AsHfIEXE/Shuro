@@ -28,6 +28,8 @@ void main() {
     final item = {'isrc': 'XX1', 'title': 'T', 'artist': 'A', 'duration': 200.5};
     expect(LrcRedService.parseSearch([item]).single.duration, const Duration(milliseconds: 200500));
     expect(LrcRedService.parseSearch({'results': [item]}), hasLength(1));
+    // The documented shape.
+    expect(LrcRedService.parseSearch({'hits': [item], 'next': 'p24'}), hasLength(1));
     expect(LrcRedService.parseSearch(null), isEmpty);
   });
 }

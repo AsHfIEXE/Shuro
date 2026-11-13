@@ -31,6 +31,7 @@ import '../../widgets/click_region.dart';
 import '../../widgets/desktop_context_menu.dart';
 import '../../widgets/state_views.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Opens the lyrics view for whatever is playing. [song] is only the starting
 /// point: the screen follows [PlayerController.currentSong] from then on, so
@@ -251,7 +252,13 @@ class _LyricsScreenState extends State<LyricsScreen> {
   }
 
   void _startLoad(Song song) {
-    final future = _load(song);
+    // Progressive: lyrics show as soon as ANY source answers (e.g. LRCLIB's
+    // line-synced text) and upgrade in place if lrc.red's word timing lands
+    // a moment later.
+    final future = _load(song, onProgress: (view) {
+      if (!mounted || _song?.id != song.id) return;
+      setState(() => _loadedView = view);
+    });
     _future = future;
     future.then((view) {
       if (!mounted || _song?.id != song.id) return;
@@ -280,17 +287,17 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// the same path: their tags (filled by the local tag enrichment) are real
   /// metadata, so a tagged import gets LRCLIB too, and an untagged one simply
   /// ends at the not-found state.
-  Future<_LyricsView> _load(Song song) {
+  Future<_LyricsView> _load(Song song, {void Function(_LyricsView)? onProgress}) {
     // Never let the skeleton spin forever: a stalled server call or storage
     // read turns into the "couldn't reach" state with a Retry button.
-    return _loadInner(song).timeout(
+    return _loadInner(song, onProgress: onProgress).timeout(
       const Duration(seconds: 25),
       onTimeout: () => _LyricsView.miss(LyricsFailureKind.network,
           detail: 'The lyrics lookup timed out. Try again.'),
     );
   }
 
-  Future<_LyricsView> _loadInner(Song song) async {
+  Future<_LyricsView> _loadInner(Song song, {void Function(_LyricsView)? onProgress}) async {
     // A saved on-device edit always wins (roadmap #21): the user chose these
     // words, so neither the server's tags nor LRCLIB may override them.
     try {
@@ -315,6 +322,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
       artist: song.artist,
       album: album,
       duration: song.duration,
+      onUpdate: onProgress == null
+          ? null
+          : (r) {
+              if (r.isFound) onProgress(_LyricsView.found(r.track!));
+            },
       embedded: () => EmbeddedLyricsCache.fetch(
               song.id, () => _appState.fetchEmbeddedLyrics(song))
           .timeout(const Duration(seconds: 8), onTimeout: () => null),
@@ -1699,10 +1711,19 @@ class _AttributionFooter extends StatelessWidget {
           ClickRegion(
             onTap: link == null
                 ? null
-                : () {
-                    Clipboard.setData(ClipboardData(text: link));
-                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                        SnackBar(content: Text('Copied $link')));
+                : () async {
+                    // lrc.red's terms: credit AND link back wherever its data
+                    // is shown. Open the track page; copy it if that fails.
+                    var opened = false;
+                    try {
+                      opened = await launchUrl(Uri.parse(link),
+                          mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                    if (!opened && context.mounted) {
+                      Clipboard.setData(ClipboardData(text: link));
+                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                          SnackBar(content: Text('Copied $link')));
+                    }
                   },
             child: Text(
               parts.join(' · '),

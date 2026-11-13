@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
 import '../app_info.dart';
 import '../models/lyrics.dart';
+import 'lyrics_disk_cache.dart';
 import 'lyrics_parser.dart';
 
 /// Why a lyrics lookup produced nothing. Kept distinct — instead of one
@@ -92,15 +94,13 @@ class LyricsService {
   static const String _baseUrl = 'https://lrclib.net/api';
   static const Duration _timeout = Duration(seconds: 10);
 
-  /// Minimum spacing between outbound requests. LRCLIB asks clients to leave
-  /// 200–500 ms between calls.
-  static const Duration _minSpacing = Duration(milliseconds: 300);
+  /// Minimum spacing between outbound requests.
+  // LRCLIB asks for sequential requests 200-500 ms apart.
+  static const Duration _minSpacing = Duration(milliseconds: 250);
 
-  /// A client identifier. LRCLIB's docs ask for the application name plus a
-  /// version **and** a homepage/project link or an email address; Shuro ships
-  /// without a public project URL, so this identifies the app and its version
-  /// and is the single place to add a link or contact once one exists.
-  static final String clientIdentifier = 'Shuro/$kAppVersion (self-hosted Navidrome client)';
+  /// A client identifier.
+  // Documented format: name, version and a link or email.
+  static final String clientIdentifier = 'Shuro v$kAppVersion (https://github.com/ashfiexe/Shuro)';
 
   static final Map<String, String> _headers = {
     'User-Agent': clientIdentifier,
@@ -108,6 +108,7 @@ class LyricsService {
     // client is identifiable even behind a proxy that rewrites User-Agent.
     'Lrclib-Client': clientIdentifier,
     'X-User-Agent': clientIdentifier,
+    'Lrclib-App-Id': 'Shuro',
     'Accept': 'application/json',
   };
 
@@ -171,20 +172,46 @@ class LyricsService {
     }
 
     try {
-      final exact = await _requestGet(title: title, artist: artist, album: album, duration: duration);
-      if (exact != null) {
-        final delta = _durationOf(exact) != null ? (_durationOf(exact)! - duration).abs() : null;
-        return _fromRecord(exact, duration: duration, matchDelta: delta);
+      // 0. Something this device already fetched: no network at all.
+      final diskKey = _cacheKey(title: title, artist: artist, album: album, duration: duration);
+      final onDisk = await LyricsDiskCache.read(diskKey);
+      if (onDisk != null) {
+        final d = _durationOf(onDisk);
+        final hit = _fromRecord(onDisk, duration: duration, matchDelta: d == null ? null : (d - duration).abs());
+        if (hit.isFound) return hit;
       }
 
-      final candidates = await _requestSearch(title: title, artist: artist);
-      if (candidates.isEmpty) return const LyricsLookupResult.miss(LyricsFailureKind.notFound);
+      LyricsLookupResult fromExact(Map<String, dynamic> record) {
+        final d = _durationOf(record);
+        final r = _fromRecord(record, duration: duration, matchDelta: d == null ? null : (d - duration).abs());
+        if (r.isFound) unawaited(LyricsDiskCache.write(diskKey, record));
+        return r;
+      }
 
-      final best = pickBestCandidate(candidates, title: title, artist: artist, album: album, duration: duration);
+      // 1. /api/get: LRCLIB's own best match for the exact signature (title +
+      //    artist + album + length within +-2 s). A 400 (e.g. an unknown
+      //    length) is not an answer - fall through to search.
+      Map<String, dynamic>? exact;
+      try {
+        exact = await _requestGet(title: title, artist: artist, album: album, duration: duration);
+      } on _LyricsException catch (e) {
+        if (e.kind != LyricsFailureKind.rejected) rethrow;
+      }
+      if (exact != null) return fromExact(exact);
+
+      // 2. /api/search: fuzzy candidates, ranked locally by title/artist/length.
+      var candidates = await _requestSearch(title: title, artist: artist);
+      // Structured search found nothing: one free-text retry (q matches any
+      // field), still ranked and length-checked locally.
+      if (candidates.isEmpty) candidates = await _requestSearch(title: title, artist: artist, freeText: true);
+      final best = candidates.isEmpty
+          ? null
+          : pickBestCandidate(candidates, title: title, artist: artist, album: album, duration: duration);
       if (best == null) return const LyricsLookupResult.miss(LyricsFailureKind.notFound);
 
       final result = _fromRecord(best.record, duration: duration, matchDelta: best.delta);
       if (!result.isFound) return result;
+      unawaited(LyricsDiskCache.write(diskKey, best.record));
       if (!best.timingsTrustworthy && result.track!.type != LyricsSyncType.static_) {
         // Defensive: timings from a recording of a different length must never
         // drive the highlight. trackFromRecord already downgrades these, so
@@ -254,10 +281,12 @@ class LyricsService {
       'track_name': title,
       'artist_name': artist,
       if (album != null && album.trim().isNotEmpty) 'album_name': album.trim(),
-      'duration': '${duration.inSeconds}',
+      // Documented range is 1-3600 s; anything else is a 400, so an unknown
+      // length is simply left out.
+      if (duration.inSeconds >= 1 && duration.inSeconds <= 3600) 'duration': '${duration.inSeconds}',
     };
     final uri = Uri.parse('$_baseUrl/get').replace(queryParameters: params);
-    final decoded = await _getJson(uri);
+    final decoded = await _getJson(uri, timeout: const Duration(seconds: 8));
     if (decoded == null) return null;
     if (decoded is! Map<String, dynamic>) {
       throw const _LyricsException(LyricsFailureKind.rejected, 'LRCLIB returned an unexpected record shape.');
@@ -265,9 +294,11 @@ class LyricsService {
     return decoded;
   }
 
-  static Future<List<Map<String, dynamic>>> _requestSearch({required String title, required String artist}) async {
-    final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: {'track_name': title, 'artist_name': artist});
-    final decoded = await _getJson(uri);
+  static Future<List<Map<String, dynamic>>> _requestSearch(
+      {required String title, required String artist, bool freeText = false}) async {
+    final uri = Uri.parse('$_baseUrl/search').replace(
+        queryParameters: freeText ? {'q': '$title $artist'} : {'track_name': title, 'artist_name': artist});
+    final decoded = await _getJson(uri, timeout: const Duration(seconds: 6));
     if (decoded == null) return const [];
     if (decoded is! List) {
       throw const _LyricsException(LyricsFailureKind.rejected, 'LRCLIB returned an unexpected search shape.');
@@ -278,12 +309,12 @@ class LyricsService {
   /// One GET with the whole transport policy applied: spacing, timeouts,
   /// classification of status codes, and a content-type check before decoding.
   /// Returns null only for "matched nothing" (HTTP 404).
-  static Future<dynamic> _getJson(Uri uri) async {
+  static Future<dynamic> _getJson(Uri uri, {Duration? timeout}) async {
     await _throttle();
 
     final http.Response response;
     try {
-      response = await _client.get(uri, headers: _headers).timeout(_timeout);
+      response = await _client.get(uri, headers: _headers).timeout(timeout ?? _timeout);
     } on TimeoutException {
       throw const _LyricsException(LyricsFailureKind.network, 'LRCLIB took too long to answer.');
     } catch (_) {
@@ -293,7 +324,10 @@ class LyricsService {
     final status = response.statusCode;
     if (status == 404) return null;
     if (status == 429 || status == 503) {
-      final seconds = int.tryParse(response.headers['retry-after'] ?? '') ?? (status == 503 ? 1 : 60);
+      final base = int.tryParse(response.headers['retry-after'] ?? '') ?? (status == 503 ? 1 : 60);
+      // Documented: honour Retry-After and add up to ~30 % random jitter so
+      // throttled clients don't retry in a synchronized wave.
+      final seconds = base + (base * 0.3 * math.Random().nextDouble()).ceil();
       throw _LyricsException(
         LyricsFailureKind.rateLimited,
         status == 429
@@ -329,9 +363,15 @@ class LyricsService {
   /// Keeps outbound requests sequential with a small gap between them, as
   /// LRCLIB's docs ask clients to do.
   static Future<void> _throttle() async {
-    final wait = _lastRequestAt.add(_minSpacing).difference(DateTime.now());
+    // Reserves the next request slot up front so concurrent callers (the
+    // screen and the prefetcher) queue one behind another, [_minSpacing]
+    // apart, instead of both reading the same timestamp and firing together.
+    final now = DateTime.now();
+    final slot = _lastRequestAt.add(_minSpacing);
+    final at = slot.isAfter(now) ? slot : now;
+    _lastRequestAt = at;
+    final wait = at.difference(now);
     if (wait > Duration.zero) await Future<void>.delayed(wait);
-    _lastRequestAt = DateTime.now();
   }
 
   static Duration? _durationOf(Map<String, dynamic> record) {

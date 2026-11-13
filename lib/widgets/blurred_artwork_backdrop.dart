@@ -71,6 +71,11 @@ class BlurredArtworkBackdrop extends StatelessWidget {
     }
 
     final animated = appearance.backgroundStyle == BackgroundStyle.animatedGradient;
+    // The lyrics screen uses the flowing look by default (when the user is on
+    // the standard animated blur); Now Playing keeps its breathing plate
+    // unless Flowing artwork is chosen in Settings.
+    final flowing = appearance.backgroundStyle == BackgroundStyle.flowingArtwork ||
+        (style == BlurBackdropStyle.lyrics && appearance.backgroundStyle == BackgroundStyle.animatedBlur);
 
     return Stack(
       fit: StackFit.expand,
@@ -96,11 +101,12 @@ class BlurredArtworkBackdrop extends StatelessWidget {
             style: style,
             blurScale: appearance.backdropBlurScale,
             motion: appearance.backdropMotion,
+            flowing: flowing,
           ),
         ),
         ),
         _ColourWash(palette: palette, style: style),
-        _Scrim(style: style),
+        _Scrim(style: style, flowing: flowing),
       ],
     );
   }
@@ -159,8 +165,13 @@ class _MeshBackdropLayer extends StatefulWidget {
   final double blurScale;
   final BackdropMotion motion;
 
+  /// Flowing-artwork look: rotating blurred copies of the cover (see
+  /// [_FlowingArtworkPainter]) instead of the single breathing plate.
+  final bool flowing;
+
   const _MeshBackdropLayer({
     super.key,
+    this.flowing = false,
     required this.artwork,
     required this.palette,
     required this.style,
@@ -205,7 +216,8 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
   void didUpdateWidget(covariant _MeshBackdropLayer old) {
     super.didUpdateWidget(old);
     if (old.artwork != widget.artwork) _resolveArtwork();
-    if (old.motion != widget.motion) _applyMotion();
+    if (old.motion != widget.motion || old.flowing != widget.flowing) _applyMotion();
+    if (old.flowing != widget.flowing) _resolveArtwork();
     if (old.blurScale != widget.blurScale) _resolveArtwork(); // re-blur at the new strength
   }
   @override
@@ -217,6 +229,24 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
   }
 
   void _applyMotion() {
+    if (widget.flowing) {
+      // Flowing artwork turns slowly: whole rotations per loop (the painter
+      // uses integer speed multiples), so the loop wrap is invisible.
+      switch (widget.motion) {
+        case BackdropMotion.still:
+          _clock.stop();
+        case BackdropMotion.subtle:
+          _clock.duration = const Duration(seconds: 140);
+          if (!_clock.isAnimating) _clock.repeat();
+        case BackdropMotion.normal:
+          _clock.duration = const Duration(seconds: 80);
+          if (!_clock.isAnimating) _clock.repeat();
+        case BackdropMotion.lively:
+          _clock.duration = const Duration(seconds: 44);
+          if (!_clock.isAnimating) _clock.repeat();
+      }
+      return;
+    }
     // Durations are the master loop; nodes orbit at 1/2/3× within it. The
     // loop is seamless now (integer multiples), so the wrap point is
     // invisible and the length only sets the drift speed.
@@ -303,7 +333,9 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
       srcRect = Rect.fromLTWH(0, (source.height - cropH) / 2, source.width.toDouble(), cropH);
     }
 
-    final baseSigma = widget.style == BlurBackdropStyle.lyrics ? 40.0 : 22.0;
+    // Flowing artwork keeps the colours recognisable while they rotate, so it
+    // blurs less than the lyrics plate (the 1.5-2x upscale softens it further).
+    final baseSigma = widget.flowing ? 26.0 : (widget.style == BlurBackdropStyle.lyrics ? 40.0 : 22.0);
     final sigma = (baseSigma * widget.blurScale).clamp(4.0, 80.0);
 
     final recorder = ui.PictureRecorder();
@@ -340,7 +372,8 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
       BackdropMotion.lively => 0.085,
       _ => 0.065,
     };
-    final showPlate = widget.style == BlurBackdropStyle.nowPlaying && _blurredImage != null;
+    final showPlate = !widget.flowing && widget.style == BlurBackdropStyle.nowPlaying && _blurredImage != null;
+    final showFlow = widget.flowing && _blurredImage != null;
 
     return AnimatedBuilder(
       animation: _clock,
@@ -358,6 +391,10 @@ class _MeshBackdropLayerState extends State<_MeshBackdropLayer> with SingleTicke
             CustomPaint(
               painter: _MeshGradientPainter(palette: widget.palette, phase: phase),
             ),
+            if (showFlow)
+              CustomPaint(
+                painter: _FlowingArtworkPainter(image: _blurredImage!, phase: phase),
+              ),
             if (showPlate)
               Transform.scale(
                 // Breathing a *drawn texture* is the cheap part. The edge
@@ -425,6 +462,73 @@ class _MeshGradientPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MeshGradientPainter old) => old.phase != phase || old.palette != palette;
+}
+
+/// Spicy-style flowing backdrop: three oversized copies of the blurred cover
+/// rotating at different speeds and directions, drifting on small orbits, with
+/// boosted saturation. Only texture blits - the blur is baked once per track.
+///
+/// Speeds are INTEGER multiples of the loop phase (1, -1, 2) so the loop wrap
+/// never jumps. Each copy is at least 2.2x the longest screen side so its
+/// rotating corners always cover the viewport.
+class _FlowingArtworkPainter extends CustomPainter {
+  final ui.Image image;
+  final double phase;
+
+  _FlowingArtworkPainter({required this.image, required this.phase});
+
+  // Saturation x1.45 (standard luminance-preserving matrix).
+  static final ColorFilter _saturate = ColorFilter.matrix(_satMatrix(1.45));
+
+  static List<double> _satMatrix(double s) {
+    const r = 0.2126, g = 0.7152, b = 0.0722;
+    final inv = 1 - s;
+    return <double>[
+      r * inv + s, g * inv, b * inv, 0, 0,
+      r * inv, g * inv + s, b * inv, 0, 0,
+      r * inv, g * inv, b * inv + s, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final side = size.longestSide * 2.2;
+    final src = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+
+    // (speed multiple, scale, orbit x, orbit y, alpha, blend)
+    const layers = <(int, double, double, double, double, BlendMode)>[
+      (1, 1.00, 0.10, 0.06, 1.00, BlendMode.srcOver),
+      (-1, 0.82, -0.14, 0.10, 0.70, BlendMode.srcOver),
+      (2, 0.68, 0.08, -0.12, 0.45, BlendMode.screen),
+    ];
+    for (var i = 0; i < layers.length; i++) {
+      final (speed, scale, ox, oy, alpha, blend) = layers[i];
+      final pulse = 1 + 0.035 * math.sin(phase * (i + 1));
+      canvas.save();
+      canvas.translate(
+        center.dx + size.width * ox * math.cos(phase + i * 2.1),
+        center.dy + size.height * oy * math.sin(phase + i * 2.1),
+      );
+      canvas.rotate(phase * speed + i * 1.9);
+      final s = side * scale * pulse;
+      canvas.drawImageRect(
+        image,
+        src,
+        Rect.fromCenter(center: Offset.zero, width: s, height: s),
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = blend
+          ..colorFilter = _saturate
+          ..color = Colors.white.withValues(alpha: alpha),
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FlowingArtworkPainter old) => old.phase != phase || old.image != image;
 }
 
 /// Draws the cached pre-blurred artwork tile, cover-fitted. A plain texture
@@ -499,7 +603,11 @@ class _ColourWash extends StatelessWidget {
 class _Scrim extends StatelessWidget {
   final BlurBackdropStyle style;
 
-  const _Scrim({required this.style});
+  /// Flowing artwork is brighter and busier than the other backdrops, so it
+  /// gets an even dark veil on top to keep lyric text comfortably readable.
+  final bool flowing;
+
+  const _Scrim({required this.style, this.flowing = false});
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +616,7 @@ class _Scrim extends StatelessWidget {
     return IgnorePointer(
       child: DecoratedBox(
         decoration: BoxDecoration(
+          color: flowing ? Colors.black.withValues(alpha: isLyrics ? 0.34 : 0.22) : null,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,

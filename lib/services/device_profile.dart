@@ -57,7 +57,7 @@ class ProfilePreset {
   /// The "What this changes" list — each line is a real, wired effect.
   List<String> get changes => [
         'Page transitions: ${reduceMotion ? 'simple fade' : 'full animation'}',
-        'Backdrop: ${backgroundStyle == BackgroundStyle.animatedBlur ? 'animated blurred artwork' : backgroundStyle == BackgroundStyle.animatedGradient ? 'drifting gradient' : 'static artwork'}',
+        'Backdrop: ${backgroundStyle == BackgroundStyle.animatedBlur ? 'animated blurred artwork' : backgroundStyle == BackgroundStyle.animatedGradient ? 'drifting gradient' : backgroundStyle == BackgroundStyle.flowingArtwork ? 'flowing artwork' : 'static artwork'}',
         'Backdrop motion: ${backdropMotion.name}',
         'Backdrop blur: ${backdropBlurScale <= 0.01 ? 'off' : '${(backdropBlurScale * 100).round()}%'}',
         'Image cache: ${(imageCacheBytes / (1024 * 1024)).round()} MB',

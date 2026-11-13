@@ -24,14 +24,19 @@ class LrcRedService {
   LrcRedService._();
 
   static const String _base = 'https://lrc.red';
-  static const Duration _timeout = Duration(seconds: 10);
-  static const Duration _minSpacing = Duration(milliseconds: 300);
+  // Short budgets: lrc.red must never hold up lyrics that LRCLIB already has
+  // (the resolver also runs both at once), so a slow answer is a miss.
+  static const Duration _searchTimeout = Duration(seconds: 4);
+  static const Duration _fileTimeout = Duration(seconds: 5);
+  static const Duration _minSpacing = Duration(milliseconds: 200);
 
   static String get userAgent =>
       'Shuro/$kAppVersion (https://github.com/ashfiexe/Shuro; contact: salahin0ashfi@gmail.com)';
 
+  // X-Client-ID carries the same identity for clients that can't set a
+  // User-Agent (lrc.red accepts either).
   static Map<String, String> get _headers =>
-      {'User-Agent': userAgent, 'Accept': 'application/json'};
+      {'User-Agent': userAgent, 'X-Client-ID': userAgent, 'Accept': 'application/json'};
 
   @visibleForTesting
   static http.Client client = http.Client();
@@ -100,7 +105,10 @@ class LrcRedService {
     }
 
     try {
-      final found = await _search('$title $artist');
+      var found = await _search('$title $artist');
+      // Nothing at all for the combined query: one retry on the title alone
+      // (the matcher still insists on the right artist and length).
+      if (found.isEmpty) found = await _search(title);
       final ranked = <LrcRedCandidate>[
         for (final c in found)
           if (LrcRedMatcher.accept(c, title: title, artist: artist, album: album, duration: duration)) c,
@@ -110,9 +118,20 @@ class LrcRedService {
 
       LyricsTrack? fallbackLine;
       // Only the few best candidates are fetched; each is a real request.
-      for (final c in ranked.take(3)) {
+      for (final c in ranked.take(2)) {
         final cached = _byIsrc[c.isrc];
-        final track = cached ?? await _fetchTrack(c, duration);
+        LyricsTrack? track = cached;
+        if (track == null) {
+          try {
+            track = await _fetchTrack(c, duration);
+          } on _RateLimited {
+            rethrow;
+          } on TimeoutException {
+            continue;
+          } catch (_) {
+            continue; // one candidate's file missing must not end the lookup
+          }
+        }
         if (track == null) continue;
         if (cached == null) _remember(c.isrc, track);
         if (track.hasRealWordSync) {
@@ -143,7 +162,7 @@ class LrcRedService {
 
   static Future<List<LrcRedCandidate>> _search(String q) async {
     final uri = Uri.parse('$_base/search.json').replace(queryParameters: {'q': q});
-    final decoded = await _getJson(uri);
+    final decoded = await _getJson(uri, _searchTimeout);
     return parseSearch(decoded);
   }
 
@@ -155,7 +174,9 @@ class LrcRedService {
     if (decoded is List) {
       items = decoded;
     } else if (decoded is Map) {
-      for (final key in const ['results', 'tracks', 'items', 'data']) {
+      // Documented shape: {"hits": [...], "next": "p24"}. The others are
+      // tolerated in case it ever changes.
+      for (final key in const ['hits', 'results', 'tracks', 'items', 'data']) {
         final v = decoded[key];
         if (v is List) {
           items = v;
@@ -173,21 +194,15 @@ class LrcRedService {
   }
 
   static Future<LyricsTrack?> _fetchTrack(LrcRedCandidate c, Duration duration) async {
-    final meta = await _getJson(Uri.parse('$_base/s/${c.isrc}.json'));
-    if (meta is! Map) return null;
-    final files = meta['files'];
-    final ttmlUrl = (files is Map ? files['ttml'] : null) as String? ?? '$_base/s/${c.isrc}.ttml';
-    final body = await _getText(Uri.parse(ttmlUrl));
+    // The TTML URL is derivable from the ISRC, so the separate metadata call
+    // (one more round trip) is skipped: the search hit already carries the
+    // identity fields and the TTML itself is validated by the parser.
+    final body = await _getText(Uri.parse('$_base/s/${c.isrc}.ttml'), _fileTimeout);
     return parseTtml(body, duration: duration, sourceUrl: trackPageUrl(c.isrc))?.withMatch(
-      title: (meta['title'] as String?) ?? c.title,
-      artist: (meta['artist'] as String?) ?? c.artist,
-      duration: c.duration ?? _seconds(meta['duration']),
+      title: c.title,
+      artist: c.artist,
+      duration: c.duration,
     );
-  }
-
-  static Duration? _seconds(dynamic v) {
-    if (v is num) return Duration(milliseconds: (v * 1000).round());
-    return null;
   }
 
   static Future<void> _space() async {
@@ -196,9 +211,9 @@ class LrcRedService {
     _lastRequestAt = DateTime.now();
   }
 
-  static Future<http.Response> _get(Uri uri) async {
+  static Future<http.Response> _get(Uri uri, Duration timeout) async {
     await _space();
-    final response = await client.get(uri, headers: _headers).timeout(_timeout);
+    final response = await client.get(uri, headers: _headers).timeout(timeout);
     if (response.statusCode == 429 || response.statusCode == 503) {
       final secs = int.tryParse(response.headers['retry-after'] ?? '');
       throw _RateLimited(Duration(seconds: (secs ?? 60).clamp(1, 3600)));
@@ -206,15 +221,15 @@ class LrcRedService {
     return response;
   }
 
-  static Future<dynamic> _getJson(Uri uri) async {
-    final r = await _get(uri);
+  static Future<dynamic> _getJson(Uri uri, Duration timeout) async {
+    final r = await _get(uri, timeout);
     if (r.statusCode == 404) return null;
     if (r.statusCode != 200) throw StateError('HTTP ${r.statusCode}');
     return json.decode(utf8.decode(r.bodyBytes));
   }
 
-  static Future<String> _getText(Uri uri) async {
-    final r = await _get(uri);
+  static Future<String> _getText(Uri uri, Duration timeout) async {
+    final r = await _get(uri, timeout);
     if (r.statusCode != 200) throw StateError('HTTP ${r.statusCode}');
     return utf8.decode(r.bodyBytes);
   }
@@ -251,9 +266,9 @@ class LrcRedCandidate {
   const LrcRedCandidate({required this.isrc, required this.title, required this.artist, this.album, this.duration});
 
   static LrcRedCandidate? fromJson(Map<String, dynamic> j) {
-    final isrc = (j['isrc'] ?? j['id'])?.toString().trim() ?? '';
-    final title = (j['title'] ?? j['name'] ?? j['track'])?.toString() ?? '';
-    final artistRaw = j['artist'] ?? j['artists'];
+    final isrc = (j['isrc'] ?? j['ISRC'] ?? j['id'])?.toString().trim() ?? '';
+    final title = (j['title'] ?? j['trackName'] ?? j['track_name'] ?? j['name'] ?? j['track'])?.toString() ?? '';
+    final artistRaw = j['artist'] ?? j['artistName'] ?? j['artist_name'] ?? j['artists'];
     final artist = artistRaw is List ? artistRaw.join(', ') : artistRaw?.toString() ?? '';
     if (isrc.isEmpty || title.isEmpty) return null;
     final d = j['duration'];

@@ -132,7 +132,7 @@ extension LyricsSourceLabel on LyricsSource {
       case LyricsSource.embedded:
         return 'the file\'s own tags';
       case LyricsSource.edited:
-        return 'your edit';
+        return 'your edit or imported file';
       case LyricsSource.none:
         return 'Unavailable';
     }

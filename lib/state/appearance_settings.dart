@@ -18,6 +18,12 @@ enum BackgroundStyle {
   /// over three colours, so it sits between the other two in cost while giving
   /// the screen continuous, gentle life.
   animatedGradient,
+
+  /// Large, heavily blurred copies of the cover that slowly rotate and drift
+  /// at different speeds behind everything, with boosted colour and a dark
+  /// legibility scrim - the "flowing lyrics backdrop" look. Drawn from one
+  /// pre-blurred texture, so per-frame cost is a few image blits.
+  flowingArtwork,
 }
 
 /// How the lyrics screen highlights the line being sung.
@@ -250,5 +256,6 @@ class AppearanceSettings extends ChangeNotifier {
         BackgroundStyle.animatedBlur => 'Animated blur',
         BackgroundStyle.animatedGradient => 'Animated gradient',
         BackgroundStyle.staticArtwork => 'Static artwork colours',
+        BackgroundStyle.flowingArtwork => 'Flowing artwork',
       };
 }
