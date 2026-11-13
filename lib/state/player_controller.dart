@@ -1542,6 +1542,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       PlayerRepeatMode.all => PlayerRepeatMode.one,
       PlayerRepeatMode.one => PlayerRepeatMode.off,
     };
+    PlaybackEventLog.instance.add('cmd.repeat', {'mode': _repeatMode.name});
     notifyListeners();
     unawaited(_syncNativeModes());
   }

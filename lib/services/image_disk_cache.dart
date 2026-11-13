@@ -124,6 +124,10 @@ class CachingHttpClient implements HttpClient {
   final HttpClient inner;
 
   CachingHttpClient({required HttpClient inner}) : inner = inner {
+    // A stalled connect must fail fast, not hang for the OS default
+    // (~21 s): broken IPv6 routes otherwise blow every lyrics lookup
+    // budget while streaming/musicbrainz (explicit timeouts) work.
+    inner.connectionTimeout ??= const Duration(seconds: 8);
     // DoH-resolving connector only when the device resolver is broken (the
     // StreamProxy startup health check decides). On a healthy resolver the
     // default connect path must stay untouched — it owns socket lifecycle
@@ -136,11 +140,26 @@ class CachingHttpClient implements HttpClient {
   @override
   bool autoUncompress = true;
 
-  @override
-  Duration? connectionTimeout;
+  Duration? _connectionTimeout;
+  Duration _idleTimeout = const Duration(seconds: 15);
 
   @override
-  Duration idleTimeout = const Duration(seconds: 15);
+  Duration? get connectionTimeout => _connectionTimeout;
+
+  @override
+  set connectionTimeout(Duration? value) {
+    _connectionTimeout = value;
+    inner.connectionTimeout = value;
+  }
+
+  @override
+  Duration get idleTimeout => _idleTimeout;
+
+  @override
+  set idleTimeout(Duration value) {
+    _idleTimeout = value;
+    inner.idleTimeout = value;
+  }
 
   @override
   int? maxConnectionsPerHost;

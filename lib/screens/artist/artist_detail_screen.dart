@@ -691,10 +691,7 @@ class _AboutCard extends StatelessWidget {
           if (bio != null) ...[
             Text('ABOUT', style: _eyebrow),
             const SizedBox(height: 10),
-            Text(bio!,
-                maxLines: 6,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.getFont(currentFontFamily, color: kNavText, fontSize: 13, height: 1.5)),
+            _ExpandableBio(bio: bio!),
           ],
           if (bio != null && similar.isNotEmpty) const SizedBox(height: 24),
           if (similar.isNotEmpty) ...[
@@ -886,6 +883,50 @@ class _TopSongRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Artist bio that clamps to six lines and offers See more / See less —
+/// long Last.fm biographies used to be silently cut off with no way to read
+/// the rest.
+class _ExpandableBio extends StatefulWidget {
+  final String bio;
+  const _ExpandableBio({required this.bio});
+
+  @override
+  State<_ExpandableBio> createState() => _ExpandableBioState();
+}
+
+class _ExpandableBioState extends State<_ExpandableBio> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // ~6 body lines of text; shorter bios never show the toggle.
+    final clamped = widget.bio.length > 420;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.bio,
+            maxLines: _expanded ? null : 6,
+            overflow:
+                _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            style: GoogleFonts.getFont(currentFontFamily,
+                color: kNavText, fontSize: 13, height: 1.5)),
+        if (clamped)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: ClickRegion(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Text(_expanded ? 'See less' : 'See more',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kBrandColor,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ),
+      ],
     );
   }
 }
