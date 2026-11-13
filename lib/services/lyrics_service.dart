@@ -100,15 +100,18 @@ class LyricsService {
 
   /// A client identifier.
   // Documented format: name, version and a link or email.
-  static final String clientIdentifier = 'Shuro v$kAppVersion (https://github.com/ashfiexe/Shuro)';
+  static final String clientIdentifier =
+      'Shuro v$kAppVersion (https://github.com/ashfiexe/Shuro; contact: salahin0ashfi@gmail.com)';
 
   static final Map<String, String> _headers = {
     'User-Agent': clientIdentifier,
     // LRCLIB's documented alternatives to User-Agent, sent as well so the
     // client is identifiable even behind a proxy that rewrites User-Agent.
+    // NOTE: no Lrclib-App-Id header — LRCLIB answers 401 InvalidAppIdError
+    // for any App-Id that isn't registered with them (verified live), and
+    // User-Agent + these two are fully documented identification on their own.
     'Lrclib-Client': clientIdentifier,
     'X-User-Agent': clientIdentifier,
-    'Lrclib-App-Id': 'Shuro',
     'Accept': 'application/json',
   };
 
