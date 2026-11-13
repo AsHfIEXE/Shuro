@@ -147,7 +147,14 @@ class LyricsService {
     final pending = _inFlight[key];
     if (pending != null) return pending;
 
-    final future = _lookupUncached(title: title, artist: artist, album: album, duration: duration).then((result) {
+    final future = _lookupUncached(title: title, artist: artist, album: album, duration: duration)
+        .timeout(const Duration(seconds: 12), onTimeout: () {
+      // Every internal step has its own timeout, so reaching here means
+      // something wedged before the first request (observed once: a storage
+      // read). Answer honestly instead of hanging the caller's budget.
+      return const LyricsLookupResult.miss(LyricsFailureKind.network,
+          detail: 'The LRCLIB lookup stalled before finishing - nothing was cached from this attempt.');
+    }).then((result) {
       _remember(key, result);
       return result;
     }).whenComplete(() => _inFlight.remove(key));

@@ -122,7 +122,8 @@ class LyricsResolver {
     return _priority(a.track!) > _priority(b.track!);
   }
 
-  static const LyricsLookupResult _timedOut = LyricsLookupResult.miss(LyricsFailureKind.network);
+  static const LyricsLookupResult _timedOut = LyricsLookupResult.miss(LyricsFailureKind.network,
+      detail: 'The source did not answer before its time budget.');
 
   static Future<LyricsLookupResult> _resolve({
     required String title,

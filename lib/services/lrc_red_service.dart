@@ -78,7 +78,11 @@ class LrcRedService {
     final pending = _inFlight[key];
     if (pending != null) return pending;
 
-    final future = _lookupUncached(title: title, artist: artist, album: album, duration: duration).then((r) {
+    final future = _lookupUncached(title: title, artist: artist, album: album, duration: duration)
+        .timeout(const Duration(seconds: 6), onTimeout: () {
+      return const LyricsLookupResult.miss(LyricsFailureKind.network,
+          detail: 'The lrc.red lookup stalled before finishing.');
+    }).then((r) {
       if (!r.isFound && r.failure == LyricsFailureKind.notFound) {
         _negative[key] = DateTime.now().add(_negativeTtl);
       }

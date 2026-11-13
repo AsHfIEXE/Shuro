@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../models/lyrics.dart';
 import '../../models/song.dart';
 import '../../playback/event_log.dart';
+import '../settings/settings_prefs.dart';
 import '../../services/lyrics_service.dart';
 import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
@@ -256,7 +257,14 @@ class _LyricsScreenState extends State<LyricsScreen> {
     // Progressive: lyrics show as soon as ANY source answers (e.g. LRCLIB's
     // line-synced text) and upgrade in place if lrc.red's word timing lands
     // a moment later.
-    PlaybackEventLog.instance.add('lyrics.view', {'stage': 'load', 'song': song.id});
+    final ex = SettingsExtras.instance;
+    PlaybackEventLog.instance.add('lyrics.view', {
+      'stage': 'load',
+      'song': song.id,
+      'red': ex.lyricsUseLrcRed ? 1 : 0,
+      'lib': ex.lyricsUseLrclib ? 1 : 0,
+      'emb': ex.lyricsUseEmbedded ? 1 : 0,
+    });
     final future = _load(song, onProgress: (view) {
       if (!mounted || _song?.id != song.id) return;
       setState(() => _loadedView = view);

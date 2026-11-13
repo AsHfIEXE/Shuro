@@ -27,7 +27,11 @@ class LyricsDiskCache {
   static Timer? _flush;
   static File? _file;
 
-  static Future<Map<String, dynamic>?> _load() => _loading ??= () async {
+  static Future<Map<String, dynamic>?> _load() =>
+      // A storage read that never answers (seen in the wild: a platform
+      // channel wedged at startup) must not stall every lookup behind it.
+      // Three seconds, then the cache is simply off for this session.
+      (_loading ??= () async {
         if (kIsWeb) return null;
         try {
           final dir = await getApplicationSupportDirectory();
@@ -44,7 +48,9 @@ class LyricsDiskCache {
         }
         _entries ??= <String, dynamic>{};
         return _entries;
-      }();
+      }())
+          .timeout(const Duration(seconds: 3),
+              onTimeout: () => _entries ??= <String, dynamic>{});
 
   static Future<Map<String, dynamic>?> read(String key) async {
     final entries = await _load();
