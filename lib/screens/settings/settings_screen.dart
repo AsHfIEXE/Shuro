@@ -1,3 +1,4 @@
+import '../home/home_hero_styles.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -869,6 +870,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     appearance.setBackdropMotion(motion);
                     Navigator.of(sheetContext).pop();
                   },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Home hero look: Auto (daily rotation) or one fixed style.
+  void _pickHomeBanner(BuildContext context, AppearanceSettings appearance) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Home banner',
+                      style: headingFont(
+                          color: kTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+              for (final style in HomeBannerStyle.values)
+                Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    leading: Icon(
+                      appearance.homeBanner == style
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_off_rounded,
+                      color: appearance.homeBanner == style
+                          ? kBrandColor
+                          : kMutedTextColor,
+                    ),
+                    title: Text(style.label,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500)),
+                    subtitle: Text(style.description,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMutedTextColor, fontSize: 12)),
+                    onTap: () {
+                      appearance.setHomeBanner(style);
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
                 ),
               const SizedBox(height: 8),
             ],

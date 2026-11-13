@@ -13,6 +13,8 @@ import '../../models/song.dart';
 import '../../services/shuro_pulse.dart';
 import '../../services/rediscovery.dart';
 import '../../state/app_state.dart';
+import '../../state/appearance_settings.dart';
+import 'home_hero_styles.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/desktop_tokens.dart';
@@ -561,6 +563,9 @@ class _ContinueHero extends StatelessWidget {
     final titleSize = wide ? 56.0 : 36.0;
     // The discs shrink on phone-width heroes instead of drowning the copy.
     final discScale = wide ? 1.0 : 0.5;
+    final appearance = context.watch<AppearanceSettings>();
+    final banner = appearance.homeBanner.resolve();
+    final classic = banner == HomeBannerStyle.classic;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
@@ -572,6 +577,10 @@ class _ContinueHero extends StatelessWidget {
             alignment: Alignment.centerLeft,
             children: [
               // --- decorative layer -------------------------------------
+              if (!classic)
+                Positioned.fill(
+                    child: HeroBackdrop(style: banner, song: song, wide: wide)),
+              if (classic)
               Positioned.fill(
                 child: IgnorePointer(
                   child: Stack(
@@ -702,6 +711,32 @@ class _ContinueHero extends StatelessWidget {
                         ],
                       ),
                     ],
+                  ),
+                ),
+              ),
+              // Tap to try the next banner look (saved in Settings →
+              // Appearance → Home banner).
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Tooltip(
+                  message: 'Change banner style',
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => appearance.setHomeBanner(
+                          (appearance.homeBanner == HomeBannerStyle.auto
+                                  ? banner
+                                  : appearance.homeBanner)
+                              .next),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.palette_outlined,
+                            size: 18, color: Colors.white70),
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -1,3 +1,4 @@
+import '../screens/home/home_hero_styles.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/app_persistence.dart';
@@ -65,6 +66,7 @@ class AppearanceSettings extends ChangeNotifier {
   static const String _kKaraokeSweep = 'appearance_karaoke_sweep_v1';
   static const String _kBlurScale = 'appearance_blur_scale_v1';
   static const String _kMotion = 'appearance_motion_v1';
+  static const String _kHomeBanner = 'appearance_home_banner_v1';
   static const String _kLyricsHighlight = 'appearance_lyrics_highlight_v1';
   static const String _kLyricsFontScale = 'appearance_lyrics_font_scale_v1';
   static const String _kLyricsAlignCenter = 'appearance_lyrics_align_center_v1';
@@ -88,6 +90,9 @@ class AppearanceSettings extends ChangeNotifier {
 
   /// Whether the lyrics screen fills word by word or highlights whole lines.
   LyricsHighlight lyricsHighlight = LyricsHighlight.word;
+
+  /// Home hero look (Auto rotates daily).
+  HomeBannerStyle homeBanner = HomeBannerStyle.auto;
 
   /// Multiplier on the backdrop's blur radius. Default 0.6: sharper artwork
   /// with more visible motion, per the owner's tuning.
@@ -130,6 +135,10 @@ class AppearanceSettings extends ChangeNotifier {
       final motion = persistence.getString(_kMotion);
       if (motion != null) {
         backdropMotion = BackdropMotion.values.firstWhere((m) => m.name == motion, orElse: () => backdropMotion);
+      }
+      final banner = persistence.getString(_kHomeBanner);
+      if (banner != null) {
+        homeBanner = HomeBannerStyle.values.firstWhere((h) => h.name == banner, orElse: () => homeBanner);
       }
       final highlight = persistence.getString(_kLyricsHighlight);
       if (highlight != null) {
@@ -202,6 +211,13 @@ class AppearanceSettings extends ChangeNotifier {
     backdropMotion = value;
     notifyListeners();
     await _persistence?.setString(_kMotion, value.name);
+  }
+
+  Future<void> setHomeBanner(HomeBannerStyle value) async {
+    if (homeBanner == value) return;
+    homeBanner = value;
+    notifyListeners();
+    await _persistence?.setString(_kHomeBanner, value.name);
   }
 
   Future<void> setLyricsHighlight(LyricsHighlight value) async {

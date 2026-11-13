@@ -310,6 +310,12 @@ extension _MorePages on _SettingsScreenState {
           // preference, and line mode is the honest one when only line
           // timings exist.
           _NavRow(
+            icon: Icons.view_carousel_rounded,
+            label: 'Home banner',
+            value: appearance.homeBanner.label,
+            onTap: () => _pickHomeBanner(context, appearance),
+          ),
+          _NavRow(
             icon: Icons.lyrics_rounded,
             label: 'Lyrics highlight',
             value: appearance.lyricsHighlightLabel,
