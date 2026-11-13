@@ -135,7 +135,7 @@ class LrcRedService {
         if (track == null) continue;
         if (cached == null) _remember(c.isrc, track);
         if (track.hasRealWordSync) {
-          return LyricsLookupResult.found(track, detail: 'Matched ${c.title} — ${c.artist} on lrc.red.');
+
         }
         fallbackLine ??= track;
       }

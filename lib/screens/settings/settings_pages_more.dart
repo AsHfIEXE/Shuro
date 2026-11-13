@@ -150,22 +150,49 @@ extension _MorePages on _SettingsScreenState {
         ],
       ),
 
-      _SettingsGroupCard(
-        title: 'SOURCES',
-        rows: const [
-          _NavRow(
-            icon: Icons.swap_vert_rounded,
-            label: 'Source order',
-            description: 'Lyrics sources are tried in a fixed order for now.',
-            value: 'Not available yet',
-          ),
-          _NavRow(
-            icon: Icons.translate_rounded,
-            label: 'Translation',
-            description: 'Translated lyrics are not available yet.',
-            value: 'Not available yet',
-          ),
-        ],
+      // The lyrics sources live here (not under Appearance): this page is
+      // where someone looks when lyrics misbehave. Your own edits and
+      // imported .lrc files always win over every source below.
+      _ExtrasScope(
+        builder: (context, extras) => _SettingsGroupCard(
+          title: 'SOURCES',
+          rows: [
+            _switchRow(
+              label: 'lrc.red',
+              description:
+                  'Word and syllable timing (karaoke). Preferred online source.',
+              value: extras.lyricsUseLrcRed,
+              onChanged: (v) => extras.update(() => extras.lyricsUseLrcRed = v),
+            ),
+            _switchRow(
+              label: 'LRCLIB',
+              description: 'Synced and plain lyrics, including word-timed files.',
+              value: extras.lyricsUseLrclib,
+              onChanged: (v) => extras.update(() => extras.lyricsUseLrclib = v),
+            ),
+            _switchRow(
+              label: 'Embedded lyrics',
+              description: 'Lyrics stored in the file or provided by your server.',
+              value: extras.lyricsUseEmbedded,
+              onChanged: (v) =>
+                  extras.update(() => extras.lyricsUseEmbedded = v),
+            ),
+            _switchRow(
+              label: 'Prefer embedded lyrics',
+              description:
+                  'Check the file\'s own lyrics before lrc.red and LRCLIB.',
+              value: extras.lyricsPreferEmbedded,
+              onChanged: (v) =>
+                  extras.update(() => extras.lyricsPreferEmbedded = v),
+            ),
+            const _NavRow(
+              icon: Icons.translate_rounded,
+              label: 'Translation',
+              description: 'Translated lyrics are not available yet.',
+              value: 'Not available yet',
+            ),
+          ],
+        ),
       ),
     ];
   }
@@ -334,42 +361,6 @@ extension _MorePages on _SettingsScreenState {
               value: appState.reduceAnimations,
               onChanged: appState.updateReduceAnimations),
         ],
-      ),
-
-      _ExtrasScope(
-        builder: (context, extras) => _SettingsGroupCard(
-          title: 'LYRICS SOURCES',
-          rows: [
-            _switchRow(
-              label: 'lrc.red',
-              description:
-                  'Word and syllable timing (karaoke). Checked first among the online sources.',
-              value: extras.lyricsUseLrcRed,
-              onChanged: (v) => extras.update(() => extras.lyricsUseLrcRed = v),
-            ),
-            _switchRow(
-              label: 'LRCLIB',
-              description: 'Synced and plain lyrics, including word-timed files.',
-              value: extras.lyricsUseLrclib,
-              onChanged: (v) => extras.update(() => extras.lyricsUseLrclib = v),
-            ),
-            _switchRow(
-              label: 'Embedded lyrics',
-              description: 'Lyrics stored in the file or provided by your server.',
-              value: extras.lyricsUseEmbedded,
-              onChanged: (v) =>
-                  extras.update(() => extras.lyricsUseEmbedded = v),
-            ),
-            _switchRow(
-              label: 'Prefer embedded lyrics',
-              description:
-                  'Use the file\'s own lyrics before lrc.red and LRCLIB. Your edits and imported .lrc files always come first.',
-              value: extras.lyricsPreferEmbedded,
-              onChanged: (v) =>
-                  extras.update(() => extras.lyricsPreferEmbedded = v),
-            ),
-          ],
-        ),
       ),
 
       _SettingsGroupCard(

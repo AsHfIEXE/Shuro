@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/lyrics.dart';
 import '../../models/song.dart';
+import '../../playback/event_log.dart';
 import '../../services/lyrics_service.dart';
 import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
@@ -255,6 +256,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
     // Progressive: lyrics show as soon as ANY source answers (e.g. LRCLIB's
     // line-synced text) and upgrade in place if lrc.red's word timing lands
     // a moment later.
+    PlaybackEventLog.instance.add('lyrics.view', {'stage': 'load', 'song': song.id});
     final future = _load(song, onProgress: (view) {
       if (!mounted || _song?.id != song.id) return;
       setState(() => _loadedView = view);
@@ -262,8 +264,24 @@ class _LyricsScreenState extends State<LyricsScreen> {
     _future = future;
     future.then((view) {
       if (!mounted || _song?.id != song.id) return;
+      PlaybackEventLog.instance.add('lyrics.view', {
+        'stage': view.hasTrack ? 'shown' : 'miss',
+        'song': song.id,
+        if (view.hasTrack) 'src': view.track!.source.name,
+        if (view.hasTrack) 'type': view.track!.type.name,
+        if (!view.hasTrack) 'why': view.failure?.name,
+      });
       setState(() {
         _loadedView = view;
+      });
+    }).catchError((Object e) {
+      // A lookup must never leave the skeleton spinning forever: any
+      // unexpected error becomes an explained, retryable miss.
+      if (!mounted || _song?.id != song.id) return;
+      PlaybackEventLog.instance.add('lyrics.view', {'stage': 'error', 'song': song.id, 'err': e.runtimeType.toString()});
+      setState(() {
+        _loadedView = _LyricsView.miss(LyricsFailureKind.network,
+            detail: 'The lyrics lookup failed unexpectedly ($e).');
       });
     });
   }
@@ -588,7 +606,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
         return _Message(
           icon: Icons.search_off_rounded,
           message: 'No lyrics for this song',
-          caption: 'Search again, import an .lrc file, or write your own.',
+          caption: detail ?? 'Search again, import an .lrc file, or write your own.',
           onRetry: _retry,
           retryLabel: 'Search again',
           secondaryLabel: 'Add lyrics',

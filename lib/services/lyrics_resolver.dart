@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/lyrics.dart';
+import '../playback/event_log.dart';
 import '../screens/settings/settings_prefs.dart';
 import 'lrc_red_service.dart';
 import 'lyrics_service.dart';
@@ -147,15 +148,44 @@ class LyricsResolver {
       return b;
     }
 
+    /// Short per-source outcome line, e.g. "lrc.red: no match · LRCLIB: no
+    /// record · embedded: none" — nothing sensitive, purely explanatory.
+    String _summary() {
+      final prefsNow = prefs;
+      String part(String name, bool on, LyricsLookupResult? r) {
+        if (!on) return '$name: off';
+        if (r == null) return '$name: no answer';
+        if (r.isFound) return '$name: found';
+        return switch (r.failure) {
+          LyricsFailureKind.notFound => '$name: no match',
+          LyricsFailureKind.instrumental => '$name: instrumental',
+          LyricsFailureKind.rateLimited => '$name: rate-limited',
+          LyricsFailureKind.rejected => '$name: rejected',
+          LyricsFailureKind.network => '$name: unreachable',
+          null => '$name: no answer',
+        };
+      }
+      return [
+        part('lrc.red', prefsNow.lyricsUseLrcRed, redR),
+        part('LRCLIB', prefsNow.lyricsUseLrclib, lrclibR),
+        part('embedded', prefsNow.lyricsUseEmbedded && embedded != null, embR),
+      ].join(' · ');
+    }
+
     LyricsLookupResult bestMiss() {
       final misses = [lrclibR, redR].whereType<LyricsLookupResult>().where((r) => !r.isFound).toList();
       for (final r in misses) {
         if (r.failure == LyricsFailureKind.instrumental) return r;
       }
+      // Show WHY every source missed — this string is what the lyrics screen
+      // prints under "No lyrics for this song".
+      final summary = _summary();
       for (final r in misses) {
-        if (r.failure == LyricsFailureKind.rateLimited || r.failure == LyricsFailureKind.network) return r;
+        if (r.failure == LyricsFailureKind.rateLimited || r.failure == LyricsFailureKind.network) {
+          return LyricsLookupResult.miss(r.failure!, retryAfter: r.retryAfter, detail: summary);
+        }
       }
-      return const LyricsLookupResult.miss(LyricsFailureKind.notFound);
+      return LyricsLookupResult.miss(LyricsFailureKind.notFound, detail: summary);
     }
 
     void settle(LyricsLookupResult r) {
@@ -184,13 +214,28 @@ class LyricsResolver {
     }
 
     void run(Future<LyricsLookupResult> f, Duration budget, void Function(LyricsLookupResult) set,
-        {bool isRed = false}) {
+        {bool isRed = false, String name = 'embedded'}) {
       outstanding++;
       if (isRed) redPending = true;
+      final sw = Stopwatch()..start();
       f.timeout(budget, onTimeout: () => _timedOut).catchError((_) => _timedOut).then((r) {
         set(r);
         outstanding--;
         if (isRed) redPending = false;
+        // Every source outcome lands in the diagnostics ring (Settings →
+        // About → Report a problem), so "no lyrics" is explainable after
+        // the fact instead of a mystery.
+        try {
+          PlaybackEventLog.instance.add('lyrics.src', {
+            'src': name,
+            'ok': r.isFound,
+            if (r.isFound) 'type': r.track!.type.name,
+            if (r.isFound) 'lines': r.track!.lines.length,
+            if (!r.isFound) 'why': r.failure!.name,
+            if (!r.isFound && r.retryAfter != null) 'retryS': r.retryAfter!.inSeconds,
+            if (sw.elapsedMilliseconds >= 0) 'ms': sw.elapsedMilliseconds,
+          });
+        } catch (_) {}
         evaluate();
       });
     }
@@ -218,14 +263,14 @@ class LyricsResolver {
     if (prefs.lyricsUseLrcRed) {
       run(LrcRedService.lookup(title: title, artist: artist, album: album, duration: duration),
           const Duration(seconds: 7), (r) => redR = r,
-          isRed: true);
+          isRed: true, name: 'lrc.red');
     }
     if (prefs.lyricsUseLrclib) {
       run(LyricsService.lookup(title: title, artist: artist, album: album, duration: duration),
-          const Duration(seconds: 14), (r) => lrclibR = r);
+          const Duration(seconds: 14), (r) => lrclibR = r, name: 'lrclib');
     }
     if (useEmbedded && embR == null) {
-      run(embeddedResult(), const Duration(seconds: 8), (r) => embR = r);
+      run(embeddedResult(), const Duration(seconds: 8), (r) => embR = r, name: 'embedded');
     }
 
     if (outstanding == 0) return best() ?? bestMiss();
