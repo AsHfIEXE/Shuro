@@ -550,7 +550,11 @@ class _LyricsScreenState extends State<LyricsScreen> {
             final done = snapshot.connectionState == ConnectionState.done;
             // Until the full lookup settles, show whatever the warm caches
             // already hold (never the previous song's data).
-            final result = done ? snapshot.data : _peek(live);
+            // Progressive updates (first source to answer) land in _loadedView
+            // before the future completes; show them immediately.
+            final result = done
+                ? snapshot.data
+                : (_loadedView ?? _peek(live));
             if (!done && result == null) {
               return const _LoadingSkeleton();
             }

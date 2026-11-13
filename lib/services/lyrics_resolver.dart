@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../models/lyrics.dart';
 import '../playback/event_log.dart';
 import '../screens/settings/settings_prefs.dart';
@@ -221,6 +223,8 @@ class LyricsResolver {
       final sw = Stopwatch()..start();
       f.timeout(budget, onTimeout: () => _timedOut).catchError((_) => _timedOut).then((r) {
         set(r);
+        debugPrint('[lyrics] ${isRed ? 'lrc.red' : 'source'} -> '
+            '${r.isFound ? 'found ${r.track!.type.name}' : 'miss ${r.failure?.name} ${r.detail ?? ''}'}');
         outstanding--;
         if (isRed) redPending = false;
         // Every source outcome lands in the diagnostics ring (Settings →
