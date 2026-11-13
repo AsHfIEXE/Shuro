@@ -434,23 +434,6 @@ class NowPlayingScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
-                      // Below the window caption buttons on desktop.
-                      top: WindowCaptionButtons.supported ? 44 : 8,
-                      right: 10,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          tooltip: 'Open full lyrics',
-                          onPressed: () => openLyricsScreen(context, song),
-                          icon: const Icon(Icons.open_in_full_rounded,
-                              color: Colors.white, size: 18),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1233,30 +1216,36 @@ class _Header extends StatelessWidget {
                     ),
             ),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showOutputChip) ...[
-                                _OutputChip(width: 148, height: 40),
-                const SizedBox(width: 8),
-              ],
-              // (No favourite here: the heart lives in the action row under
-              // the transport - a second one in the header was clutter.)
-              if (sleepActive)
-                Icon(Icons.bedtime_rounded, color: accent, size: 18),
-              // Board: 32 px glass circles (info, more) next to the output pill.
-              if (onAudioInfo != null) ...[
+          Padding(
+            // The window caption buttons own the top-right corner on
+            // desktop; the output chip, info and "..." keep their distance.
+            padding: EdgeInsets.only(
+                right: WindowCaptionButtons.supported ? 152 : 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showOutputChip) ...[
+                  _OutputChip(width: 148, height: 40),
+                  const SizedBox(width: 8),
+                ],
+                // (No favourite here: the heart lives in the action row under
+                // the transport - a second one in the header was clutter.)
+                if (sleepActive)
+                  Icon(Icons.bedtime_rounded, color: accent, size: 18),
+                // Board: 32 px glass circles (info, more) next to the output pill.
+                if (onAudioInfo != null) ...[
+                  _HeaderGlassCircle(
+                      icon: Icons.info_outline_rounded,
+                      tooltip: 'Audio information',
+                      onTap: onAudioInfo),
+                  const SizedBox(width: 8),
+                ],
                 _HeaderGlassCircle(
-                    icon: Icons.info_outline_rounded,
-                    tooltip: 'Audio information',
-                    onTap: onAudioInfo),
-                const SizedBox(width: 8),
+                    icon: Icons.more_horiz_rounded,
+                    tooltip: 'More options',
+                    onTap: onMore),
               ],
-              _HeaderGlassCircle(
-                  icon: Icons.more_horiz_rounded,
-                  tooltip: 'More options',
-                  onTap: onMore),
-            ],
+            ),
           ),
         ],
       ),

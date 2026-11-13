@@ -1,4 +1,6 @@
 ## 2.6.2
+- Now Playing: the header's output-device chip, info and "..." no longer sit under the window caption buttons, and the redundant floating expand button is gone (the pane header already expands; the caption bar owns the corner) - no more "two fullscreen buttons".
+- Lyrics: a cached "no lyrics for this song" expires after 90 s, so a miss from a flaky moment is retried instead of sticking for the session.
 - Tapping a lyric line now seeks the playing track (offset-compensated) instead of reloading the song from zero - this was also the hidden cause of "playback struggles" whenever lyrics were clicked.
 - Queue panel: drag the grip next to any Up Next row to reorder the queue; tap still plays, swipe still removes.
 - Window controls on immersive screens: minimise / maximise / close now show on Now Playing and the full-screen Lyrics (they cover the shell's title bar); the lyrics header keeps clear of them and the pane's expand button moves below.

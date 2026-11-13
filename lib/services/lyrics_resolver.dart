@@ -29,6 +29,11 @@ class LyricsResolver {
   LyricsResolver._();
 
   static final Map<String, LyricsLookupResult> _cache = {};
+  // When each negative (notFound) answer was cached: a "no lyrics
+  // for this song" from a flaky moment deserves a second chance a
+  // minute later instead of sticking for the whole session.
+  static final Map<String, DateTime> _negAt = {};
+  static const Duration _negTtl = Duration(seconds: 90);
   static final Map<String, Future<LyricsLookupResult>> _inFlight = {};
   static final Map<String, List<void Function(LyricsLookupResult)>> _listeners = {};
   static const int _cacheLimit = 80;
@@ -67,7 +72,19 @@ class LyricsResolver {
   }) {
     final key = _key(title, artist, album, duration);
     final cached = _cache[key];
-    if (cached != null) return Future.value(cached);
+    if (cached != null) {
+      final negAt = _negAt[key];
+      final stale = !cached.isFound &&
+          cached.failure == LyricsFailureKind.notFound &&
+          negAt != null &&
+          DateTime.now().difference(negAt) > _negTtl;
+      if (stale) {
+        _cache.remove(key);
+        _negAt.remove(key);
+      } else {
+        return Future.value(cached);
+      }
+    }
     final pending = _inFlight[key];
     if (pending != null) {
       if (onUpdate != null) _listeners[key]?.add(onUpdate);
@@ -93,6 +110,11 @@ class LyricsResolver {
       // must stay retryable.
       if (r.isFound || r.failure == LyricsFailureKind.notFound || r.failure == LyricsFailureKind.instrumental) {
         _cache[key] = r;
+        if (!r.isFound && r.failure == LyricsFailureKind.notFound) {
+          _negAt[key] = DateTime.now();
+        } else {
+          _negAt.remove(key);
+        }
         if (_cache.length > _cacheLimit) _cache.remove(_cache.keys.first);
       }
       return r;
