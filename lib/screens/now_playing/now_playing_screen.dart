@@ -24,6 +24,7 @@ import '../../widgets/add_to_playlist_sheet.dart';
 import '../../widgets/animated_favorite_icon.dart';
 import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
+import '../../widgets/window_caption_buttons.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/smooth_position_builder.dart';
@@ -227,6 +228,14 @@ class NowPlayingScreen extends StatelessWidget {
                     },
                   ),
                 ),
+                // The immersive screens cover the shell's title bar, so the
+                // window controls travel with them (Windows/Linux only).
+                if (WindowCaptionButtons.supported)
+                  const Positioned(
+                    top: 0,
+                    right: 0,
+                    child: WindowCaptionButtons(),
+                  ),
               ],
             ),
           ),
@@ -426,7 +435,8 @@ class NowPlayingScreen extends StatelessWidget {
                       ),
                     ),
                     Positioned(
-                      top: 8,
+                      // Below the window caption buttons on desktop.
+                      top: WindowCaptionButtons.supported ? 44 : 8,
                       right: 10,
                       child: DecoratedBox(
                         decoration: BoxDecoration(

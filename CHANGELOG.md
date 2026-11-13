@@ -1,4 +1,5 @@
 ## 2.6.2
+- Window controls on immersive screens: minimise / maximise / close now show on Now Playing and the full-screen Lyrics (they cover the shell's title bar); the lyrics header keeps clear of them and the pane's expand button moves below.
 - Lyrics diagnostics: every lyrics lookup now records per-source outcomes (lrc.red / LRCLIB / embedded: found, no match, rate-limited, unreachable — with timings) in the diagnostics ring, and "No lyrics for this song" explains exactly which source said what. Report a problem (Settings → About) now includes all of it.
 - Lyrics sources moved to Settings → Lyrics → Sources (they were briefly under Appearance); your edits and imported .lrc files still always win.
 - Lyrics screen can no longer spin forever: an unexpected lookup error becomes an explained, retryable message.

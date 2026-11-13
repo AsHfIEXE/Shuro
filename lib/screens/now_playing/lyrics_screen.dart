@@ -19,6 +19,7 @@ import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
 import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
+import '../../widgets/window_caption_buttons.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/shuro_icons.dart';
@@ -788,12 +789,21 @@ class _LyricsScreenState extends State<LyricsScreen> {
     final content = Column(
       children: [
         if (!widget.embedded)
-          _Header(
-              song: song,
-              accent: accent,
-              wide: wide,
-              onEditLyrics: _openLyricsEditor,
-              onAppearance: () => showLyricsAppearanceSheet(context)),
+          Padding(
+            // The immersive screens cover the shell's title bar; the window
+            // caption buttons sit in the top-right corner, so the header's
+            // own right-side tools keep their distance.
+            padding: EdgeInsets.only(
+                right: WindowCaptionButtons.supported && !widget.compact
+                    ? kWindowCaptionWidth
+                    : 0),
+            child: _Header(
+                song: song,
+                accent: accent,
+                wide: wide,
+                onEditLyrics: _openLyricsEditor,
+                onAppearance: () => showLyricsAppearanceSheet(context)),
+          ),
         // Desktop pane chrome (the redesign right column): LYRICS label,
         // word-sync chip and a compact tools pill. The portrait preview
         // (compact) stays chrome-less.
@@ -864,6 +874,9 @@ class _LyricsScreenState extends State<LyricsScreen> {
             child: _LyricsScrubRail(controller: _scroll),
           ),
         SafeArea(child: content),
+        // Window controls travel with the immersive screen on desktop.
+        if (!widget.embedded && !widget.compact && WindowCaptionButtons.supported)
+          const Positioned(top: 0, right: 0, child: WindowCaptionButtons()),
         // (No floating transport pill on the full-screen lyrics: the
         // standard sync bar and attribution stay, per review.)
       ],
