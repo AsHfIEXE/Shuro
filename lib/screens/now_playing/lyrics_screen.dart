@@ -26,6 +26,7 @@ import 'lyrics_appearance_sheet.dart';
 import 'lyrics_sync_card.dart';
 import '../../services/lrc_tools.dart';
 import '../../services/lyrics_prefetch.dart';
+import '../../services/lyrics_resolver.dart';
 import '../../widgets/click_region.dart';
 import '../../widgets/desktop_context_menu.dart';
 import '../../widgets/state_views.dart';
@@ -237,12 +238,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
   /// the skeleton, then the full lookup (which also honours saved edits)
   /// settles on top.
   _LyricsView? _peek(Song song) {
-    final embedded = EmbeddedLyricsCache.peek(song.id);
-    if (embedded != null && embedded.lines.isNotEmpty) {
-      return _LyricsView.found(embedded);
-    }
     final album = _appState.albumById(song.albumId)?.title;
-    final hit = LyricsService.peek(
+    final hit = LyricsResolver.peek(
         title: song.title,
         artist: song.artist,
         album: album,
@@ -309,28 +306,18 @@ class _LyricsScreenState extends State<LyricsScreen> {
       // Storage problems degrade to the normal lookup, never to an error.
     }
 
-    try {
-      // Through the shared cache: if the prefetcher already warmed this track
-      // (it warms the current and next song on every change), this is a hit
-      // and the screen renders without waiting on the network at all.
-      final embedded = await EmbeddedLyricsCache.fetch(
-              song.id, () => _appState.fetchEmbeddedLyrics(song))
-          .timeout(const Duration(seconds: 8), onTimeout: () => null);
-      if (embedded != null && embedded.lines.isNotEmpty) {
-        return _LyricsView.found(embedded);
-      }
-    } catch (_) {
-      // A server that doesn't implement the extension (or hiccupped) must not
-      // stop the LRCLIB fallback — AppState already swallows this, belt and
-      // braces here too.
-    }
-
+    // One resolver for the whole app (also used by the prefetcher):
+    // lrc.red -> LRCLIB -> embedded tags. Embedded goes through the shared
+    // cache, so a prefetched track renders without waiting on the network.
     final album = _appState.albumById(song.albumId)?.title;
-    final result = await LyricsService.lookup(
+    final result = await LyricsResolver.resolve(
       title: song.title,
       artist: song.artist,
       album: album,
       duration: song.duration,
+      embedded: () => EmbeddedLyricsCache.fetch(
+              song.id, () => _appState.fetchEmbeddedLyrics(song))
+          .timeout(const Duration(seconds: 8), onTimeout: () => null),
     );
     if (result.isFound) return _LyricsView.found(result.track!);
     return _LyricsView.miss(result.failure, detail: result.detail);
@@ -1695,21 +1682,37 @@ class _AttributionFooter extends StatelessWidget {
       parts.add('Synced by ${track.uploader!.username}');
     if (track.maker != null) parts.add('Written by ${track.maker!.username}');
     final precision = switch (track.type) {
-      LyricsSyncType.syllable => 'Per-word timing',
+      LyricsSyncType.syllable => 'Syllable timing',
+      LyricsSyncType.word => 'Word timing',
       LyricsSyncType.line => 'Line timing',
       LyricsSyncType.static_ => 'Not synced',
     };
     parts.add(precision);
 
+    // lrc.red's terms ask for a visible attribution linking to the track
+    // page; with no URL launcher in the app, tapping copies that link.
+    final link = track.sourceUrl;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
       child: Column(
         children: [
-          Text(
-            parts.join(' · '),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(currentFontFamily,
-                color: kStatusText, fontSize: 11),
+          ClickRegion(
+            onTap: link == null
+                ? null
+                : () {
+                    Clipboard.setData(ClipboardData(text: link));
+                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                        SnackBar(content: Text('Copied $link')));
+                  },
+            child: Text(
+              parts.join(' · '),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kStatusText,
+                  fontSize: 11,
+                  decoration: link == null ? null : TextDecoration.underline,
+                  decorationColor: Colors.white24),
+            ),
           ),
           if (detail != null)
             Padding(

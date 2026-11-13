@@ -23,6 +23,8 @@ dependencies:
   provider: ^6.1.2
   file_picker: ^8.1.2
   http: ^1.2.2
+  # TTML (lrc.red word/syllable lyrics) parsing: services/ttml_parser.dart.
+  xml: ^7.0.1
   crypto: ^3.0.6
   # (Local-file tag reading is a small pure-Dart ID3/Vorbis parser in
   # services/local_tag_enrichment.dart — audiotags was evaluated and rejected:

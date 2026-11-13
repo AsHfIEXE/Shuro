@@ -231,7 +231,7 @@ class LyricsService {
     final label = '${track.matchedTitle ?? '?'} — ${track.matchedArtist ?? '?'}';
     final delta = matchDelta ?? (track.matchedDuration != null ? (track.matchedDuration! - duration).abs() : null);
     final precision = switch (track.type) {
-      LyricsSyncType.syllable => 'word-synced',
+      LyricsSyncType.syllable || LyricsSyncType.word => 'word-synced',
       LyricsSyncType.line => 'line-synced',
       LyricsSyncType.static_ => 'unsynced text',
     };

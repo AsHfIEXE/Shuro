@@ -105,12 +105,9 @@ class LyricsPrefetcher {
     Future<LyricsTrack?> Function(Song) embeddedFetch,
     Future<void> Function(Song) onlineLookup,
   ) {
-    unawaited(EmbeddedLyricsCache.fetch(song.id, () => embeddedFetch(song))
-        .then((track) async {
-      // Only look online when the server had nothing embedded — same rule
-      // the screen applies, so the two paths can never disagree.
-      if (track != null && track.lines.isNotEmpty) return;
-      await onlineLookup(song);
-    }).catchError((_) {}));
+    // One path: the resolver (lrc.red -> LRCLIB -> embedded) runs as the
+    // online lookup and reads embedded lyrics through the same cache, so the
+    // prefetcher and the screen always agree on the source.
+    unawaited(onlineLookup(song).catchError((_) {}));
   }
 }

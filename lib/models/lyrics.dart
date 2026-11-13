@@ -38,10 +38,18 @@ class LyricsLine {
 ///    is an estimate — see [LyricsTrack.wordTimingIsEstimated].
 ///  - [static_]: no timing at all. Must not be highlighted or auto-scrolled
 ///    as if it were synced.
-enum LyricsSyncType { syllable, line, static_ }
+///  - [word]: real per-*word* timings (e.g. an lrc.red TTML with one timed span
+///    per word). Equally safe to render as true karaoke.
+///
+/// [syllable] means sub-word fragments carry their own timing; [word] means
+/// word boundaries do. Neither is ever produced by interpolation.
+enum LyricsSyncType { syllable, word, line, static_ }
 
 /// Which source actually answered — shown to the user as attribution.
 enum LyricsSource {
+  /// lrc.red: TTML with real word/syllable timing, matched by ISRC.
+  lrcRed,
+
   /// LRCLIB (lrclib.net), matched by title/artist/album/duration.
   lrclib,
 
@@ -88,6 +96,10 @@ class LyricsTrack {
   /// label estimated karaoke honestly.
   final bool wordTimingIsEstimated;
 
+  /// Where the provider's own page for this track lives (lrc.red track page),
+  /// for the attribution link.
+  final String? sourceUrl;
+
   const LyricsTrack({
     required this.type,
     required this.source,
@@ -99,18 +111,22 @@ class LyricsTrack {
     this.matchedDuration,
     this.providerOffset,
     this.wordTimingIsEstimated = false,
+    this.sourceUrl,
   });
 
   bool get hasTiming => type != LyricsSyncType.static_ && lines.isNotEmpty;
 
   /// Real per-word data — the only case that may be presented as true
   /// karaoke rather than an estimate.
-  bool get hasRealWordSync => type == LyricsSyncType.syllable;
+  bool get hasRealWordSync =>
+      type == LyricsSyncType.syllable || type == LyricsSyncType.word;
 }
 
 extension LyricsSourceLabel on LyricsSource {
   String get label {
     switch (this) {
+      case LyricsSource.lrcRed:
+        return 'lrc.red';
       case LyricsSource.lrclib:
         return 'LRCLIB';
       case LyricsSource.embedded:

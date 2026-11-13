@@ -47,7 +47,7 @@ import 'widgets/mini_player.dart';
 import 'widgets/page_transitions.dart';
 import 'widgets/state_views.dart';
 import 'services/lyrics_prefetch.dart';
-import 'services/lyrics_service.dart';
+import 'services/lyrics_resolver.dart';
 
 /// The app-level ListenBrainz submitter.
 final sharedListenBrainz = ListenBrainzService.instance;
@@ -430,11 +430,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         onlineLookup: (song) async {
           if (song.isLocal) return;
           final album = appState.albumById(song.albumId)?.title;
-          await LyricsService.lookup(
+          // The same resolver the lyrics screen uses (lrc.red -> LRCLIB ->
+          // embedded), so a warmed track is exactly what the screen shows.
+          await LyricsResolver.resolve(
             title: song.title,
             artist: song.artist,
             album: album,
             duration: song.duration,
+            embedded: () => EmbeddedLyricsCache.fetch(
+                song.id, () => appState.fetchEmbeddedLyrics(song)),
           );
         },
       );
