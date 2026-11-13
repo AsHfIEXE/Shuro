@@ -766,10 +766,19 @@ class _LyricsScreenState extends State<LyricsScreen> {
     _manualScrolling = false;
     final song = _song;
     if (song == null) return;
-    if (isCurrent) {
-      _player.seekTo(line.start);
+    // Lyrics time -> player time: the display clock compares rawPosition +
+    // user offset against line starts, so the seek target subtracts the
+    // offset again - without this a tap lands a whole offset off.
+    var target = line.start - _offset;
+    if (target < Duration.zero) target = Duration.zero;
+    // Never reload for a tap: replaying via playSong restarted the track
+    // from zero and stomped the queue entry (also the source of the
+    // "playback struggles" whenever lyrics were clicked). Seek the loaded
+    // track instead.
+    if (_player.currentSong?.id == song.id) {
+      _player.seekTo(target);
     } else {
-      _player.playSong(song, startAt: line.start);
+      _player.playSong(song, startAt: target);
     }
   }
 

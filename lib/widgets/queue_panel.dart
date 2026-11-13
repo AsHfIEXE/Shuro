@@ -160,20 +160,54 @@ class QueuePanel extends StatelessWidget {
                               style: GoogleFonts.getFont(currentFontFamily,
                                   color: kMuted2, fontSize: 13)),
                         )
-                      : ListView.builder(
+                      : ReorderableListView.builder(
                           padding:
                               const EdgeInsets.fromLTRB(12, 0, 12, 12),
                           itemCount: upNext.length,
+                          buildDefaultDragHandles: false,
+                          // ignore: deprecated_member_use
+                          onReorder: (oldIndex, newIndex) {
+                            // The panel list is the up-next slice; translate
+                            // to absolute queue indices. reorderQueue applies
+                            // the standard >oldIndex adjustment itself.
+                            player.reorderQueue(
+                              player.queueIndex + 1 + oldIndex,
+                              player.queueIndex + 1 + newIndex,
+                            );
+                          },
                           itemBuilder: (context, i) {
                             final s = upNext[i];
                             final absIndex = player.queueIndex + 1 + i;
-                            return _QueueRow(
-                              song: s,
-                              index: absIndex,
-                              onTap: () =>
-                                  player.playSong(s, queue: queue),
-                              onRemove: () =>
-                                  player.removeFromQueue(absIndex),
+                            return Container(
+                              key: ValueKey('panel-row-$absIndex-${s.id}'),
+                              child: Row(
+                                children: [
+                                  // Grip: drag here to reorder. Tapping the
+                                  // row itself still plays instantly.
+                                  ReorderableDragStartListener(
+                                    index: i,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                          left: 2, right: 2),
+                                      child: Icon(
+                                          Icons.drag_indicator_rounded,
+                                          size: 18,
+                                          color: Colors.white.withValues(
+                                              alpha: 0.25)),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _QueueRow(
+                                      song: s,
+                                      index: absIndex,
+                                      onTap: () =>
+                                          player.playSong(s, queue: queue),
+                                      onRemove: () => player
+                                          .removeFromQueue(absIndex),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
