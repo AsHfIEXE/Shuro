@@ -23,7 +23,8 @@ import '../../theme/dynamic_theme.dart';
 import '../../widgets/add_to_playlist_sheet.dart';
 import '../../widgets/animated_favorite_icon.dart';
 import '../../widgets/artwork_ring.dart';
-import '../../widgets/blurred_artwork_backdrop.dart';
+import '../../widgets/spicy_art_disc.dart';
+import '../../widgets/spicy_backdrop.dart';
 import '../../widgets/window_caption_buttons.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
@@ -146,7 +147,7 @@ class NowPlayingScreen extends StatelessWidget {
             body: Stack(
               children: [
                 Positioned.fill(
-                  child: BlurredArtworkBackdrop(
+                  child: SpicyBackdrop(
                     artwork: song.artwork,
                     palette: colors,
                     cacheKey: song.id,
@@ -1118,16 +1119,27 @@ class _ScrubbingRingState extends State<_ScrubbingRing> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                ArtworkRing(
-                  song: widget.song,
-                  progress: _preview ?? widget.progress,
-                  colors: widget.colors,
+                SpicyArtDisc(
+                  cover: ArtworkRing(
+                    song: widget.song,
+                    progress: _preview ?? widget.progress,
+                    colors: widget.colors,
+                    size: widget.size,
+                    heroTag: widget.heroTag,
+                    showProgress: widget.showProgress,
+                    scrubbing: _scrubbing,
+                    buffered: widget.buffered,
+                    knobSize: widget.knobSize,
+                  ),
                   size: widget.size,
-                  heroTag: widget.heroTag,
-                  showProgress: widget.showProgress,
-                  scrubbing: _scrubbing,
-                  buffered: widget.buffered,
-                  knobSize: widget.knobSize,
+                  progress: widget.progress,
+                  isPlaying: true, // breathing while the screen is alive
+                  cacheKey: widget.song.id,
+                  accent: widget.colors.isNotEmpty
+                      ? widget.colors.first
+                      : const Color(0xFFFF6B9D),
+                  showRing: false, // ArtworkRing owns the interactive ring
+                  clip: false,
                 ),
                 _buildBubble(bubbleProgress),
               ],

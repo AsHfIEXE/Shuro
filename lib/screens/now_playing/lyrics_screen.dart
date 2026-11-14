@@ -19,6 +19,7 @@ import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
 import '../../widgets/artwork_ring.dart';
 import '../../widgets/blurred_artwork_backdrop.dart';
+import '../../widgets/spicy_backdrop.dart';
 import '../../widgets/window_caption_buttons.dart';
 import '../../widgets/immersive_scope.dart';
 import '../../widgets/page_transitions.dart';
@@ -686,7 +687,25 @@ class _LyricsScreenState extends State<LyricsScreen> {
                         final distance = (i - currentIndex).abs();
                         _lineKeys.putIfAbsent(i, () => GlobalKey());
                         final appearance = context.watch<AppearanceSettings>();
-                        return _LyricsLineView(
+                        // Spicy-style defocus: distance blurs + dims the
+                        // line while the karaoke fill itself stays intact.
+                        final sigma = isCurrent
+                            ? 0.0
+                            : (distance * 1.7).clamp(0.0, 6.5);
+                        return TweenAnimationBuilder<double>(
+                          tween: Tween(begin: sigma, end: sigma),
+                          duration: const Duration(milliseconds: 320),
+                          curve: Curves.easeOut,
+                          builder: (_, s, child) => ImageFiltered(
+                            imageFilter: ui.ImageFilter.blur(
+                                sigmaX: s, sigmaY: s),
+                            child: child,
+                          ),
+                          child: AnimatedScale(
+                            scale: isCurrent ? 1.03 : 1.0,
+                            duration: const Duration(milliseconds: 380),
+                            curve: Curves.easeOutBack,
+                            child: _LyricsLineView(
                           key: _lineKeys[i],
                           line: track.lines[i],
                           isCurrent: isCurrent,
@@ -709,6 +728,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
                           onTap: () => _seekToLine(track.lines[i], isCurrent),
                           onContextMenu: (pos) =>
                               _showLineMenu(pos, track.lines[i]),
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -869,7 +890,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
         // text. Embedded mode skips it — the host surface already paints one.
         if (!widget.embedded)
           Positioned.fill(
-            child: BlurredArtworkBackdrop(
+            child: SpicyBackdrop(
               artwork: song?.artwork,
               palette: colors ?? song?.gradientColors ?? kBrandGradient,
               cacheKey: song?.id ?? 'no-track',
