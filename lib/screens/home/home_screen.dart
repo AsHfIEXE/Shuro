@@ -109,9 +109,9 @@ class HomeScreen extends StatelessWidget {
   /// (AppState.refreshLibrary re-calls the repository and swaps the snapshot
   /// in). A local-only session has no server to refresh against, so the gesture
   /// still completes cleanly but does nothing.
-  Future<void> _refresh(BuildContext context) async {
+  Future<void> _refresh(BuildContext context, {bool force = false}) async {
     HapticFeedback.mediumImpact();
-    await context.read<AppState>().refreshLibrary();
+    await context.read<AppState>().refreshLibrary(force: force);
   }
 
   /// Hero "Resume playback": if the hero track is still the loaded one, just
@@ -283,7 +283,7 @@ class HomeScreen extends StatelessWidget {
                                   icon: const Icon(Icons.refresh_rounded,
                                       color: Colors.white70),
                                   tooltip: 'Refresh library',
-                                  onPressed: () => _refresh(context),
+                                  onPressed: () => _refresh(context, force: true),
                                 ),
                               IconButton(
                                 icon: const Icon(Icons.download_rounded,

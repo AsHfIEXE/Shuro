@@ -337,6 +337,10 @@ class _QueuePeekButtonState extends State<QueuePeekButton> {
                   _hide();
                   widget.onOpen();
                 },
+                // The inner region owns the pointer when a custom child is
+                // used - the long-press must live HERE or hold-to-peek never
+                // fires (the outer region loses the gesture arena).
+                onLongPress: _show,
                 child: widget.child,
               )
             : IconButton(

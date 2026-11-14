@@ -366,6 +366,14 @@ class _LyricsScreenState extends State<LyricsScreen> {
   void _retry() {
     final song = _song;
     if (song == null) return;
+    // An explicit retry must bypass every cached answer - otherwise the
+    // button just replays the stale miss and looks broken.
+    LyricsResolver.drop(
+      title: song.title,
+      artist: song.artist,
+      album: _appState.albumById(song.albumId)?.title,
+      duration: song.duration,
+    );
     _startLoad(song);
     setState(() {});
   }

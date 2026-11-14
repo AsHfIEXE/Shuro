@@ -911,13 +911,16 @@ class AppState extends ChangeNotifier {
   /// swallowed (the existing, already-working snapshot is kept) rather
   /// than surfaced as a hard error — a refresh that can't reach the server
   /// right now shouldn't nuke what's already loaded and playable.
-  Future<void> refreshLibrary() async {
+  Future<void> refreshLibrary({bool force = false}) async {
     final repository = _repository;
     if (repository == null) return;
     try {
       // Change detection: when the server reports its last scan unchanged
       // since the cached snapshot, the library is unchanged — skip the full
-      // fetch (one getAlbum per album) entirely.
+      // fetch (one getAlbum per album) entirely. An explicit button press
+      // (force) skips this optimisation: the user asked for a real refresh,
+      // and a stale cached scan time must not turn the button into a no-op.
+      if (!force) {
       try {
         final scanInfo = await repository.getScanStatus();
         final remote = scanInfo.lastScan?.millisecondsSinceEpoch;
@@ -931,6 +934,7 @@ class AppState extends ChangeNotifier {
       } catch (_) {
         // Server without getScanStatus (older Navidrome): fall through to the
         // full fetch — change detection is an optimisation, not a gate.
+      }
       }
       isSyncingLibrary = true;
       notifyListeners();

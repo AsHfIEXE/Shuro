@@ -53,6 +53,19 @@ class LyricsResolver {
   static String _key(String title, String artist, String? album, Duration d) =>
       '$_prefsSig|${title.toLowerCase()}|${artist.toLowerCase()}|${(album ?? '').toLowerCase()}|${d.inSeconds}';
 
+  /// Drops every cached answer (positive and TTL'd negative) for one
+  /// track, so an explicit "Search again" truly re-fetches.
+  static void drop({
+    required String title,
+    required String artist,
+    String? album,
+    required Duration duration,
+  }) {
+    final key = _key(title, artist, album, duration);
+    _cache.remove(key);
+    _negAt.remove(key);
+  }
+
   /// What a previous resolve already found, for an instant first frame.
   static LyricsLookupResult? peek({
     required String title,
