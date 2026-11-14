@@ -21,6 +21,7 @@ import 'state/app_state.dart';
 import 'state/appearance_settings.dart';
 import 'state/player_controller.dart';
 import 'state/spoken_library_state.dart';
+import 'services/net_probe.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -81,6 +82,9 @@ Future<void> main() async {
               .timeout(const Duration(seconds: 25));
         } catch (_) {}
       }
+      // Then time DNS / TCP (v4 vs v6) / TLS per lyrics host into the
+      // diagnostics ring (net.probe) so a stall is attributable.
+      await NetProbe.run();
     }());
 
     // DNS health check BEFORE any request goes out: decides whether the DoH
