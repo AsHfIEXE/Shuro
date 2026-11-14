@@ -398,14 +398,26 @@ extension _MorePages on _SettingsScreenState {
       ),
       _SettingsGroupCard(
         title: 'KEYS',
-        rows: const [
-          _NavRow(
-            icon: Icons.keyboard_rounded,
-            label: 'Global shortcuts',
-            description: 'System-wide shortcuts are not available yet.',
-            value: 'Not available yet',
+        rows: [
+          ValueListenableBuilder<bool>(
+            valueListenable: GlobalHotkeys.instance.enabled,
+            builder: (context, on, _) => _ToggleRow(
+              label: 'Global shortcuts',
+              value: on,
+              onChanged: (v) {
+                final player = context.read<PlayerController>();
+                GlobalHotkeys.instance.setEnabled(
+                  v,
+                  toggle: () => player.togglePlayPause(),
+                  next: () => player.next(),
+                  previous: () => player.previous(),
+                );
+              },
+              description:
+                  'Works outside Shuro: media keys, Ctrl+Alt+Space (play/pause), Ctrl+Alt+Left/Right (previous/next).',
+            ),
           ),
-          _NavRow(
+          const _NavRow(
             icon: Icons.skip_next_rounded,
             label: 'Media keys',
             description: 'Media keys follow the system and cannot be remapped.',
@@ -631,11 +643,12 @@ extension _MorePages on _SettingsScreenState {
           ),
           // The web services Shuro talks to are not pub packages, so they
           // never show up in showLicensePage — they get their own page.
-          const _NavRow(
+          _NavRow(
             icon: Icons.system_update_rounded,
             label: 'Check for updates',
-            description: 'Update checks are not built in yet.',
-            value: 'Not available yet',
+            description: 'Compares your version with the latest GitHub release.',
+            value: 'Check now',
+            onTap: () => showUpdateCheck(context),
           ),
           _NavRow(
             icon: Icons.public_rounded,

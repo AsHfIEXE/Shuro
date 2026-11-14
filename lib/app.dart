@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart'
     show debugPrint, kDebugMode, kIsWeb, defaultTargetPlatform;
@@ -20,6 +21,7 @@ import 'services/app_persistence.dart';
 import 'services/audio_cache.dart';
 import 'services/desktop_lifecycle.dart';
 import 'services/discord_rpc_service.dart';
+import 'services/global_hotkeys.dart';
 import 'services/download_service.dart';
 import 'services/local_tag_enrichment.dart';
 import 'services/metadata/lastfm_client.dart';
@@ -616,6 +618,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         // No persistence on this platform: default-on applies in memory.
       }
       DiscordRpcService.startFor(player);
+
+      // System-wide media keys + Ctrl+Alt fallbacks (Settings -> Desktop ->
+      // Global shortcuts). Media keys are harmless duplicates of what the
+      // OS already sends; the combos are the real feature.
+      if (!kIsWeb &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        unawaited(GlobalHotkeys.instance.restore(
+          toggle: () => player.togglePlayPause(),
+          next: () => player.next(),
+          previous: () => player.previous(),
+        ));
+      }
 
       // "Listen along" button target: the active Navidrome server's web UI,
       // so a friend clicking the button lands in the same library. A

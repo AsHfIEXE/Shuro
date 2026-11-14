@@ -15,6 +15,7 @@ import '../../state/app_state.dart';
 import '../../state/appearance_settings.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/palette_fix.dart';
 import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
 import '../../widgets/artwork_ring.dart';
@@ -699,7 +700,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
                         // line while the karaoke fill itself stays intact.
                         final sigma = isCurrent
                             ? 0.0
-                            : (distance * 1.7).clamp(0.0, 6.5);
+                            : (distance * 1.2).clamp(0.0, 5.0);
                         return TweenAnimationBuilder<double>(
                           tween: Tween(begin: sigma, end: sigma),
                           duration: const Duration(milliseconds: 320),
@@ -900,7 +901,8 @@ class _LyricsScreenState extends State<LyricsScreen> {
           Positioned.fill(
             child: SpicyBackdrop(
               artwork: song?.artwork,
-              palette: colors ?? song?.gradientColors ?? kBrandGradient,
+              palette: spicyPalette(
+                  colors ?? song?.gradientColors ?? kBrandGradient),
               cacheKey: song?.id ?? 'no-track',
               style: BlurBackdropStyle.lyrics,
             ),

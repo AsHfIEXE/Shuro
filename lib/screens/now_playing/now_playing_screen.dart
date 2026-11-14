@@ -18,6 +18,7 @@ import '../../playback/audio_diagnostics.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/palette_fix.dart';
 import '../../theme/desktop_tokens.dart';
 import '../../theme/dynamic_theme.dart';
 import '../../widgets/add_to_playlist_sheet.dart';
@@ -149,7 +150,7 @@ class NowPlayingScreen extends StatelessWidget {
                 Positioned.fill(
                   child: SpicyBackdrop(
                     artwork: song.artwork,
-                    palette: colors,
+                    palette: spicyPalette(colors),
                     cacheKey: song.id,
                   ),
                 ),
