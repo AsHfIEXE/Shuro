@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:dart_discord_presence/dart_discord_presence.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show NetworkImage;
 
 import 'app_persistence.dart';
 import '../models/song.dart';
@@ -505,20 +506,35 @@ class DiscordRpcService {
       // (Discord cannot reach a LAN address). Verified with a HEAD before
       // use; any failure falls through to MusicBrainz and finally the
       // shuro_logo asset.
+      // Feishin-style public art: the song's own artwork URL already
+      // carries the server credentials (u/t/s) - swapping its base to the
+      // user's public address yields a URL Discord's clients can fetch
+      // directly, no anonymous-access rule needed. Verified with a HEAD
+      // before use; any failure falls through to MusicBrainz / shuro_logo.
       final publicBase = SettingsExtras.instance.rpcPublicServerUrl;
-      if (publicBase.isNotEmpty && !song.id.startsWith('local_')) {
+      final art = song.artwork;
+      if (publicBase.isNotEmpty && art is NetworkImage && !song.id.startsWith('local_')) {
+        final original = Uri.tryParse(art.url);
         final base = Uri.tryParse(publicBase);
-        if (base != null && base.hasScheme && base.host.isNotEmpty) {
-          final art = base.replace(
-            path: (base.path.endsWith('/') ? base.path : '${base.path}/') + 'rest/getCoverArt',
-            queryParameters: {'id': 'so-${song.id}', 'v': '1.16.1', 'c': 'Shuro', 'f': 'json'},
+        if (original != null &&
+            base != null &&
+            base.hasScheme &&
+            base.host.isNotEmpty &&
+            base.host != original.host) {
+          final publicArt = original.replace(
+            scheme: base.scheme,
+            host: base.host,
+            port: base.hasPort
+                ? base.port
+                : (base.scheme == 'https' ? 443 : 80),
           );
           try {
-            final check = await (await client
-                    .headUrl(art))
+            final check = await (await client.headUrl(publicArt))
                 .close()
                 .timeout(const Duration(seconds: 5));
-            if (check.statusCode >= 200 && check.statusCode < 400) return art.toString();
+            if (check.statusCode >= 200 && check.statusCode < 400) {
+              return publicArt.toString();
+            }
           } catch (_) {}
         }
       }
