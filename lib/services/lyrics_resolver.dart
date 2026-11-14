@@ -293,11 +293,17 @@ class LyricsResolver {
           isRed: true, name: 'lrc.red');
     }
     if (prefs.lyricsUseLrclib) {
-      run(LyricsService.lookup(title: title, artist: artist, album: album, duration: duration),
-          const Duration(seconds: 14), (r) => lrclibR = r, name: 'lrclib');
+      Timer(const Duration(milliseconds: 600), () {
+        run(LyricsService.lookup(title: title, artist: artist, album: album, duration: duration),
+            const Duration(seconds: 14), (r) => lrclibR = r, name: 'lrclib');
+      });
     }
     if (useEmbedded && embR == null) {
-      run(embeddedResult(), const Duration(seconds: 8), (r) => embR = r, name: 'embedded');
+      // Staggered starts: this machine's resolver stalls under concurrent
+      // lookups, so the sources resolve DNS one at a time (lrc.red now,
+      // embedded +250 ms, LRCLIB +600 ms). Budgets absorb the delay.
+      Timer(const Duration(milliseconds: 250),
+          () => run(embeddedResult(), const Duration(seconds: 8), (r) => embR = r, name: 'embedded'));
     }
 
     if (outstanding == 0) return best() ?? bestMiss();

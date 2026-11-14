@@ -67,15 +67,19 @@ Future<void> main() async {
     // which is exactly "first lyrics lookup dies, the retry is instant".
     // Warm the public hosts in the background while the splash shows.
     unawaited(() async {
+      // SEQUENTIAL on purpose: this machine's resolver stalls when several
+      // lookups run at once (serialized fetchers like the RPC art path work
+      // flawlessly; the parallel lyrics burst is what dies).
       for (final host in [
         'lrclib.net',
         'lrc.red',
         'musicbrainz.org',
         'coverartarchive.org',
       ]) {
-        unawaited(InternetAddress.lookup(host)
-            .timeout(const Duration(seconds: 25))
-            .then((_) {}, onError: (_) {}));
+        try {
+          await InternetAddress.lookup(host)
+              .timeout(const Duration(seconds: 25));
+        } catch (_) {}
       }
     }());
 
