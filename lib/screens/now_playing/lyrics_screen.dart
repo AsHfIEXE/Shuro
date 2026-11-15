@@ -1105,13 +1105,38 @@ class _LyricsLineViewState extends State<_LyricsLineView> {
                 children: [
                   painted,
                   const SizedBox(height: 4),
-                  Container(
-                    width: 22,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: kBrandColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                  // The static dash is now a fill: it tracks progress
+                  // through the sung line (0 -> 1 between the line's start
+                  // and end), driven by the same clock as the karaoke.
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: widget.position,
+                    builder: (context, pos, _) {
+                      final line = widget.line;
+                      var p = 0.0;
+                      if (line.end > line.start) {
+                        p = ((pos - line.start).inMilliseconds /
+                                (line.end - line.start).inMilliseconds)
+                            .clamp(0.0, 1.0);
+                      }
+                      return Container(
+                        width: 34,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: p,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: kBrandColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               );

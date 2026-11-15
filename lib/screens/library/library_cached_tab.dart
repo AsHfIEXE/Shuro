@@ -222,9 +222,9 @@ class _CachedTabState extends State<CachedTab> {
         if (wide) const LibraryColumn('ARTIST', flex: 3),
         if (wide) const LibraryColumn('ALBUM', flex: 3),
         if (wide) const LibraryColumn('QUALITY', width: 110),
-        const LibraryColumn('SIZE', width: 80),
+        const LibraryColumn('SIZE', width: 80, numeric: true),
         if (wide) const LibraryColumn('STATUS', width: 130),
-        const LibraryColumn('TIME', width: 56),
+        const LibraryColumn('TIME', width: 56, numeric: true),
       ];
       return Container(
         decoration: libraryTableCardDecoration(),
@@ -279,6 +279,7 @@ class _CachedTabState extends State<CachedTab> {
     final album = appState.albumById(song.albumId)?.title ?? '—';
     return LibraryTableRow(
       columns: columns,
+      playing: player.currentSong?.id == song.id,
       onTap: () => player.playSong(song, queue: queue),
       index: Text('${i + 1}',
           style: libraryCellStyle(color: kStatusText, size: 13)),

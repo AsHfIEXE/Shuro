@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,6 +43,25 @@ enum _SearchFilter { all, songs, albums, artists, playlists }
 
 class _SearchScreenState extends State<SearchScreen> {
   final _controller = TextEditingController();
+  Timer? _queryDebounce;
+  _TopHit? _topHit;
+
+  /// Arrow-key navigation across the CURRENT song results (Enter
+  /// plays the selection once one exists).
+  int _selectedSong = -1;
+  List<Song> _navSongs = const [];
+
+  void _moveSelection(int delta) {
+    if (_navSongs.isEmpty) return;
+    final next =
+        (_selectedSong + delta).clamp(-1, _navSongs.length - 1).toInt();
+    if (next != _selectedSong) setState(() => _selectedSong = next);
+  }
+
+  Song? get _selectedNavSong =>
+      (_selectedSong >= 0 && _selectedSong < _navSongs.length)
+          ? _navSongs[_selectedSong]
+          : null;
   final _focus = FocusNode();
   String _query = '';
   _SearchFilter _filter = _SearchFilter.all;
@@ -57,7 +78,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   @override
+  @override
   void dispose() {
+    _queryDebounce?.cancel();
     _focus.dispose();
     _controller.dispose();
     super.dispose();
@@ -67,6 +90,19 @@ class _SearchScreenState extends State<SearchScreen> {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
     context.read<AppState>().addRecentSearch(trimmed);
+    // Enter plays the arrow-key selection first, else the top hit -
+    // the classic "type, type, arrow, enter" flow.
+    final selected = _selectedNavSong;
+    if (selected != null) {
+      context.read<PlayerController>().playOrToggle(selected, queue: _navSongs);
+      _focus.unfocus();
+      return;
+    }
+    final hit = _topHit;
+    if (hit?.song != null) {
+      context.read<PlayerController>().playSong(hit!.song!);
+      _focus.unfocus();
+    }
   }
 
   void _clearQuery() {
@@ -114,6 +150,9 @@ class _SearchScreenState extends State<SearchScreen> {
     final effectiveFilter = visibleFilters.contains(_filter) ? _filter : _SearchFilter.all;
 
     final topHit = q.isEmpty ? null : _resolveTopHit(q, songResults, albumResults, artistResults, playlistResults);
+    _topHit = topHit;
+    _navSongs = songResults;
+    if (_selectedSong >= _navSongs.length) _selectedSong = _navSongs.length - 1;
     final showTopHit = topHit != null &&
         (effectiveFilter == _SearchFilter.all || _typeOfFilter(topHit) == effectiveFilter);
 
@@ -146,14 +185,20 @@ class _SearchScreenState extends State<SearchScreen> {
                 focus: _focus,
                 query: _query,
                 wide: wide,
-                onChanged: (v) => setState(() {
-                  _query = v;
-                  // A new query invalidates an expanded Songs section —
-                  // collapse it back to the board's preview row count.
-                  _songsExpanded = false;
-                }),
+                onChanged: (v) {
+                  // Debounced: keystrokes stay responsive, the result set
+                  // recomputes once typing pauses (250 ms).
+                  _queryDebounce?.cancel();
+                  _queryDebounce = Timer(const Duration(milliseconds: 250),
+                      () => setState(() => _query = v));
+                },
                 onSubmitted: _submit,
-                onClear: _clearQuery,
+                onClear: () {
+                  _clearQuery();
+                  setState(() => _selectedSong = -1);
+                },
+                onArrowDown: () => _moveSelection(1),
+                onArrowUp: () => _moveSelection(-1),
               ),
             ),
             if (q.isNotEmpty && hasResults)
@@ -220,6 +265,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           songsExpanded: _songsExpanded,
                           onToggleSongs: () =>
                               setState(() => _songsExpanded = !_songsExpanded),
+                          selectedSongId: _selectedNavSong?.id,
                           onSearchCommitted: () => _submit(_query),
                         ),
             ),
@@ -272,6 +318,8 @@ class _QueryField extends StatelessWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
+    this.onArrowDown,
+    this.onArrowUp,
   });
 
   final TextEditingController controller;
@@ -281,12 +329,20 @@ class _QueryField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
+  final VoidCallback? onArrowDown;
+  final VoidCallback? onArrowUp;
 
   @override
   Widget build(BuildContext context) {
     final active = focus.hasFocus || query.isNotEmpty;
     return CallbackShortcuts(
-      bindings: {const SingleActivator(LogicalKeyboardKey.escape): onClear},
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): onClear,
+        if (onArrowDown != null)
+          const SingleActivator(LogicalKeyboardKey.arrowDown): onArrowDown!,
+        if (onArrowUp != null)
+          const SingleActivator(LogicalKeyboardKey.arrowUp): onArrowUp!,
+      },
       child: Container(
         height: 56,
         padding: const EdgeInsets.only(left: 20, right: 12),
@@ -478,6 +534,7 @@ class _SearchResults extends StatelessWidget {
     required this.songsExpanded,
     required this.onToggleSongs,
     required this.onSearchCommitted,
+    this.selectedSongId,
   });
 
   final AppState appState;
@@ -493,6 +550,10 @@ class _SearchResults extends StatelessWidget {
   final bool songsExpanded;
   final VoidCallback onToggleSongs;
   final VoidCallback onSearchCommitted;
+
+  /// The arrow-key selection (search screen state), highlighted in the
+  /// Songs panel.
+  final String? selectedSongId;
 
   @override
   Widget build(BuildContext context) {
@@ -629,12 +690,20 @@ class _SearchResults extends StatelessWidget {
       for (final (i, song) in songResults.take(count).indexed)
         Entrance(
           delay: Entrance.stagger(i),
-          child: SongTile(
-            song: song,
-            onTap: () {
-              onSearchCommitted();
-              player.playOrToggle(song, queue: songResults);
-            },
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: song.id == selectedSongId
+                  ? kBrandColor.withValues(alpha: 0.14)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: SongTile(
+              song: song,
+              onTap: () {
+                onSearchCommitted();
+                player.playOrToggle(song, queue: songResults);
+              },
+            ),
           ),
         ),
     ];

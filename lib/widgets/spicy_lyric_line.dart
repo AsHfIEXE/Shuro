@@ -42,7 +42,7 @@ class SpicyLyricLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Distance → defocus. Cap so far lines don't cost more than near ones.
-    final sigma = active ? 0.0 : (distance * 1.7).clamp(0.0, 6.5);
+    final sigma = active ? 0.0 : (distance * 1.2).clamp(0.0, 5.0);
     final opacity = active ? 1.0 : (1.0 - distance * 0.14).clamp(0.18, 0.75);
 
     return Padding(

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -388,7 +390,11 @@ class LibraryColumn {
 
   /// Fixed width instead of flex when non-null.
   final double? width;
-  const LibraryColumn(this.label, {this.flex = 1, this.width});
+
+  /// Numeric columns (Size, Time, Count...): right-aligned with tabular
+  /// figures so digits line up down the column.
+  final bool numeric;
+  const LibraryColumn(this.label, {this.flex = 1, this.width, this.numeric = false});
 }
 
 Widget _cellBox(LibraryColumn c, Widget child) => c.width != null
@@ -421,9 +427,13 @@ class LibraryTableHeader extends StatelessWidget {
             _cellBox(
                 c,
                 Padding(
-                  padding: const EdgeInsets.only(right: 12),
+                  padding: EdgeInsets.only(
+                      right: c.numeric ? 20 : 12, left: c.numeric ? 12 : 0),
                   child: Text(c.label,
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: c.numeric ? TextAlign.right : TextAlign.left,
+                      style: style),
                 )),
           const SizedBox(width: 56),
         ],
@@ -440,6 +450,10 @@ class LibraryTableRow extends StatefulWidget {
   final Widget? trailing;
   final VoidCallback onTap;
 
+  /// True when this row's song is the one currently playing: the index
+  /// slot becomes animated equalizer bars.
+  final bool playing;
+
   const LibraryTableRow({
     super.key,
     required this.columns,
@@ -447,6 +461,7 @@ class LibraryTableRow extends StatefulWidget {
     required this.cells,
     required this.onTap,
     this.trailing,
+    this.playing = false,
   });
 
   @override
@@ -475,14 +490,23 @@ class _LibraryTableRowState extends State<LibraryTableRow> {
           ),
           child: Row(
             children: [
-              SizedBox(width: 36, child: Center(child: widget.index)),
+              SizedBox(
+                  width: 36,
+                  child: Center(
+                      child: widget.playing
+                          ? const _PlayingBars()
+                          : widget.index)),
               for (var i = 0; i < widget.columns.length; i++)
                 _cellBox(
                     widget.columns[i],
                     Padding(
-                      padding: const EdgeInsets.only(right: 12),
+                      padding: EdgeInsets.only(
+                          right: widget.columns[i].numeric ? 20 : 12,
+                          left: widget.columns[i].numeric ? 12 : 0),
                       child: Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: widget.columns[i].numeric
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
                           child: widget.cells[i]),
                     )),
               SizedBox(
@@ -537,4 +561,57 @@ String libraryAgo(DateTime t) {
   if (diff.inDays < 14) return '${diff.inDays} days ago';
   if (diff.inDays < 60) return '${(diff.inDays / 7).floor()} weeks ago';
   return '${(diff.inDays / 30).floor()} months ago';
+}
+
+/// Three animated bars for the currently-playing table row.
+class _PlayingBars extends StatefulWidget {
+  const _PlayingBars();
+
+  @override
+  State<_PlayingBars> createState() => _PlayingBarsState();
+}
+
+class _PlayingBarsState extends State<_PlayingBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _phase =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _phase.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _phase,
+      builder: (context, _) {
+        final t = _phase.value * 2 * math.pi;
+        return SizedBox(
+          width: 16,
+          height: 14,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < 3; i++)
+                Container(
+                  width: 3,
+                  height: 5 + 7 * (0.5 + 0.5 * _wave(t, i)),
+                  decoration: BoxDecoration(
+                    color: kBrandColor.withValues(
+                        alpha: 0.55 + 0.45 * _wave(t, i)),
+                    borderRadius: BorderRadius.circular(1.5),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static double _wave(double t, int i) =>
+      math.sin(t * (1 + i * 0.45) + i).abs();
 }

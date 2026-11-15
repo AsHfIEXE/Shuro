@@ -767,9 +767,17 @@ class _EmptyTabNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Text(text,
-            style: GoogleFonts.getFont(currentFontFamily,
-                color: kStatusText, fontSize: 13)),
+        child: Row(
+          children: [
+            Icon(Icons.download_done_rounded, color: kStatusText, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(text,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: kStatusText, fontSize: 13)),
+            ),
+          ],
+        ),
       );
 }
 

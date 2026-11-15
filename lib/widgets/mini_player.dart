@@ -198,6 +198,8 @@ class _RingScrubber extends StatefulWidget {
 
 class _RingScrubberState extends State<_RingScrubber> {
   double? _preview;
+  Duration? _hoverTime;
+  Offset? _hoverPos;
   int _lastTickBucket = -1;
 
   void _onPreview(double fraction) {
@@ -234,7 +236,25 @@ class _RingScrubberState extends State<_RingScrubber> {
         return (((angle + math.pi / 2) / (2 * math.pi)) % 1.0 + 1.0) % 1.0;
       }
 
-      return ClickRegion(
+      return MouseRegion(
+        onHover: (e) {
+          final total = widget.player.duration;
+          if (total <= Duration.zero) return;
+          final f = fractionAt(e.localPosition);
+          // Fraction -> time: clamp inside [0, total).
+          final t = Duration(
+              milliseconds:
+                  (total.inMilliseconds * f).round().clamp(0, total.inMilliseconds - 1));
+          setState(() {
+            _hoverTime = t;
+            _hoverPos = e.localPosition;
+          });
+        },
+        onExit: (_) => setState(() {
+          _hoverTime = null;
+          _hoverPos = null;
+        }),
+        child: ClickRegion(
         behavior: HitTestBehavior.opaque,
         onTapUp: (details) {
           final target = fractionAt(details.localPosition);
@@ -258,7 +278,10 @@ class _RingScrubberState extends State<_RingScrubber> {
         child: SizedBox(
           width: widget.size + 12,
           height: widget.size + 12,
-          child: Center(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Center(
             child: _preview != null || !live
                 ? ArtworkRing(
                     song: song,
@@ -282,8 +305,33 @@ class _RingScrubberState extends State<_RingScrubber> {
                       knobSize: NpvMetrics.knobMini,
                     ),
                   ),
+              ),
+              if (_hoverTime != null && _hoverPos != null)
+                Positioned(
+                  left: (_hoverPos!.dx - 24).clamp(0.0, widget.size - 36),
+                  top: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${_hoverTime!.inMinutes}:${(_hoverTime!.inSeconds % 60).toString().padLeft(2, '0')}',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
+      ),
       );
     });
   }

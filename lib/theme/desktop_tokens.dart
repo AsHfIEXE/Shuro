@@ -40,7 +40,9 @@ class DesktopTokens {
   static const double contentTable = 1600;
 
   /// Settings: a label and its control must stay close together.
-  static const double contentSettings = 720;
+  // Widened from 720: the settings pages read fine to ~880 px and the
+  // old value left large dead margins on wide windows.
+  static const double contentSettings = 880;
 
   /// Text lists (Books and podcasts).
   static const double contentText = 960;

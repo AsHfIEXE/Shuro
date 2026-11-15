@@ -193,11 +193,13 @@ class _LocalTabState extends State<LocalTab> {
           _toolbar(appState, songs.length, missing, dups),
           const SizedBox(height: 16),
           if (songs.isEmpty)
-            const EmptyStateView(
+            EmptyStateView(
               icon: Icons.folder_open_rounded,
               title: 'No local files yet',
               subtitle:
                   'Add a music folder, or pick individual audio files, to play them here.',
+              action:
+                  _ctaButton('Add a folder', () => _addFolder(appState)),
             )
           else if (filtered.isEmpty)
             const EmptyStateView(
@@ -353,8 +355,8 @@ class _LocalTabState extends State<LocalTab> {
         const LibraryColumn('ARTIST', flex: 3),
         if (wide) const LibraryColumn('FOLDER', flex: 2),
         if (wide) const LibraryColumn('FORMAT', width: 100),
-        if (wide) const LibraryColumn('SIZE', width: 80),
-        const LibraryColumn('TIME', width: 56),
+        if (wide) const LibraryColumn('SIZE', width: 80, numeric: true),
+        const LibraryColumn('TIME', width: 56, numeric: true),
       ];
       return Container(
         decoration: libraryTableCardDecoration(),
@@ -405,6 +407,7 @@ class _LocalTabState extends State<LocalTab> {
     final size = _sizeOf(s);
     return LibraryTableRow(
       columns: columns,
+      playing: player.currentSong?.id == s.id,
       onTap: () => player.playSong(s, queue: queue),
       index: Text('${i + 1}',
           style: libraryCellStyle(color: kStatusText, size: 13)),
@@ -616,4 +619,24 @@ class _Dashed extends CustomPainter {
 
   @override
   bool shouldRepaint(_Dashed old) => false;
+}
+
+/// The empty-state call to action: outlined pill in the brand colour.
+Widget _ctaButton(String label, VoidCallback? onTap) {
+  return ClickRegion(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kBrandColor.withValues(alpha: 0.8)),
+        color: kBrandColor.withValues(alpha: 0.10),
+      ),
+      child: Text(label,
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700)),
+    ),
+  );
 }

@@ -9,6 +9,7 @@ import '../../models/song.dart';
 import '../../state/app_state.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../settings/manage_servers_screen.dart';
 import '../../widgets/desktop_song_table.dart';
 import '../../theme/desktop_tokens.dart';
 import '../../widgets/loading_skeletons.dart';
@@ -273,11 +274,15 @@ class _SongsTabState extends State<_SongsTab> {
       return const SongListSkeleton();
     }
     if (songs.isEmpty) {
-      return const EmptyStateView(
+      return EmptyStateView(
         icon: Icons.library_music_rounded,
         title: 'No songs yet',
         subtitle:
             'Connect a Navidrome server to see its catalog here, or add files from the Local files tab.',
+        action: _ctaButton('Connect a server', () {
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const ManageServersScreen()));
+        }),
       );
     }
     // Desktop-only filter field: case-insensitive substring match across
@@ -622,4 +627,24 @@ class _LibraryTab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The empty-state call to action: outlined pill in the brand colour.
+Widget _ctaButton(String label, VoidCallback? onTap) {
+  return ClickRegion(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kBrandColor.withValues(alpha: 0.8)),
+        color: kBrandColor.withValues(alpha: 0.10),
+      ),
+      child: Text(label,
+          style: GoogleFonts.getFont(currentFontFamily,
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700)),
+    ),
+  );
 }
