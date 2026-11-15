@@ -14,6 +14,23 @@ class SpokenLibrary {
   final SpokenMediaType type;
 }
 
+/// A direct-play track from the item's own media (the ABS Track object,
+/// carrying its own `contentUrl`). These are the URLs ABS's own clients
+/// stream when they direct-play - unlike a play session, which may hand
+/// back an HLS transcode playlist instead.
+@immutable
+class SpokenTrack {
+  const SpokenTrack(
+      {required this.contentUrl,
+      required this.mimeType,
+      required this.startOffset,
+      required this.duration});
+  final String contentUrl;
+  final String mimeType;
+  final double startOffset;
+  final double duration;
+}
+
 /// A chapter marker inside an audiobook's single timeline (seconds from the
 /// item start). Used for chapter jumps and the end-of-chapter sleep timer.
 @immutable
@@ -42,6 +59,7 @@ class SpokenItem {
     this.chapters = const [],
     this.seriesNames = const [],
     this.isFinished = false,
+    this.tracks = const [],
   });
   final String id;
   final String libraryId;
@@ -54,6 +72,10 @@ class SpokenItem {
   final double progressSeconds;
   final List<SpokenEpisode> episodes;
   final List<SpokenChapter> chapters;
+
+  /// Direct-play tracks from the item's media (empty when the server does
+  /// not expose them). The fallback when a play session returns HLS.
+  final List<SpokenTrack> tracks;
 
   /// Series names from the item's metadata (ABS maintains these on scan;
   /// books can belong to several series).

@@ -186,6 +186,15 @@ class AudiobookshelfApi {
     'audio/ogg',
     'audio/aac',
     'audio/x-m4a',
+    // m4b audiobooks report audio/x-m4b; when the mime is missing from
+    // this list the server decides it must transcode to HLS - which the
+    // Windows engine cannot open.
+    'audio/x-m4b',
+    'audio/m4b',
+    'audio/mp4a-latm',
+    'audio/aacp',
+    'audio/wav',
+    'audio/x-wav',
   ];
 
   /// Opens a real play session and returns the server-issued audio tracks.
@@ -443,6 +452,16 @@ class AudiobookshelfApi {
         .map((series) => series['name'] as String? ?? '')
         .where((name) => name.isNotEmpty)
         .toList();
+    final directTracks = (media['tracks'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((track) => SpokenTrack(
+              contentUrl: track['contentUrl'] as String? ?? '',
+              mimeType: track['mimeType'] as String? ?? 'audio/mpeg',
+              startOffset: (track['startOffset'] as num?)?.toDouble() ?? 0,
+              duration: (track['duration'] as num?)?.toDouble() ?? 0,
+            ))
+        .where((track) => track.contentUrl.isNotEmpty)
+        .toList();
     final episodes = (media['episodes'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((episode) => SpokenEpisode(
@@ -481,6 +500,7 @@ class AudiobookshelfApi {
       chapters: chapters,
       seriesNames: seriesNames,
       isFinished: (progress?['isFinished'] as bool? ?? false),
+      tracks: directTracks,
     );
   }
 

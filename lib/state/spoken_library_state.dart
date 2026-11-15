@@ -320,21 +320,48 @@ class SpokenLibraryState extends ChangeNotifier {
       await closeActiveSession();
     }
     final session = await api.startPlayback(item.id, episodeId: episode?.id);
-    final songs = _sessionSongs(api, session, item, episode);
+    // A play session may hand back an HLS transcode playlist (.m3u8),
+    // which the Windows engine cannot open - it stalls to the 20 s
+    // watchdog. When it does, the item's own media tracks are the
+    // direct-play URLs ABS clients stream; the session stays open for
+    // progress either way.
+    final isHls = session.tracks.any((track) =>
+        track.contentUrl.contains('/hls/') ||
+        track.contentUrl.endsWith('.m3u8'));
+    var trackSource = 'session';
+    var effective = session;
+    if (isHls && item.tracks.isNotEmpty) {
+      effective = AbsSession(
+        id: session.id,
+        currentTime: session.currentTime,
+        tracks: [
+          for (final track in item.tracks)
+            AbsTrack(
+              contentUrl: track.contentUrl,
+              mimeType: track.mimeType,
+              startOffset: track.startOffset,
+              duration: track.duration,
+            ),
+        ],
+      );
+      trackSource = 'itemTracks';
+    }
+    final session2 = effective;
+    final songs = _sessionSongs(api, session2, item, episode);
     // Which track holds the resume point, and how far into it. The session
     // currentTime is item/episode-relative; each track has its offset.
-    var trackIndex = session.tracks.length - 1;
-    for (var i = 0; i < session.tracks.length; i++) {
-      final candidate = session.tracks[i];
-      if (session.currentTime <
+    var trackIndex = session2.tracks.length - 1;
+    for (var i = 0; i < session2.tracks.length; i++) {
+      final candidate = session2.tracks[i];
+      if (session2.currentTime <
               candidate.startOffset + candidate.duration ||
-          i == session.tracks.length - 1) {
+          i == session2.tracks.length - 1) {
         trackIndex = i;
         break;
       }
     }
-    final track = session.tracks[trackIndex];
-    var within = session.currentTime - track.startOffset;
+    final track = session2.tracks[trackIndex];
+    var within = session2.currentTime - track.startOffset;
     if (within < 0) within = 0;
     if (track.duration > 1 && within > track.duration - 1) {
       within = track.duration - 1;
@@ -342,16 +369,16 @@ class SpokenLibraryState extends ChangeNotifier {
     var totalSeconds =
         (episode?.duration ?? item.duration).inMilliseconds / 1000.0;
     if (totalSeconds <= 0) {
-      totalSeconds = session.tracks.isEmpty
+      totalSeconds = session2.tracks.isEmpty
           ? 0
-          : session.tracks.last.startOffset + session.tracks.last.duration;
+          : session2.tracks.last.startOffset + session2.tracks.last.duration;
     }
 
     final progressId = episode == null ? item.id : '${item.id}/${episode.id}';
     final songIds = [for (final song in songs) song.id];
     final startOffsetById = {
       for (var i = 0; i < songs.length; i++)
-        songs[i].id: session.tracks[i].startOffset,
+        songs[i].id: session2.tracks[i].startOffset,
     };
     if (forQueue) {
       _queuedSessions[songs.first.id] = _QueuedAbsSession(
@@ -367,7 +394,8 @@ class SpokenLibraryState extends ChangeNotifier {
       PlaybackEventLog.instance.add('abs.session.queue', {
         'item': item.id,
         'episode': episode?.id,
-        'tracks': session.tracks.length,
+        'tracks': session2.tracks.length,
+        'src': trackSource,
       });
       return SpokenPlaybackSession(
         song: songs.first,
@@ -390,10 +418,11 @@ class SpokenLibraryState extends ChangeNotifier {
       'item': item.id,
       'episode': episode?.id,
       'session': session.id,
-      'tracks': session.tracks.length,
-      'resumeS': session.currentTime.round(),
+      'tracks': session2.tracks.length,
+      'resumeS': session2.currentTime.round(),
+      'src': trackSource,
       // Path only (never the query) so diagnostics show what was opened.
-      'url': Uri.parse(api.streamUrlOf(session.tracks.first)).path,
+      'url': Uri.parse(api.streamUrlOf(session2.tracks.first)).path,
     });
     return SpokenPlaybackSession(
       song: songs[trackIndex],
