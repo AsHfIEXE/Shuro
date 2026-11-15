@@ -330,6 +330,37 @@ class AudiobookshelfApi {
         'If this item is ebook-only there is nothing to stream.';
   }
 
+  /// Direct-play tracks from the FULL item (GET /api/items/:id). The
+  /// library LISTING omits media.tracks - this is the response that
+  /// carries each file's own /s/ contentUrl, i.e. the URLs ABS clients
+  /// stream when they direct-play.
+  Future<List<AbsTrack>> directTracks(String itemId) async {
+    final data = await _get('/items/$itemId');
+    final media = data['media'] as Map<String, dynamic>?;
+    final rows = _trackRows(media?['tracks']);
+    return [
+      for (final row in rows)
+        AbsTrack(
+          contentUrl: row['contentUrl'] as String? ?? '',
+          mimeType: row['mimeType'] as String? ?? 'audio/mpeg',
+          startOffset: (row['startOffset'] as num?)?.toDouble() ?? 0,
+          duration: (row['duration'] as num?)?.toDouble() ?? 0,
+        ),
+    ].where((track) => track.contentUrl.isNotEmpty).toList();
+  }
+
+  /// One-off status probe for a stream URL (diagnostics: names the exact
+  /// HTTP status the engine is failing on). Never throws.
+  Future<int?> probeUrl(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(
+          const Duration(seconds: 5));
+      return response.statusCode;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   /// Full stream URL for a session track. Session contentUrls already carry
   /// their own auth (`?token=<sessionId>`); appending a SECOND `token=`
   /// param makes the server read an array and reject the stream - so the

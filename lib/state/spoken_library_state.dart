@@ -329,24 +329,51 @@ class SpokenLibraryState extends ChangeNotifier {
         track.contentUrl.contains('/hls/') ||
         track.contentUrl.endsWith('.m3u8'));
     var trackSource = 'session';
-    var effective = session;
-    if (isHls && item.tracks.isNotEmpty) {
-      effective = AbsSession(
-        id: session.id,
-        currentTime: session.currentTime,
-        tracks: [
-          for (final track in item.tracks)
+    var playTracks = session.tracks;
+    if (isHls) {
+      // The engine cannot open the server's HLS playlist. Direct tracks,
+      // in order of cheapness: the listing's media.tracks (some servers
+      // include them), then the FULL item fetch - GET /api/items/:id is
+      // the response that actually carries each file's /s/ contentUrl.
+      var direct = item.tracks;
+      if (direct.isEmpty && episode == null) {
+        try {
+          direct = [
+            for (final track in await api.directTracks(item.id))
+              SpokenTrack(
+                contentUrl: track.contentUrl,
+                mimeType: track.mimeType,
+                startOffset: track.startOffset,
+                duration: track.duration,
+              ),
+          ];
+        } catch (_) {}
+      }
+      if (direct.isNotEmpty) {
+        playTracks = [
+          for (final track in direct)
             AbsTrack(
               contentUrl: track.contentUrl,
               mimeType: track.mimeType,
               startOffset: track.startOffset,
               duration: track.duration,
             ),
-        ],
-      );
-      trackSource = 'itemTracks';
+        ];
+        trackSource = item.tracks.isNotEmpty ? 'itemTracks' : 'itemFetch';
+      }
+      // Diagnostics: what does the HLS URL itself answer? (Non-blocking.)
+      unawaited(api
+          .probeUrl(api.streamUrlOf(session.tracks.first))
+          .then((status) {
+        PlaybackEventLog.instance
+            .add('abs.hls', {'status': status, 'fellBack': trackSource != 'session'});
+      }));
     }
-    final session2 = effective;
+    final session2 = AbsSession(
+      id: session.id,
+      currentTime: session.currentTime,
+      tracks: playTracks,
+    );
     final songs = _sessionSongs(api, session2, item, episode);
     // Which track holds the resume point, and how far into it. The session
     // currentTime is item/episode-relative; each track has its offset.
@@ -406,6 +433,17 @@ class SpokenLibraryState extends ChangeNotifier {
       );
     }
     _activeSessionId = session.id;
+    if (trackSource == 'itemTracks') {
+      // The server opened an ffmpeg transcode for the HLS session; the
+      // direct tracks make it pointless. Stop it now (flushing the session
+      // position) and keep syncing progress via PATCH only - syncSession
+      // no-ops on an empty session id.
+      _activeSessionId = null;
+      unawaited(api.closeSession(session.id,
+          currentTime: session.currentTime, duration: totalSeconds));
+      PlaybackEventLog.instance.add('abs.session.close',
+          {'session': session.id, 'src': 'hls-stopped'});
+    }
     _activeProgressId = progressId;
     _activeDuration = totalSeconds;
     _activeSongIds = songIds;
@@ -584,8 +622,10 @@ class SpokenLibraryState extends ChangeNotifier {
       await api.closeSession(sessionId,
           currentTime: seconds, duration: duration);
     }
-    PlaybackEventLog.instance.add('abs.session.close',
-        {'session': sessionId ?? '', 's': seconds?.round() ?? -1});
+    if (sessionId != null || progressId != null) {
+      PlaybackEventLog.instance.add('abs.session.close',
+          {'session': sessionId ?? '', 's': seconds?.round() ?? -1});
+    }
   }
 
   @override
