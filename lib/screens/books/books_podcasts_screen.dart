@@ -212,6 +212,10 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
 
     final books = state.bookItems;
     final shows = state.podcastShows;
+    final nothingToShow = !state.loading &&
+        books.isEmpty &&
+        shows.isEmpty &&
+        state.error == null;
     final inProgress = [
       ...books.where((b) => b.progress > 0 && b.progress < 1),
       for (final show in shows)
@@ -277,6 +281,45 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                       Expanded(
                           child: Text(state.error!,
                               style: _ts(12, c: _C.textSoft))),
+                    ]),
+                  ),
+                ],
+                if (nothingToShow) ...[
+                  const SizedBox(height: 26),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                        color: _C.card,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _C.border)),
+                    child: Column(children: [
+                      const Icon(Icons.library_books_rounded,
+                          color: _C.violetLight, size: 36),
+                      const SizedBox(height: 12),
+                      Text('No audiobooks or podcasts found',
+                          style: _ts(15, w: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      Text(
+                          'The server connected, but its libraries came back empty. Add items in Audiobookshelf (or check the library type) and refresh.',
+                          textAlign: TextAlign.center,
+                          style: _ts(13, c: _C.muted, h: 1.5)),
+                      const SizedBox(height: 14),
+                      _Hover(
+                        onTap: state.loading ? null : state.refresh,
+                        child: Container(
+                          height: 34,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          decoration: BoxDecoration(
+                              color: _C.violet.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(17),
+                              border: Border.all(
+                                  color: _C.violet.withValues(alpha: 0.6))),
+                          child: Text('Refresh',
+                              style: _ts(12,
+                                  w: FontWeight.w700, c: _C.violetPale)),
+                        ),
+                      ),
                     ]),
                   ),
                 ],

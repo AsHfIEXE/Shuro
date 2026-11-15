@@ -180,8 +180,7 @@ class SpokenLibraryState extends ChangeNotifier {
   /// items from podcast libraries.
   List<SpokenItem> get bookItems => [
         for (final item in allItems)
-          if (item.type == SpokenMediaType.book ||
-              item.episodes.isEmpty && item.duration > Duration.zero)
+          if (item.type == SpokenMediaType.book || item.episodes.isEmpty)
             item,
       ];
 
