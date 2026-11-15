@@ -297,11 +297,16 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                       const Icon(Icons.library_books_rounded,
                           color: _C.violetLight, size: 36),
                       const SizedBox(height: 12),
-                      Text('No audiobooks or podcasts found',
+                      Text(
+                          state.libraries.isEmpty
+                              ? 'Connected · 0 libraries visible'
+                              : 'No audiobooks or podcasts found',
                           style: _ts(15, w: FontWeight.w700)),
                       const SizedBox(height: 6),
                       Text(
-                          'The server connected, but its libraries came back empty. Add items in Audiobookshelf (or check the library type) and refresh.',
+                          state.libraries.isEmpty
+                              ? 'The token is valid but this user can see no libraries. In Audiobookshelf, give the user access to at least one library (Users → permissions) and refresh.'
+                              : 'The server connected and libraries exist, but they came back without items. Add items in Audiobookshelf and refresh.',
                           textAlign: TextAlign.center,
                           style: _ts(13, c: _C.muted, h: 1.5)),
                       const SizedBox(height: 14),
@@ -659,6 +664,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
           child: LayoutBuilder(builder: (context, c) {
             final compact = c.maxWidth < 640;
             final isNew = e.publishedAt != null &&
+                e.progressSeconds <= 0 &&
                 DateTime.now().difference(e.publishedAt!).inDays <= 7 &&
                 !DateTime.now().isBefore(e.publishedAt!);
             return Row(children: [
