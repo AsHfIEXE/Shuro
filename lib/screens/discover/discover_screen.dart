@@ -18,7 +18,7 @@ import '../../widgets/shimmer_box.dart';
 import '../../widgets/state_views.dart';
 import '../artist/artist_detail_screen.dart';
 import 'build_with_shuro_screen.dart';
-import 'pulse_dashboard.dart';
+import '../pulse/shuro_pulse_screen.dart';
 import 'smart_playlists_screen.dart';
 import '../../widgets/click_region.dart';
 
@@ -465,6 +465,16 @@ class _EntryPointsRow extends StatelessWidget {
               title: 'Build with Shuro',
               subtitle: 'Describe the mood, get a playlist',
               onTap: () => Navigator.of(context).push(drillDownRoute(const BuildWithShuroScreen())),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _EntryCard(
+              icon: Icons.graphic_eq_rounded,
+              title: 'Shuro Pulse',
+              subtitle: 'Your listening, charted',
+              onTap: () =>
+                  Navigator.of(context).push(drillDownRoute(const ShuroPulseScreen())),
             ),
           ),
         ],
