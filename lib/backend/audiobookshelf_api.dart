@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/spoken_media.dart';
+import '../playback/event_log.dart';
 
 class AudiobookshelfApiException implements Exception {
   const AudiobookshelfApiException(this.message);
@@ -171,41 +172,133 @@ class AudiobookshelfApi {
   /// This is the only playback path: the guessed direct file URL
   /// (`/api/items/:id/file/:index`) hangs on several servers, while the
   /// session's `contentUrl` is what ABS's own clients actually stream.
+  ///
+  /// Robust against server shape differences - the first integration only
+  /// read `audioTracks` and some servers answer the same POST with the
+  /// tracks elsewhere: tracks are accepted from the session's
+  /// `audioTracks`, the embedded `libraryItem.media.tracks`, a nested
+  /// `session` object, or (1.x style) a top-level `streamUrl`. And when a
+  /// forced direct play comes back empty, one retry without the force lets
+  /// the server choose its own method. Every attempt is logged with what
+  /// came back, so a future failure names the shape instead of guessing.
   Future<AbsSession> startPlayback(String itemId, {String? episodeId}) async {
-    final body = <String, dynamic>{
-      'deviceInfo': {
-        'deviceId': 'shuro-desktop',
-        'clientName': 'Shuro',
-        'deviceName': 'Shuro',
-      },
-      'forceTranscode': false,
-      'forceDirectPlay': true,
-      'mediaPlayer': 'just_audio',
-      'supportedMimeTypes': _supportedMimeTypes,
-      if (episodeId != null) 'episodeId': episodeId,
-    };
-    final data = await _post('/items/$itemId/play', body);
-    final tracks = <AbsTrack>[];
-    for (final row in (data['audioTracks'] as List<dynamic>? ?? const [])) {
-      if (row is! Map<String, dynamic>) continue;
-      final contentUrl = row['contentUrl'] as String? ?? '';
-      if (contentUrl.isEmpty) continue;
-      tracks.add(AbsTrack(
-        contentUrl: contentUrl,
-        mimeType: row['mimeType'] as String? ?? 'audio/mpeg',
-        startOffset: (row['startOffset'] as num?)?.toDouble() ?? 0,
-        duration: (row['duration'] as num?)?.toDouble() ?? 0,
-      ));
+    AudiobookshelfApiException? lastNoAudio;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final body = <String, dynamic>{
+        'deviceInfo': {
+          'deviceId': 'shuro-desktop',
+          'clientName': 'Shuro',
+          'deviceName': 'Shuro',
+        },
+        'forceTranscode': false,
+        // Attempt 0 prefers direct play (no server CPU, instant start).
+        // Some servers answer a forced direct play with an empty track
+        // list when they would rather transcode; attempt 1 lets the
+        // server decide.
+        'forceDirectPlay': attempt == 0,
+        'mediaPlayer': 'just_audio',
+        'supportedMimeTypes': _supportedMimeTypes,
+        if (episodeId != null) 'episodeId': episodeId,
+      };
+      final Map<String, dynamic> data;
+      try {
+        data = await _post('/items/$itemId/play', body);
+      } on AudiobookshelfApiException {
+        rethrow; // real HTTP errors surface immediately
+      } catch (_) {
+        continue; // timeout / socket: the other config is still worth one try
+      }
+      final extracted = _extractTracks(data);
+      PlaybackEventLog.instance.add('abs.play', {
+        'item': itemId,
+        'episode': episodeId,
+        'attempt': attempt,
+        'playMethod': data['playMethod'],
+        'via': extracted.via,
+        'tracks': extracted.tracks.length,
+      });
+      if (extracted.tracks.isNotEmpty) {
+        return AbsSession(
+          id: data['id'] as String? ?? '',
+          currentTime: (data['currentTime'] as num?)?.toDouble() ??
+              (data['startTime'] as num?)?.toDouble() ??
+              0,
+          tracks: extracted.tracks,
+        );
+      }
+      lastNoAudio = AudiobookshelfApiException(_noAudioMessage(data));
     }
+    PlaybackEventLog.instance.add('abs.play.fail', {
+      'item': itemId,
+      'episode': episodeId,
+      'msg': lastNoAudio?.message ?? 'no answer',
+    });
+    throw lastNoAudio ??
+        const AudiobookshelfApiException(
+            'Audiobookshelf did not answer the play request.');
+  }
+
+  /// Pulls playable tracks out of a play response, wherever this server
+  /// decided to put them.
+  ({List<AbsTrack> tracks, String via}) _extractTracks(
+      Map<String, dynamic> data) {
+    var via = 'audioTracks';
+    var rows = _trackRows(data['audioTracks']);
+    if (rows.isEmpty) {
+      // The play response embeds the full library item; its media.tracks
+      // are the documented direct-play Track objects.
+      final embedded = data['libraryItem'] as Map<String, dynamic>?;
+      final media = embedded?['media'] as Map<String, dynamic>?;
+      rows = _trackRows(media?['tracks']);
+      if (rows.isNotEmpty) via = 'libraryItem.media.tracks';
+    }
+    if (rows.isEmpty) {
+      final nested = data['session'] as Map<String, dynamic>?;
+      if (nested != null) {
+        rows = _trackRows(nested['audioTracks']);
+        if (rows.isNotEmpty) via = 'session.audioTracks';
+      }
+    }
+    var tracks = [
+      for (final row in rows)
+        AbsTrack(
+          contentUrl: row['contentUrl'] as String? ?? '',
+          mimeType: row['mimeType'] as String? ?? 'audio/mpeg',
+          startOffset: (row['startOffset'] as num?)?.toDouble() ?? 0,
+          duration: (row['duration'] as num?)?.toDouble() ?? 0,
+        ),
+    ].where((track) => track.contentUrl.isNotEmpty).toList();
     if (tracks.isEmpty) {
-      throw const AudiobookshelfApiException(
-          'Audiobookshelf returned no audio for this item.');
+      // 1.x-style single stream URL.
+      final stream = data['streamUrl'] as String?;
+      if (stream != null && stream.isNotEmpty) {
+        tracks = [
+          AbsTrack(
+            contentUrl: stream,
+            mimeType: 'audio/mpeg',
+            startOffset: 0,
+            duration: (data['duration'] as num?)?.toDouble() ?? 0,
+          ),
+        ];
+        via = 'streamUrl';
+      }
     }
-    return AbsSession(
-      id: data['id'] as String? ?? '',
-      currentTime: (data['currentTime'] as num?)?.toDouble() ?? 0,
-      tracks: tracks,
-    );
+    return (tracks: tracks, via: via);
+  }
+
+  List<Map<String, dynamic>> _trackRows(dynamic raw) {
+    if (raw is Map<String, dynamic>) return [raw];
+    if (raw is! List) return const [];
+    return [for (final row in raw) if (row is Map<String, dynamic>) row];
+  }
+
+  String _noAudioMessage(Map<String, dynamic> data) {
+    final tracks = data['audioTracks'];
+    return 'Audiobookshelf returned no audio for this item '
+        '(playMethod=${data['playMethod'] ?? '?'}, '
+        'mediaType=${data['mediaType'] ?? '?'}, '
+        'audioTracks=${tracks is List ? tracks.length : 'absent'}). '
+        'If this item is ebook-only there is nothing to stream.';
   }
 
   /// Full stream URL for a session track - `contentUrl` plus the token the
@@ -222,15 +315,18 @@ class AudiobookshelfApi {
       _uri('/items/$itemId/cover', {'token': token});
 
   /// Reports position back to the server (`itemId` or `itemId/episodeId`).
+  /// [forceFinished] drives "Mark as played" independent of the fraction.
   Future<void> saveProgress(String id,
-      {required double currentTime, required double duration}) async {
+      {required double currentTime,
+      required double duration,
+      bool? forceFinished}) async {
     final progress =
         duration <= 0 ? 0.0 : (currentTime / duration).clamp(0.0, 1.0);
     await _patch('/me/progress/$id', {
       'currentTime': currentTime,
       'duration': duration,
       'progress': progress,
-      'isFinished': progress >= 0.99,
+      'isFinished': forceFinished ?? progress >= 0.99,
     });
   }
 
@@ -268,11 +364,62 @@ class AudiobookshelfApi {
     } catch (_) {}
   }
 
+  // --- Bookmarks (ABS user bookmarks, time-keyed per item) -------------------
+
+  Future<void> _delete(String path) async {
+    final response = await http
+        .delete(_uri(path), headers: _headers)
+        .timeout(const Duration(seconds: 8));
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw const AudiobookshelfApiException(
+          'Audiobookshelf rejected that API token.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AudiobookshelfApiException(
+          'Audiobookshelf returned ${response.statusCode}.');
+    }
+  }
+
+  /// All of the user's bookmarks (raw rows; filtered per item by the state).
+  Future<List<Map<String, dynamic>>> bookmarks() async {
+    final me = await _get('/me');
+    return [
+      for (final row in (me['bookmarks'] as List<dynamic>? ?? const []))
+        if (row is Map<String, dynamic>) row
+    ];
+  }
+
+  Future<void> addBookmark(String itemId,
+          {required double time, required String title}) =>
+      _post('/me/item/$itemId/bookmark', {'time': time, 'title': title});
+
+  Future<void> removeBookmark(String itemId, double time) async {
+    // The bookmark's time is its id in the ABS API.
+    final key = time == time.roundToDouble()
+        ? time.toInt().toString()
+        : time.toString();
+    await _delete('/me/item/$itemId/bookmark/$key');
+  }
+
   SpokenItem _item(Map<String, dynamic> row, SpokenMediaType type) {
     final media = row['media'] as Map<String, dynamic>? ?? const {};
     final metadata = media['metadata'] as Map<String, dynamic>? ?? const {};
     final duration = (media['duration'] as num?)?.toDouble() ?? 0;
     final progress = row['userMediaProgress'] as Map<String, dynamic>?;
+    final chapters = (media['chapters'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((chapter) => SpokenChapter(
+              id: (chapter['id'] as num?)?.toInt() ?? 0,
+              start: (chapter['start'] as num?)?.toDouble() ?? 0,
+              end: (chapter['end'] as num?)?.toDouble() ?? 0,
+              title: chapter['title'] as String? ?? '',
+            ))
+        .toList();
+    final seriesNames = (metadata['series'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((series) => series['name'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toList();
     final episodes = (media['episodes'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((episode) => SpokenEpisode(
@@ -291,8 +438,7 @@ class AudiobookshelfApi {
                           as Map<String, dynamic>?)?['currentTime'] as num?)
                       ?.toDouble() ??
                   0,
-              publishedAt:
-                  DateTime.tryParse(episode['publishedAt'] as String? ?? ''),
+              publishedAt: _parseDate(episode['publishedAt']),
             ))
         .toList();
     return SpokenItem(
@@ -309,6 +455,18 @@ class AudiobookshelfApi {
       coverUrl: _uri('/items/${row['id']}/cover').toString(),
       progressSeconds: (progress?['currentTime'] as num?)?.toDouble() ?? 0,
       episodes: episodes,
+      chapters: chapters,
+      seriesNames: seriesNames,
+      isFinished: (progress?['isFinished'] as bool? ?? false),
     );
+  }
+
+  /// ABS sends episode publish stamps as epoch milliseconds; some builds
+  /// send ISO strings. Accept both - a wrong assumption here killed every
+  /// NEW badge and date in the list.
+  DateTime? _parseDate(dynamic value) {
+    if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 }

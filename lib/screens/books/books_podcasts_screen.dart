@@ -106,6 +106,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
   final ScrollController _scroll = ScrollController();
   String _filter = 'All';
   bool _showAll = false;
+  bool _showAllEpisodes = false;
 
   @override
   void dispose() {
@@ -146,7 +147,8 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
   /// hands back the audio tracks it wants streamed, resume comes from the
   /// session's own currentTime, and progress syncs back every 15 s while
   /// those songs are what's playing.
-  Future<void> _play(SpokenItem item, {SpokenEpisode? episode}) async {
+  Future<void> _play(SpokenItem item,
+      {SpokenEpisode? episode, Duration? startAt}) async {
     final state = context.read<SpokenLibraryState>();
     final player = context.read<PlayerController>();
     try {
@@ -158,16 +160,69 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         if (mounted) _toast('Not connected — reconnect Audiobookshelf.');
         return;
       }
-      await player.playSong(session.song,
-          queue: session.queue,
-          startAt:
-              session.resumeAt > Duration.zero ? session.resumeAt : null);
+      // A chapter jump overrides the server resume point; otherwise resume
+      // wherever the server last left off.
+      final at = startAt ??
+          (session.resumeAt > Duration.zero ? session.resumeAt : null);
+      await player.playSong(session.song, queue: session.queue, startAt: at);
+      // Per-book speed memory: books read at 1.75x stay at 1.75x.
+      final speed = await state.savedSpeedFor(session.progressId);
+      if (speed > 0 && speed != player.playbackSpeed) {
+        player.playbackSpeed = speed;
+        await player.applyPlaybackTweaksNow();
+      }
       if (mounted) _toast('Playing ${session.song.title}');
     } on AudiobookshelfApiException catch (e) {
       if (mounted) _toast(e.message);
     } catch (_) {
       if (mounted) _toast('Playback failed — the server did not answer.');
     }
+  }
+
+  /// Opens a session for a queued play ("Add to queue"): the sync tick
+  /// adopts it the moment the player reaches the song.
+  Future<void> _queue(SpokenItem item, {SpokenEpisode? episode}) async {
+    final state = context.read<SpokenLibraryState>();
+    final player = context.read<PlayerController>();
+    try {
+      final session = await state.openSession(item,
+          episode: episode,
+          forQueue: true,
+          positionReader: () => player.position,
+          songIdReader: () => player.currentSong?.id);
+      if (session == null) {
+        if (mounted) _toast('Not connected — reconnect Audiobookshelf.');
+        return;
+      }
+      if (player.queue.isEmpty) {
+        // addToQueue with an empty queue starts playback immediately.
+        await _play(item, episode: episode);
+        return;
+      }
+      player.addToQueue(session.song);
+      if (mounted) _toast('Added ${session.song.title} to the queue');
+    } on AudiobookshelfApiException catch (e) {
+      if (mounted) _toast(e.message);
+    } catch (_) {
+      if (mounted) _toast('Could not add — the server did not answer.');
+    }
+  }
+
+  /// Latest episodes across every show, newest first (nulls last).
+  List<(SpokenItem, SpokenEpisode)> _latestEpisodes(List<SpokenItem> shows) {
+    final pairs = <(SpokenItem, SpokenEpisode)>[
+      for (final show in shows)
+        for (final episode in show.episodes) (show, episode),
+    ];
+    pairs.sort((a, b) {
+      final ap = a.$2.publishedAt;
+      final bp = b.$2.publishedAt;
+      if (ap == null && bp == null) return 0;
+      if (ap == null) return 1;
+      if (bp == null) return -1;
+      return bp.compareTo(ap);
+    });
+    return pairs;
   }
 
   Future<void> _connect() async {
@@ -251,6 +306,9 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
 
     final showBooks = _filter == 'All' || _filter == 'Audiobooks';
     final showPods = _filter == 'All' || _filter == 'Podcasts';
+    final showSeries = _filter == 'Series';
+    final seriesGroups = state.seriesGroups;
+    final latest = _latestEpisodes(shows);
 
     return Container(
       color: _C.bg,
@@ -371,17 +429,46 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                   _audiobookShelf(books, playingId),
                   const SizedBox(height: 30),
                 ],
-                if (showPods && shows.isNotEmpty) ...[
-                  _section('Podcasts'),
+                if (showPods && latest.isNotEmpty) ...[
+                  _section('Podcasts · latest episodes',
+                      trailing: latest.length > 4
+                          ? _link(
+                              _showAllEpisodes
+                                  ? 'Show less'
+                                  : 'Show all ${latest.length}',
+                              () => setState(
+                                  () => _showAllEpisodes = !_showAllEpisodes))
+                          : null),
                   const SizedBox(height: 14),
-                  ...[
-                    for (final show in shows) ...[
-                      _section(show.title),
-                      const SizedBox(height: 10),
-                      _episodeList(show, playingId),
-                      const SizedBox(height: 24),
-                    ],
-                  ],
+                  _latestCard(latest, playingId),
+                  const SizedBox(height: 30),
+                ],
+                if (showSeries) ...[
+                  _section('Series'),
+                  const SizedBox(height: 14),
+                  if (seriesGroups.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                          color: _C.card,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _C.border)),
+                      child: Column(children: [
+                        const Icon(Icons.collections_bookmark_rounded,
+                            color: _C.violetLight, size: 36),
+                        const SizedBox(height: 12),
+                        Text('No series metadata on this server yet',
+                            style: _ts(15, w: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        Text(
+                            'Series come from your audiobook tags in Audiobookshelf. Give books matching series tags and they will appear here.',
+                            textAlign: TextAlign.center,
+                            style: _ts(13, c: _C.muted, h: 1.5)),
+                      ]),
+                    )
+                  else
+                    _seriesGrid(seriesGroups),
                 ],
               ],
             ),
@@ -431,7 +518,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final f in const ['All', 'Audiobooks', 'Podcasts'])
+          for (final f in const ['All', 'Audiobooks', 'Podcasts', 'Series'])
             _chip(f, state),
         ],
       );
@@ -564,7 +651,11 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 Text(
-                    episode == null ? item.creator : 'Podcast · ${item.title}',
+                    episode == null
+                        ? (item.episodes.isNotEmpty
+                            ? '${item.creator} · ${item.episodes.length} episodes'
+                            : '${item.creator} · ${_hoursLabel(item.duration)}')
+                        : 'Podcast · ${item.title}',
                     style: _ts(13, c: _C.muted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
@@ -663,20 +754,27 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
     );
   }
 
-  // ── Episodes ──────────────────────────────────────────────────────────────
-  Widget _episodeList(SpokenItem show, String? playingId) => Container(
-        decoration: BoxDecoration(
-          color: _C.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _C.border),
-        ),
-        padding: const EdgeInsets.all(8),
-        child: Column(children: [
-          for (var i = 0; i < show.episodes.length; i++)
-            _episodeRow(show, show.episodes[i], i < show.episodes.length - 1,
-                playingId),
-        ]),
-      );
+  // ── Episodes (aggregated latest card) ────────────────────────────────────
+  Widget _latestCard(
+      List<(SpokenItem, SpokenEpisode)> latest, String? playingId) {
+    final rows = _showAllEpisodes ? latest : latest.take(4).toList();
+    final body = Container(
+      decoration: BoxDecoration(
+        color: _C.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _C.border),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Column(children: [
+        for (var i = 0; i < rows.length; i++)
+          _episodeRow(rows[i].$1, rows[i].$2, i < rows.length - 1, playingId),
+      ]),
+    );
+    if (!_showAllEpisodes || rows.length <= 12) return body;
+    // "Show all" on a big feed: scroll inside the card instead of building
+    // a thousand-row column on the page.
+    return SizedBox(height: 560, child: SingleChildScrollView(child: body));
+  }
 
   Widget _episodeRow(
       SpokenItem show, SpokenEpisode e, bool divider, String? playingId) {
@@ -757,6 +855,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                 onTap: () => _play(show, episode: e),
               ),
               const SizedBox(width: 6),
+              _episodeMenu(show, e),
             ]);
           }),
         ),
@@ -767,6 +866,200 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 12),
             color: _C.borderSoft),
     ]);
+  }
+
+  /// Real actions only: play, queue (own play session, adopted when it
+  /// starts), and mark-as-played via the progress API.
+  Widget _episodeMenu(SpokenItem show, SpokenEpisode e) =>
+      PopupMenuButton<String>(
+        tooltip: 'More',
+        color: _C.raised,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: _C.border)),
+        icon: const Icon(Icons.more_horiz_rounded,
+            size: 20, color: Color(0xFF6F7890)),
+        onSelected: (value) {
+          switch (value) {
+            case 'play':
+              _play(show, episode: e);
+              break;
+            case 'queue':
+              _queue(show, episode: e);
+              break;
+            case 'played':
+              context
+                  .read<SpokenLibraryState>()
+                  .markPlayed(show, episode: e)
+                  .then((_) {
+                if (mounted) _toast('Marked as played');
+              }).catchError((_) {
+                if (mounted) _toast('Could not reach the server.');
+              });
+              break;
+          }
+        },
+        itemBuilder: (_) => [
+          _menuItem('play', Icons.play_arrow_rounded, 'Play now'),
+          _menuItem('queue', Icons.queue_music_rounded, 'Add to queue'),
+          _menuItem(
+              'played', Icons.check_circle_outline_rounded, 'Mark as played'),
+        ],
+      );
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) =>
+      PopupMenuItem(
+          value: value,
+          height: 38,
+          child: Row(children: [
+            Icon(icon, size: 16, color: _C.textSoft),
+            const SizedBox(width: 10),
+            Text(label, style: _ts(13)),
+          ]));
+
+  // ── Series ─────────────────────────────────────────────────────────
+  Widget _seriesGrid(Map<String, List<SpokenItem>> groups) =>
+      LayoutBuilder(builder: (context, c) {
+        final n = c.maxWidth > 1000
+            ? 4
+            : c.maxWidth > 600
+                ? 2
+                : 1;
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: n,
+          mainAxisSpacing: 20,
+          crossAxisSpacing: 20,
+          childAspectRatio: 268 / 120,
+          children: [
+            for (final entry in groups.entries)
+              _seriesCard(entry.key, entry.value),
+          ],
+        );
+      });
+
+  Widget _seriesCard(String name, List<SpokenItem> items) {
+    final colors = _coverFor(items.first.id);
+    return _Hover(
+      onTap: () => _openSeries(name, items),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: _grad(colors),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _C.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(name,
+                style: _ts(16, w: FontWeight.w800),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text('${items.length} book${items.length == 1 ? '' : 's'}',
+                style: _ts(12, c: _C.textSoft)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openSeries(String name, List<SpokenItem> items) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _C.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: _C.border),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.62,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (_, sc) => ListView(
+          controller: sc,
+          padding: const EdgeInsets.all(24),
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: _C.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(name, style: _ts(22, w: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('${items.length} book${items.length == 1 ? '' : 's'}',
+                style: _ts(13, c: _C.muted)),
+            const SizedBox(height: 18),
+            for (final book in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _Hover(
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _play(book);
+                  },
+                  child: Container(
+                    height: 64,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _C.raised,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _C.borderSoft),
+                    ),
+                    child: Row(children: [
+                      _cover(
+                          w: 48,
+                          h: 48,
+                          r: 8,
+                          colors: _coverFor(book.id),
+                          shadow: false,
+                          url: _coverUrlOf(book)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(book.title,
+                                style: _ts(14, w: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text(book.creator,
+                                style: _ts(12, c: _C.muted),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _rail(value: book.progress, height: 3),
+                      const SizedBox(width: 12),
+                      _playButton(
+                          size: 34,
+                          subtle: true,
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            _play(book);
+                          }),
+                    ]),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Shared primitives ─────────────────────────────────────────────────────
@@ -885,6 +1178,8 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         maxChildSize: 0.9,
         builder: (_, sc) => Builder(builder: (sheetContext) {
           final spoken = sheetContext.read<SpokenLibraryState>();
+          final player = sheetContext.read<PlayerController>();
+          final isThisPlaying = _isAbsPlaying(player.currentSong?.id, b);
           return ListView(
           controller: sc,
           padding: const EdgeInsets.all(24),
@@ -961,6 +1256,67 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                 ),
               ),
             ]),
+            const SizedBox(height: 20),
+            // Player tools for this book: sleep (chapter-aware), speed
+            // (remembered per book), bookmarks (stored on the server).
+            Row(children: [
+              _sheetTool(
+                icon: Icons.bedtime_rounded,
+                label: 'Sleep',
+                onTap: () => _openSleepMenu(b, player, isThisPlaying),
+              ),
+              const SizedBox(width: 10),
+              _sheetTool(
+                icon: Icons.speed_rounded,
+                label: 'Speed',
+                onTap: () => _openSpeedMenu(b, spoken, player),
+              ),
+              const SizedBox(width: 10),
+              _sheetTool(
+                icon: Icons.bookmark_border_rounded,
+                label: 'Bookmarks',
+                onTap: () => _openBookmarks(b, isThisPlaying),
+              ),
+            ]),
+            if (b.chapters.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _section('Chapters'),
+              const SizedBox(height: 8),
+              ...b.chapters.map((chapter) {
+                final start = Duration(seconds: chapter.start.round());
+                return _Hover(
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    if (_isAbsPlaying(player.currentSong?.id, b)) {
+                      player.seekTo(start);
+                    } else {
+                      _play(b, startAt: start);
+                    }
+                  },
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Row(children: [
+                      SizedBox(
+                          width: 34,
+                          child: Text('${chapter.id + 1}',
+                              style: _ts(12, c: _C.faint))),
+                      Expanded(
+                          child: Text(
+                              chapter.title.isEmpty
+                                  ? 'Chapter ${chapter.id + 1}'
+                                  : chapter.title,
+                              style: _ts(13, c: _C.textSoft),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis)),
+                      Text(_hoursLabel(start), style: _ts(12, c: _C.faint)),
+                    ]),
+                  ),
+                );
+              }),
+            ],
             if (b.description.isNotEmpty) ...[
               const SizedBox(height: 24),
               _section('About'),
@@ -974,6 +1330,321 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
       ),
     );
   }
+  // ── Sheet tools ───────────────────────────────────────────────────────────
+  Widget _sheetTool(
+          {required IconData icon,
+          required String label,
+          required VoidCallback onTap}) =>
+      _Hover(
+        onTap: onTap,
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: const Color(0x0FFFFFFF),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: _C.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: _C.textSoft),
+            const SizedBox(width: 8),
+            Text(label, style: _ts(12, w: FontWeight.w600, c: _C.textSoft)),
+          ]),
+        ),
+      );
+
+  /// Sleep timer on the real player machinery (fade, pause, restore). The
+  /// book-aware extra: fall asleep at the END of the current chapter.
+  void _openSleepMenu(
+      SpokenItem b, PlayerController player, bool isThisPlaying) {
+    // Entries carry their own onTap so they work inside a plain dialog.
+    List<PopupMenuItem<String>> entries(void Function() close) => [
+          if (isThisPlaying && b.chapters.isNotEmpty)
+            PopupMenuItem<String>(
+              value: 'chapter',
+              height: 38,
+              onTap: () {
+                close();
+                final seconds = player.position.inMilliseconds / 1000.0;
+                SpokenChapter chapter = b.chapters.last;
+                for (final candidate in b.chapters) {
+                  if (candidate.end > seconds) {
+                    chapter = candidate;
+                    break;
+                  }
+                }
+                final remaining =
+                    (chapter.end - seconds).clamp(0.0, double.infinity);
+                player.startSleepTimer(Duration(seconds: remaining.round()),
+                    fadeOut: true);
+                _toast('Sleeping at end of chapter');
+              },
+              child: Row(children: [
+                const Icon(Icons.auto_stories_rounded,
+                    size: 16, color: _C.textSoft),
+                const SizedBox(width: 10),
+                Text('End of chapter', style: _ts(13)),
+              ]),
+            ),
+          for (final minutes in const [10, 20, 30, 45, 60])
+            PopupMenuItem<String>(
+              value: '$minutes',
+              height: 38,
+              onTap: () {
+                close();
+                player.startSleepTimer(Duration(minutes: minutes),
+                    fadeOut: true);
+                _toast('Sleeping in $minutes minutes');
+              },
+              child: Row(children: [
+                const Icon(Icons.timer_outlined, size: 16, color: _C.textSoft),
+                const SizedBox(width: 10),
+                Text('$minutes minutes', style: _ts(13)),
+              ]),
+            ),
+          if (player.sleepUntil != null)
+            PopupMenuItem<String>(
+              value: 'cancel',
+              height: 38,
+              onTap: () {
+                close();
+                player.cancelSleepTimer();
+                _toast('Sleep timer cancelled');
+              },
+              child: Row(children: [
+                const Icon(Icons.timer_off_rounded, size: 16, color: _C.pink),
+                const SizedBox(width: 10),
+                Text('Cancel timer', style: _ts(13)),
+              ]),
+            ),
+        ];
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _C.card,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.border)),
+        title: Row(children: [
+          const Icon(Icons.bedtime_rounded, color: _C.violetLight, size: 18),
+          const SizedBox(width: 8),
+          Text('Sleep timer', style: _ts(16, w: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in entries(() => Navigator.pop(dialogContext)))
+              entry,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSpeedMenu(SpokenItem b, SpokenLibraryState spoken,
+      PlayerController player) async {
+    final speed = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _C.card,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.border)),
+        title: Row(children: [
+          const Icon(Icons.speed_rounded, color: _C.violetLight, size: 18),
+          const SizedBox(width: 8),
+          Text('Playback speed', style: _ts(16, w: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Remembered for this book.',
+                style: _ts(12, c: _C.muted)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final value
+                    in const [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0])
+                  _Hover(
+                    onTap: () => Navigator.pop(dialogContext, value),
+                    child: Container(
+                      width: 56,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: (player.playbackSpeed - value).abs() < 0.01
+                            ? _C.violet
+                            : const Color(0x0FFFFFFF),
+                        borderRadius: BorderRadius.circular(17),
+                        border: Border.all(color: _C.border),
+                      ),
+                      child: Text('${value}x',
+                          style: _ts(12,
+                              w: FontWeight.w600,
+                              c: (player.playbackSpeed - value).abs() < 0.01
+                                  ? Colors.white
+                                  : _C.textSoft)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (speed == null || !mounted) return;
+    player.playbackSpeed = speed;
+    await player.applyPlaybackTweaksNow();
+    await spoken.saveSpeedFor(b.id, speed);
+    setState(() {});
+    _toast('Speed ${speed}x — remembered for this book');
+  }
+
+  Future<void> _openBookmarks(SpokenItem b, bool isThisPlaying) async {
+    await showDialog(
+      context: context,
+      builder: (_) => _BookmarksDialog(
+          item: b,
+          spoken: context.read<SpokenLibraryState>(),
+          player: context.read<PlayerController>(),
+          isThisPlaying: isThisPlaying),
+    );
+  }
+
+}
+
+/// Server-side bookmarks for one item: list, add-at-position, jump, remove.
+class _BookmarksDialog extends StatefulWidget {
+  final SpokenItem item;
+  final SpokenLibraryState spoken;
+  final PlayerController player;
+  final bool isThisPlaying;
+  const _BookmarksDialog(
+      {required this.item,
+      required this.spoken,
+      required this.player,
+      required this.isThisPlaying});
+  @override
+  State<_BookmarksDialog> createState() => _BookmarksDialogState();
+}
+
+class _BookmarksDialogState extends State<_BookmarksDialog> {
+  List<Map<String, dynamic>>? _rows;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await widget.spoken.bookmarksFor(widget.item.id);
+      if (mounted) setState(() => _rows = rows);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not reach the server.');
+    }
+  }
+
+  String _mmss(double seconds) {
+    final s = seconds.round();
+    return '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        backgroundColor: _C.card,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.border)),
+        title: Row(children: [
+          const Icon(Icons.bookmark_rounded, color: _C.violetLight, size: 18),
+          const SizedBox(width: 8),
+          Text('Bookmarks', style: _ts(16, w: FontWeight.w700)),
+        ]),
+        content: SizedBox(
+          width: 380,
+          child: _error != null
+              ? Text(_error!, style: _ts(13, c: _C.pink))
+              : _rows == null
+                  ? const Center(
+                      child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: _C.violet)))
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.isThisPlaying)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                final time = widget.player.position.inSeconds
+                                    .toDouble();
+                                await widget.spoken.addBookmark(
+                                    widget.item.id,
+                                    time: time,
+                                    title:
+                                        'Bookmark at ${_mmss(time)}');
+                                await _load();
+                              },
+                              icon: const Icon(Icons.bookmark_add_rounded,
+                                  size: 16, color: _C.violetLight),
+                              label: Text('Bookmark here',
+                                  style: _ts(13, c: _C.violetLight)),
+                            ),
+                          ),
+                        if (_rows!.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            child: Text(
+                                widget.isThisPlaying
+                                    ? 'No bookmarks yet — bookmark the current spot.'
+                                    : 'No bookmarks yet. Play this book to add one at the current spot.',
+                                textAlign: TextAlign.center,
+                                style: _ts(13, c: _C.muted, h: 1.5)),
+                          ),
+                        for (final row in _rows!)
+                          ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                                (row['title'] as String?) ?? 'Bookmark',
+                                style: _ts(13),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                _mmss((row['time'] as num?)?.toDouble() ?? 0),
+                                style: _ts(12, c: _C.faint)),
+                            onTap: widget.isThisPlaying
+                                ? () {
+                                    final time =
+                                        (row['time'] as num?)?.toDouble() ?? 0;
+                                    widget.player.seekTo(Duration(
+                                        seconds: time.round()));
+                                    Navigator.pop(context);
+                                  }
+                                : null,
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded,
+                                  size: 16, color: _C.faint),
+                              onPressed: () async {
+                                await widget.spoken.removeBookmark(
+                                    widget.item.id,
+                                    (row['time'] as num?)?.toDouble() ?? 0);
+                                await _load();
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -51,6 +51,11 @@ class SpokenLibraryState extends ChangeNotifier {
   /// the last refresh; this is what happened since.
   final Map<String, double> _liveProgress = {};
 
+  /// Sessions opened for songs that were QUEUED, not played. The sync tick
+  /// promotes one to the active session the moment the player reaches it,
+  /// so queued books sync progress too.
+  final Map<String, _QueuedAbsSession> _queuedSessions = {};
+
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
   List<SpokenLibrary> get podcastLibraries =>
@@ -221,6 +226,81 @@ class SpokenLibraryState extends ChangeNotifier {
   double? liveProgressSecondsFor(SpokenItem item, {SpokenEpisode? episode}) =>
       _liveProgress[episode == null ? item.id : '${item.id}/${episode.id}'];
 
+  /// Series name -> books carrying that series (from item metadata; ABS
+  /// maintains series on scan). Sorted by name, books in library order.
+  Map<String, List<SpokenItem>> get seriesGroups {
+    final groups = <String, List<SpokenItem>>{};
+    for (final item in bookItems) {
+      for (final name in item.seriesNames) {
+        groups.putIfAbsent(name, () => []).add(item);
+      }
+    }
+    final names = groups.keys.toList()..sort();
+    return {for (final name in names) name: groups[name]!};
+  }
+
+  /// "Mark as played" - reports the full duration as finished, and updates
+  /// the live position so rails and the NEW badge react immediately.
+  Future<void> markPlayed(SpokenItem item, {SpokenEpisode? episode}) async {
+    final api = _api;
+    if (api == null) return;
+    final progressId = episode == null ? item.id : '${item.id}/${episode.id}';
+    final total =
+        (episode?.duration ?? item.duration).inMilliseconds / 1000.0;
+    await api.saveProgress(progressId,
+        currentTime: total > 0 ? total : 1,
+        duration: total,
+        forceFinished: true);
+    _liveProgress[progressId] = total;
+    notifyListeners();
+    PlaybackEventLog.instance.add('abs.mark', {'id': progressId});
+  }
+
+  // --- Per-book playback speed memory ----------------------------------------
+  static const _speedKey = 'abs_speed_v1';
+
+  Future<double> savedSpeedFor(String progressId) async {
+    try {
+      final store = await AppPersistence.load();
+      final raw = store.getString(_speedKey);
+      if (raw == null) return 1.0;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return (map[progressId] as num?)?.toDouble() ?? 1.0;
+    } catch (_) {
+      return 1.0;
+    }
+  }
+
+  Future<void> saveSpeedFor(String progressId, double speed) async {
+    try {
+      final store = await AppPersistence.load();
+      final map = <String, dynamic>{};
+      final raw = store.getString(_speedKey);
+      if (raw != null) map.addAll(jsonDecode(raw) as Map<String, dynamic>);
+      map[progressId] = speed;
+      await store.setString(_speedKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  // --- Bookmarks (passthrough to the API, filtered per item) -----------------
+
+  Future<List<Map<String, dynamic>>> bookmarksFor(String itemId) async {
+    final rows = await _api?.bookmarks() ?? const <Map<String, dynamic>>[];
+    return [
+      for (final row in rows)
+        if (row['libraryItemId'] == itemId) row
+    ];
+  }
+
+  Future<void> addBookmark(String itemId,
+      {required double time, required String title}) async {
+    await _api?.addBookmark(itemId, time: time, title: title);
+  }
+
+  Future<void> removeBookmark(String itemId, double time) async {
+    await _api?.removeBookmark(itemId, time);
+  }
+
   /// Opens a real ABS play session for a book or episode and returns the
   /// playable queue: one [Song] per server-issued audio track, resuming at
   /// the server-known position. This replaced the guessed
@@ -229,35 +309,18 @@ class SpokenLibraryState extends ChangeNotifier {
   Future<SpokenPlaybackSession?> openSession(SpokenItem item,
       {SpokenEpisode? episode,
       Duration Function()? positionReader,
-      String? Function()? songIdReader}) async {
+      String? Function()? songIdReader,
+      bool forQueue = false}) async {
     final api = _api;
     if (api == null || connection == null) return null;
-    // One session at a time: flush the old one's final position before the
-    // server opens the next.
-    await closeActiveSession();
+    if (!forQueue) {
+      // One ACTIVE session at a time: flush the old one's final position
+      // before the server opens the next. A queued session must NOT close
+      // whatever is playing right now.
+      await closeActiveSession();
+    }
     final session = await api.startPlayback(item.id, episodeId: episode?.id);
-    final baseId =
-        episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}';
-    final cover = NetworkImage(api.coverUrl(item.id).toString());
-    final songs = <Song>[
-      for (var i = 0; i < session.tracks.length; i++)
-        Song(
-          // Track 0 keeps the plain id the playing-highlight keys expect;
-          // later tracks suffix _t<i> so queue ids stay unique.
-          id: i == 0 ? baseId : '${baseId}_t$i',
-          title: session.tracks.length > 1
-              ? '${episode?.title ?? item.title} (${i + 1}/${session.tracks.length})'
-              : (episode?.title ?? item.title),
-          artist: episode == null ? item.creator : item.title,
-          artistId: '',
-          albumId: '',
-          duration: Duration(
-              milliseconds: (session.tracks[i].duration * 1000).round()),
-          gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
-          artwork: cover,
-          localFilePath: api.streamUrlOf(session.tracks[i]),
-        ),
-    ];
+    final songs = _sessionSongs(api, session, item, episode);
     // Which track holds the resume point, and how far into it. The session
     // currentTime is item/episode-relative; each track has its offset.
     var trackIndex = session.tracks.length - 1;
@@ -284,17 +347,44 @@ class SpokenLibraryState extends ChangeNotifier {
           : session.tracks.last.startOffset + session.tracks.last.duration;
     }
 
-    _activeSessionId = session.id;
-    _activeProgressId = episode == null ? item.id : '${item.id}/${episode.id}';
-    _activeDuration = totalSeconds;
-    _activeSongIds = [for (final song in songs) song.id];
-    _activeStartOffsetById = {
+    final progressId = episode == null ? item.id : '${item.id}/${episode.id}';
+    final songIds = [for (final song in songs) song.id];
+    final startOffsetById = {
       for (var i = 0; i < songs.length; i++)
         songs[i].id: session.tracks[i].startOffset,
     };
+    if (forQueue) {
+      _queuedSessions[songs.first.id] = _QueuedAbsSession(
+        sessionId: session.id,
+        progressId: progressId,
+        durationSeconds: totalSeconds,
+        songIds: songIds,
+        startOffsetById: startOffsetById,
+      );
+      _positionReader = positionReader ?? _positionReader;
+      _songIdReader = songIdReader ?? _songIdReader;
+      _startSyncTimer();
+      PlaybackEventLog.instance.add('abs.session.queue', {
+        'item': item.id,
+        'episode': episode?.id,
+        'tracks': session.tracks.length,
+      });
+      return SpokenPlaybackSession(
+        song: songs.first,
+        queue: songs,
+        resumeAt: Duration(milliseconds: (within * 1000).round()),
+        sessionId: session.id,
+        progressId: progressId,
+      );
+    }
+    _activeSessionId = session.id;
+    _activeProgressId = progressId;
+    _activeDuration = totalSeconds;
+    _activeSongIds = songIds;
+    _activeStartOffsetById = startOffsetById;
     _positionReader = positionReader;
     _songIdReader = songIdReader;
-    _liveProgress[_activeProgressId!] = session.currentTime;
+    _liveProgress[progressId] = session.currentTime;
     _startSyncTimer();
     PlaybackEventLog.instance.add('abs.session', {
       'item': item.id,
@@ -308,8 +398,34 @@ class SpokenLibraryState extends ChangeNotifier {
       queue: songs,
       resumeAt: Duration(milliseconds: (within * 1000).round()),
       sessionId: session.id,
-      progressId: _activeProgressId!,
+      progressId: progressId,
     );
+  }
+
+  List<Song> _sessionSongs(AudiobookshelfApi api, AbsSession session,
+      SpokenItem item, SpokenEpisode? episode) {
+    final baseId =
+        episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}';
+    final cover = NetworkImage(api.coverUrl(item.id).toString());
+    return <Song>[
+      for (var i = 0; i < session.tracks.length; i++)
+        Song(
+          // Track 0 keeps the plain id the playing-highlight keys expect;
+          // later tracks suffix _t<i> so queue ids stay unique.
+          id: i == 0 ? baseId : '${baseId}_t$i',
+          title: session.tracks.length > 1
+              ? '${episode?.title ?? item.title} (${i + 1}/${session.tracks.length})'
+              : (episode?.title ?? item.title),
+          artist: episode == null ? item.creator : item.title,
+          artistId: '',
+          albumId: '',
+          duration: Duration(
+              milliseconds: (session.tracks[i].duration * 1000).round()),
+          gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
+          artwork: cover,
+          localFilePath: api.streamUrlOf(session.tracks[i]),
+        ),
+    ];
   }
 
   void _startSyncTimer() {
@@ -323,8 +439,43 @@ class SpokenLibraryState extends ChangeNotifier {
   /// on to other music, the session closes itself.
   Future<void> _syncActiveProgress() async {
     final api = _api;
+    if (api == null) {
+      _syncTimer?.cancel();
+      _syncTimer = null;
+      return;
+    }
+    // A queued session whose song just became the current one is promoted
+    // to THE active session - queued books sync progress like any other.
+    if (_activeProgressId == null && _queuedSessions.isNotEmpty) {
+      final songId = _songIdReader?.call();
+      if (songId != null) {
+        for (final entry in _queuedSessions.values.toList()) {
+          if (entry.songIds.contains(songId)) {
+            _queuedSessions.remove(entry.firstSongId);
+            _activeSessionId = entry.sessionId;
+            _activeProgressId = entry.progressId;
+            _activeDuration = entry.durationSeconds;
+            _activeSongIds = entry.songIds;
+            _activeStartOffsetById = entry.startOffsetById;
+            _liveProgress.putIfAbsent(entry.progressId, () => 0);
+            PlaybackEventLog.instance.add('abs.session.adopt', {
+              'session': entry.sessionId,
+              'id': entry.progressId,
+            });
+            break;
+          }
+        }
+      }
+    }
     final progressId = _activeProgressId;
-    if (api == null || progressId == null) return;
+    if (progressId == null) {
+      // Nothing active; the timer stays alive only for queued sessions.
+      if (_queuedSessions.isEmpty) {
+        _syncTimer?.cancel();
+        _syncTimer = null;
+      }
+      return;
+    }
     final sessionId = _activeSessionId ?? '';
     final seconds = _currentActiveSeconds();
     if (seconds == null) {
@@ -381,6 +532,7 @@ class SpokenLibraryState extends ChangeNotifier {
     _activeDuration = 0;
     _activeSongIds = const [];
     _activeStartOffsetById = const {};
+    _queuedSessions.clear();
     _positionReader = null;
     _songIdReader = null;
     if (api == null) return;
@@ -405,6 +557,24 @@ class SpokenLibraryState extends ChangeNotifier {
     unawaited(closeActiveSession());
     super.dispose();
   }
+}
+
+/// A play session opened for a queued song, parked until the player
+/// reaches it. The sync tick promotes it to the active session then.
+class _QueuedAbsSession {
+  const _QueuedAbsSession({
+    required this.sessionId,
+    required this.progressId,
+    required this.durationSeconds,
+    required this.songIds,
+    required this.startOffsetById,
+  });
+  final String sessionId;
+  final String progressId;
+  final double durationSeconds;
+  final List<String> songIds;
+  final Map<String, double> startOffsetById;
+  String get firstSongId => songIds.first;
 }
 
 /// Everything the Books screen needs to hand one ABS item to the shared

@@ -14,6 +14,18 @@ class SpokenLibrary {
   final SpokenMediaType type;
 }
 
+/// A chapter marker inside an audiobook's single timeline (seconds from the
+/// item start). Used for chapter jumps and the end-of-chapter sleep timer.
+@immutable
+class SpokenChapter {
+  const SpokenChapter(
+      {required this.id, required this.start, required this.end, required this.title});
+  final int id;
+  final double start;
+  final double end;
+  final String title;
+}
+
 @immutable
 class SpokenItem {
   const SpokenItem({
@@ -27,6 +39,9 @@ class SpokenItem {
     this.coverUrl,
     this.progressSeconds = 0,
     this.episodes = const [],
+    this.chapters = const [],
+    this.seriesNames = const [],
+    this.isFinished = false,
   });
   final String id;
   final String libraryId;
@@ -38,6 +53,14 @@ class SpokenItem {
   final String? coverUrl;
   final double progressSeconds;
   final List<SpokenEpisode> episodes;
+  final List<SpokenChapter> chapters;
+
+  /// Series names from the item's metadata (ABS maintains these on scan;
+  /// books can belong to several series).
+  final List<String> seriesNames;
+
+  /// The server's own finished flag for this user, if it reports one.
+  final bool isFinished;
 
   bool get isBook => type == SpokenMediaType.book;
   double get progress => duration.inMilliseconds == 0
