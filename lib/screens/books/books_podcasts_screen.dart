@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../backend/audiobookshelf_api.dart';
 import '../../models/spoken_media.dart';
 import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
@@ -127,24 +128,46 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
       ));
   }
 
-  /// Plays a book or an episode through the normal player, resuming from the
-  /// server-known position. Same plumbing the previous screen used.
-  void _play(SpokenItem item, {SpokenEpisode? episode}) {
+  /// Cover URL for an item (token included) — null when not connected.
+  String? _coverUrlOf(SpokenItem item) =>
+      context.read<SpokenLibraryState>().coverUrlFor(item);
+
+  /// ABS playing-highlight match: plain ids for single-track sessions,
+  /// `_t<n>` suffixes for multi-file books.
+  bool _isAbsPlaying(String? playingId, SpokenItem item,
+      {SpokenEpisode? episode}) {
+    if (playingId == null) return false;
+    final base =
+        episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}';
+    return playingId == base || playingId.startsWith('${base}_t');
+  }
+
+  /// Plays a book or an episode through a real ABS play session: the server
+  /// hands back the audio tracks it wants streamed, resume comes from the
+  /// session's own currentTime, and progress syncs back every 15 s while
+  /// those songs are what's playing.
+  Future<void> _play(SpokenItem item, {SpokenEpisode? episode}) async {
     final state = context.read<SpokenLibraryState>();
     final player = context.read<PlayerController>();
-    final song = state.songFor(item, episode: episode);
-    if (song == null) {
-      _toast('Not ready — refresh libraries and try again.');
-      return;
+    try {
+      final session = await state.openSession(item,
+          episode: episode,
+          positionReader: () => player.position,
+          songIdReader: () => player.currentSong?.id);
+      if (session == null) {
+        if (mounted) _toast('Not connected — reconnect Audiobookshelf.');
+        return;
+      }
+      await player.playSong(session.song,
+          queue: session.queue,
+          startAt:
+              session.resumeAt > Duration.zero ? session.resumeAt : null);
+      if (mounted) _toast('Playing ${session.song.title}');
+    } on AudiobookshelfApiException catch (e) {
+      if (mounted) _toast(e.message);
+    } catch (_) {
+      if (mounted) _toast('Playback failed — the server did not answer.');
     }
-    final at = state.resumeAt(item, episode: episode);
-    final queue = [
-      for (final b in state.bookItems) state.songFor(b) ?? song,
-    ];
-    player.playSong(song,
-        startAt: at > Duration.zero ? at : null,
-        queue: queue.isNotEmpty ? queue : [song]);
-    _toast('Playing ${song.title}');
   }
 
   Future<void> _connect() async {
@@ -441,7 +464,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
           Text(title.toUpperCase(),
               style: _ts(11, w: FontWeight.w700, c: _C.faint, ls: 1)),
           const Spacer(),
-          if (trailing != null) trailing!,
+          if (trailing != null) trailing,
         ],
       );
 
@@ -459,18 +482,18 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         () {
           final SpokenItem item = entry is SpokenItem ? entry : entry.$1 as SpokenItem;
           final SpokenEpisode? ep = entry is SpokenItem ? null : entry.$2 as SpokenEpisode;
-          final id = ep == null ? 'abs_${item.id}' : 'abs_${item.id}_${ep.id}';
-          final playing = playingId == id;
-          final progress = ep == null
-              ? item.progress
-              : (ep.duration > Duration.zero
-                  ? (ep.progressSeconds / ep.duration.inSeconds).clamp(0.0, 1.0)
-                  : 0.0);
+          final playing = _isAbsPlaying(playingId, item, episode: ep);
+          // Live position from the sync timer when this one is playing;
+          // otherwise the server-known snapshot from the listing.
+          final seconds = context
+                  .read<SpokenLibraryState>()
+                  .liveProgressSecondsFor(item, episode: ep) ??
+              (ep?.progressSeconds ?? item.progressSeconds);
           final total = ep?.duration ?? item.duration;
-          final left = total -
-              Duration(
-                  seconds:
-                      (ep?.progressSeconds ?? item.progressSeconds).round());
+          final progress = total > Duration.zero
+              ? (seconds / total.inSeconds).clamp(0.0, 1.0)
+              : 0.0;
+          final left = total - Duration(seconds: seconds.round());
           return _continueCard(
             item: item,
             episode: ep,
@@ -525,7 +548,10 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                   : _C.border),
         ),
         child: Row(children: [
-          _cover(w: 116, h: 116, r: 12, colors: _coverFor(item.id)),
+          _cover(
+              w: 116, h: 116, r: 12,
+              colors: _coverFor(item.id),
+              url: _coverUrlOf(item)),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
@@ -589,7 +615,14 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
   }
 
   Widget _bookCard(SpokenItem b, String? playingId) {
-    final playing = playingId == 'abs_${b.id}';
+    final playing = _isAbsPlaying(playingId, b);
+    final live = context
+        .read<SpokenLibraryState>()
+        .liveProgressSecondsFor(b);
+    final progress = b.duration > Duration.zero
+        ? ((live ?? b.progressSeconds) / b.duration.inSeconds)
+            .clamp(0.0, 1.0)
+        : b.progress;
     return SizedBox(
       width: 118,
       child: _Hover(
@@ -609,13 +642,13 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                 ),
               ],
             ),
-            child: _cover(w: 118, h: 168, r: 10, colors: _coverFor(b.id)),
+            child: _cover(w: 118, h: 168, r: 10, colors: _coverFor(b.id), url: _coverUrlOf(b)),
           ),
           const SizedBox(height: 4),
           _rail(
-              value: b.progress,
+              value: progress,
               height: 3,
-              color: b.progress >= 1 ? _C.green : _C.violetLight),
+              color: progress >= 1 ? _C.green : _C.violetLight),
           const SizedBox(height: 7),
           Text(b.title,
               style: _ts(13, w: FontWeight.w600),
@@ -647,7 +680,8 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
 
   Widget _episodeRow(
       SpokenItem show, SpokenEpisode e, bool divider, String? playingId) {
-    final playing = playingId == 'abs_${show.id}_${e.id}';
+    final playing = _isAbsPlaying(playingId, show, episode: e);
+    final spoken = context.read<SpokenLibraryState>();
     return Column(children: [
       _Hover(
         onTap: () => _play(show, episode: e),
@@ -664,11 +698,17 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
           child: LayoutBuilder(builder: (context, c) {
             final compact = c.maxWidth < 640;
             final isNew = e.publishedAt != null &&
-                e.progressSeconds <= 0 &&
+                (spoken.liveProgressSecondsFor(show, episode: e) ??
+                        e.progressSeconds) <=
+                    0 &&
                 DateTime.now().difference(e.publishedAt!).inDays <= 7 &&
                 !DateTime.now().isBefore(e.publishedAt!);
             return Row(children: [
-              _cover(w: 40, h: 40, r: 8, colors: _coverFor(show.id), shadow: false),
+              _cover(
+                w: 40, h: 40, r: 8,
+                colors: _coverFor(show.id),
+                shadow: false,
+                url: _coverUrlOf(show)),
               const SizedBox(width: 16),
               Expanded(
                 flex: 5,
@@ -731,28 +771,49 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
 
   // ── Shared primitives ─────────────────────────────────────────────────────
   Widget _cover(
-          {required double w,
-          required double h,
-          required double r,
-          required List<Color> colors,
-          bool shadow = true}) =>
-      Container(
-        width: w,
-        height: h,
-        decoration: BoxDecoration(
-          gradient: _grad(colors),
-          borderRadius: BorderRadius.circular(r),
-          boxShadow: shadow
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-      );
+      {required double w,
+      required double h,
+      required double r,
+      required List<Color> colors,
+      bool shadow = true,
+      String? url}) {
+    final fallback = Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(gradient: _grad(colors)),
+    );
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(r),
+        boxShadow: shadow
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: url == null
+          ? fallback
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(r),
+              child: Image.network(
+                url,
+                width: w,
+                height: h,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => fallback,
+                loadingBuilder: (_, child, progress) =>
+                    progress == null ? child : fallback,
+              ),
+            ),
+    );
+  }
 
   Widget _rail(
           {required double value,
@@ -822,7 +883,9 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         initialChildSize: 0.62,
         minChildSize: 0.4,
         maxChildSize: 0.9,
-        builder: (_, sc) => ListView(
+        builder: (_, sc) => Builder(builder: (sheetContext) {
+          final spoken = sheetContext.read<SpokenLibraryState>();
+          return ListView(
           controller: sc,
           padding: const EdgeInsets.all(24),
           children: [
@@ -838,7 +901,7 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
               ),
             ),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _cover(w: 96, h: 136, r: 10, colors: _coverFor(b.id)),
+              _cover(w: 96, h: 136, r: 10, colors: _coverFor(b.id), url: _coverUrlOf(b)),
               const SizedBox(width: 20),
               Expanded(
                 child: Column(
@@ -849,14 +912,28 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                     Text('${b.creator} · ${_hoursLabel(b.duration)}',
                         style: _ts(13, c: _C.muted)),
                     const SizedBox(height: 14),
-                    _rail(value: b.progress),
-                    const SizedBox(height: 8),
-                    Text(
-                      b.progress >= 1
-                          ? 'Finished'
-                          : '${(b.progress * 100).round()}% complete',
-                      style: _ts(12, w: FontWeight.w500, c: _C.violetPale),
-                    ),
+                    Builder(builder: (_) {
+                      final live = spoken
+                          .liveProgressSecondsFor(b);
+                      final progress = b.duration > Duration.zero
+                          ? ((live ?? b.progressSeconds) /
+                                  b.duration.inSeconds)
+                              .clamp(0.0, 1.0)
+                          : b.progress;
+                      return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _rail(value: progress),
+                            const SizedBox(height: 8),
+                            Text(
+                              progress >= 1
+                                  ? 'Finished'
+                                  : '${(progress * 100).round()}% complete',
+                              style: _ts(
+                                  12, w: FontWeight.w500, c: _C.violetPale),
+                            ),
+                          ]);
+                    }),
                     const SizedBox(height: 16),
                     _Hover(
                       onTap: () {
@@ -892,7 +969,8 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                   style: _ts(13, c: _C.textSoft, h: 1.5)),
             ],
           ],
-        ),
+        );
+        }),
       ),
     );
   }

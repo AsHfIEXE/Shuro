@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'dart:ui' show Color;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show NetworkImage;
 
 import '../backend/audiobookshelf_api.dart';
 import '../models/song.dart';
 import '../models/spoken_media.dart';
+import '../playback/event_log.dart';
 import '../services/app_persistence.dart';
 import '../services/server_secret_store.dart';
 
@@ -27,10 +31,25 @@ class SpokenLibraryState extends ChangeNotifier {
   String? error;
   AudiobookshelfApi? _api;
 
-  /// The API token, kept in memory to build direct-play stream URLs
-  /// (ABS accepts ?token= on media endpoints). Never persisted here -
-  /// it lives in [ServerSecretStore].
-  String? _token;
+
+  // --- Active play session ---------------------------------------------------
+  // One ABS play session is live at a time. The sync timer lives HERE, not
+  // in the Books screen, so progress keeps reporting while the user is on
+  // any other screen (Now Playing, Lyrics, ...) - the readers below are
+  // handed in by whoever opened the session.
+  Timer? _syncTimer;
+  String? _activeSessionId;
+  String? _activeProgressId;
+  double _activeDuration = 0;
+  Map<String, double> _activeStartOffsetById = const {};
+  List<String> _activeSongIds = const [];
+  Duration Function()? _positionReader;
+  String? Function()? _songIdReader;
+
+  /// Freshest known positions (progressId -> seconds), updated by the sync
+  /// timer while a session plays. The library listing is a snapshot from
+  /// the last refresh; this is what happened since.
+  final Map<String, double> _liveProgress = {};
 
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
@@ -40,6 +59,7 @@ class SpokenLibraryState extends ChangeNotifier {
   /// Forgets the Audiobookshelf connection and its token. The server itself
   /// is untouched; Books and podcasts simply disappear from the sidebar.
   Future<void> disconnect() async {
+    await closeActiveSession();
     connection = null;
     _api = null;
     libraries = const [];
@@ -71,7 +91,6 @@ class SpokenLibraryState extends ChangeNotifier {
       connection = AudiobookshelfConnection(
           url: json['url'] as String, name: json['name'] as String);
       _api = AudiobookshelfApi(baseUrl: connection!.url, token: token);
-      _token = token;
       await refresh();
     } catch (_) {
       error = 'Saved Audiobookshelf connection could not be restored.';
@@ -92,8 +111,8 @@ class SpokenLibraryState extends ChangeNotifier {
     notifyListeners();
     final api = AudiobookshelfApi(baseUrl: trimmed, token: token.trim());
     try {
-      _token = token.trim();
       await api.validate();
+      await closeActiveSession();
       connection = AudiobookshelfConnection(
           name: (name?.trim().isNotEmpty ?? false)
               ? name!.trim()
@@ -190,38 +209,218 @@ class SpokenLibraryState extends ChangeNotifier {
           if (item.episodes.isNotEmpty) item,
       ];
 
-  /// Direct-play URL for a book (its first audio file) or an episode.
-  String? streamUrlFor(SpokenItem item, {SpokenEpisode? episode}) {
-    final api = _api;
-    final token = _token;
-    if (api == null || token == null || connection == null) return null;
-    final index = episode?.fileIndex ?? 0;
-    final base = connection!.url;
-    return '$base/api/items/${item.id}/file/$index?token=$token';
-  }
+  // --- Playback sessions -----------------------------------------------------
 
-  /// A playable [Song] for a book or episode, carrying a direct-play URL
-  /// the engine opens as-is. Progress seeds `startAt` for resume.
-  Song? songFor(SpokenItem item, {SpokenEpisode? episode}) {
-    final url = streamUrlFor(item, episode: episode);
-    if (url == null) return null;
-    final dur = episode?.duration ?? item.duration;
-    return Song(
-      id: episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}',
-      title: episode?.title ?? item.title,
-      artist: item.creator,
-      artistId: '',
-      albumId: '',
-      duration: dur,
-      gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
-      localFilePath: url,
+  /// Cover URL for an item, carrying the token as a query param so plain
+  /// Image.network can fetch it.
+  String? coverUrlFor(SpokenItem item) => _api?.coverUrl(item.id).toString();
+
+  /// The freshest known position for an item/episode (seconds), or null
+  /// when nothing has played it this session. UI falls back: live value ->
+  /// library listing -> untouched.
+  double? liveProgressSecondsFor(SpokenItem item, {SpokenEpisode? episode}) =>
+      _liveProgress[episode == null ? item.id : '${item.id}/${episode.id}'];
+
+  /// Opens a real ABS play session for a book or episode and returns the
+  /// playable queue: one [Song] per server-issued audio track, resuming at
+  /// the server-known position. This replaced the guessed
+  /// `/api/items/:id/file/:index` URL, which some servers never answer -
+  /// the session's own `contentUrl` is what ABS clients actually stream.
+  Future<SpokenPlaybackSession?> openSession(SpokenItem item,
+      {SpokenEpisode? episode,
+      Duration Function()? positionReader,
+      String? Function()? songIdReader}) async {
+    final api = _api;
+    if (api == null || connection == null) return null;
+    // One session at a time: flush the old one's final position before the
+    // server opens the next.
+    await closeActiveSession();
+    final session = await api.startPlayback(item.id, episodeId: episode?.id);
+    final baseId =
+        episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}';
+    final cover = NetworkImage(api.coverUrl(item.id).toString());
+    final songs = <Song>[
+      for (var i = 0; i < session.tracks.length; i++)
+        Song(
+          // Track 0 keeps the plain id the playing-highlight keys expect;
+          // later tracks suffix _t<i> so queue ids stay unique.
+          id: i == 0 ? baseId : '${baseId}_t$i',
+          title: session.tracks.length > 1
+              ? '${episode?.title ?? item.title} (${i + 1}/${session.tracks.length})'
+              : (episode?.title ?? item.title),
+          artist: episode == null ? item.creator : item.title,
+          artistId: '',
+          albumId: '',
+          duration: Duration(
+              milliseconds: (session.tracks[i].duration * 1000).round()),
+          gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
+          artwork: cover,
+          localFilePath: api.streamUrlOf(session.tracks[i]),
+        ),
+    ];
+    // Which track holds the resume point, and how far into it. The session
+    // currentTime is item/episode-relative; each track has its offset.
+    var trackIndex = session.tracks.length - 1;
+    for (var i = 0; i < session.tracks.length; i++) {
+      final candidate = session.tracks[i];
+      if (session.currentTime <
+              candidate.startOffset + candidate.duration ||
+          i == session.tracks.length - 1) {
+        trackIndex = i;
+        break;
+      }
+    }
+    final track = session.tracks[trackIndex];
+    var within = session.currentTime - track.startOffset;
+    if (within < 0) within = 0;
+    if (track.duration > 1 && within > track.duration - 1) {
+      within = track.duration - 1;
+    }
+    var totalSeconds =
+        (episode?.duration ?? item.duration).inMilliseconds / 1000.0;
+    if (totalSeconds <= 0) {
+      totalSeconds = session.tracks.isEmpty
+          ? 0
+          : session.tracks.last.startOffset + session.tracks.last.duration;
+    }
+
+    _activeSessionId = session.id;
+    _activeProgressId = episode == null ? item.id : '${item.id}/${episode.id}';
+    _activeDuration = totalSeconds;
+    _activeSongIds = [for (final song in songs) song.id];
+    _activeStartOffsetById = {
+      for (var i = 0; i < songs.length; i++)
+        songs[i].id: session.tracks[i].startOffset,
+    };
+    _positionReader = positionReader;
+    _songIdReader = songIdReader;
+    _liveProgress[_activeProgressId!] = session.currentTime;
+    _startSyncTimer();
+    PlaybackEventLog.instance.add('abs.session', {
+      'item': item.id,
+      'episode': episode?.id,
+      'session': session.id,
+      'tracks': session.tracks.length,
+      'resumeS': session.currentTime.round(),
+    });
+    return SpokenPlaybackSession(
+      song: songs[trackIndex],
+      queue: songs,
+      resumeAt: Duration(milliseconds: (within * 1000).round()),
+      sessionId: session.id,
+      progressId: _activeProgressId!,
     );
   }
 
-  /// Where playback should resume, if partway through.
-  Duration resumeAt(SpokenItem item, {SpokenEpisode? episode}) {
-    final seconds = episode?.progressSeconds ?? item.progressSeconds;
-    if (seconds <= 0) return Duration.zero;
-    return Duration(seconds: seconds.round());
+  void _startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) => _syncActiveProgress());
   }
+
+  /// Reports the live position to the server every 15 s while the session's
+  /// songs are what the player is actually playing. When the player moves
+  /// on to other music, the session closes itself.
+  Future<void> _syncActiveProgress() async {
+    final api = _api;
+    final progressId = _activeProgressId;
+    if (api == null || progressId == null) return;
+    final sessionId = _activeSessionId ?? '';
+    final seconds = _currentActiveSeconds();
+    if (seconds == null) {
+      await closeActiveSession();
+      return;
+    }
+    _liveProgress[progressId] = seconds;
+    notifyListeners();
+    try {
+      await api.syncSession(sessionId,
+          currentTime: seconds, duration: _activeDuration);
+      await api.saveProgress(progressId,
+          currentTime: seconds, duration: _activeDuration);
+      PlaybackEventLog.instance.add('abs.sync', {
+        'id': progressId,
+        's': seconds.round(),
+        'progress': _activeDuration <= 0
+            ? '0'
+            : (seconds / _activeDuration).toStringAsFixed(2),
+      });
+    } catch (e) {
+      PlaybackEventLog.instance.add('abs.sync.fail', {
+        'id': progressId,
+        'err': e.toString().split('\n').first,
+      });
+    }
+  }
+
+  /// Current item/episode-relative seconds, or null when the player is no
+  /// longer on this session's songs.
+  double? _currentActiveSeconds() {
+    final songId = _songIdReader?.call();
+    if (songId == null || !_activeSongIds.contains(songId)) return null;
+    final startOffset = _activeStartOffsetById[songId] ?? 0;
+    final position = _positionReader?.call() ?? Duration.zero;
+    return startOffset + position.inMilliseconds / 1000.0;
+  }
+
+  /// Flushes the final position and closes the session. Safe to call with
+  /// nothing open. The position saved is the freshest one available: live
+  /// reader if the session's song is still current, else the last synced
+  /// value.
+  Future<void> closeActiveSession() async {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    final api = _api;
+    final sessionId = _activeSessionId;
+    final progressId = _activeProgressId;
+    final duration = _activeDuration;
+    final seconds = _currentActiveSeconds() ??
+        (progressId != null ? _liveProgress[progressId] : null);
+    _activeSessionId = null;
+    _activeProgressId = null;
+    _activeDuration = 0;
+    _activeSongIds = const [];
+    _activeStartOffsetById = const {};
+    _positionReader = null;
+    _songIdReader = null;
+    if (api == null) return;
+    if (progressId != null && seconds != null) {
+      _liveProgress[progressId] = seconds;
+      try {
+        await api.saveProgress(progressId,
+            currentTime: seconds, duration: duration);
+      } catch (_) {}
+    }
+    if (sessionId != null && sessionId.isNotEmpty) {
+      await api.closeSession(sessionId,
+          currentTime: seconds, duration: duration);
+    }
+    PlaybackEventLog.instance.add('abs.session.close',
+        {'session': sessionId ?? '', 's': seconds?.round() ?? -1});
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    unawaited(closeActiveSession());
+    super.dispose();
+  }
+}
+
+/// Everything the Books screen needs to hand one ABS item to the shared
+/// player: the per-track queue, where to resume, and the id progress syncs
+/// back under.
+class SpokenPlaybackSession {
+  const SpokenPlaybackSession({
+    required this.song,
+    required this.queue,
+    required this.resumeAt,
+    required this.sessionId,
+    required this.progressId,
+  });
+  final Song song;
+  final List<Song> queue;
+  final Duration resumeAt;
+  final String sessionId;
+  final String progressId;
 }
