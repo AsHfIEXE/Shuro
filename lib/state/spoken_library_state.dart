@@ -392,6 +392,8 @@ class SpokenLibraryState extends ChangeNotifier {
       'session': session.id,
       'tracks': session.tracks.length,
       'resumeS': session.currentTime.round(),
+      // Path only (never the query) so diagnostics show what was opened.
+      'url': Uri.parse(api.streamUrlOf(session.tracks.first)).path,
     });
     return SpokenPlaybackSession(
       song: songs[trackIndex],
@@ -482,6 +484,12 @@ class SpokenLibraryState extends ChangeNotifier {
       await closeActiveSession();
       return;
     }
+    if (seconds <= 0) {
+      // Nothing audible has happened yet (playback may have failed to
+      // load): several ABS versions reject currentTime 0 as an invalid
+      // payload, and there is nothing meaningful to report anyway.
+      return;
+    }
     _liveProgress[progressId] = seconds;
     notifyListeners();
     try {
@@ -536,7 +544,7 @@ class SpokenLibraryState extends ChangeNotifier {
     _positionReader = null;
     _songIdReader = null;
     if (api == null) return;
-    if (progressId != null && seconds != null) {
+    if (progressId != null && seconds != null && seconds > 0) {
       _liveProgress[progressId] = seconds;
       try {
         await api.saveProgress(progressId,

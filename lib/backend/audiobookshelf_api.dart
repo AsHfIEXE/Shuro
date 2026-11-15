@@ -51,6 +51,26 @@ class AudiobookshelfApi {
   Map<String, String> get _headers =>
       {'Authorization': 'Bearer $token', 'Accept': 'application/json'};
 
+  /// Status failures carry the server's own error text (ABS sends a plain
+  /// reason or {error: ...}) so a 400 names its cause in diagnostics
+  /// instead of just its number.
+  String _statusMessage(String method, String path, String body) {
+    var detail = body.trim();
+    if (detail.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(detail);
+        if (decoded is Map && decoded['error'] != null) {
+          detail = '${decoded['error']}';
+        }
+      } catch (_) {}
+    }
+    detail = detail.replaceAll(RegExp(r'\s+'), ' ');
+    if (detail.length > 120) detail = detail.substring(0, 120);
+    return detail.isEmpty
+        ? 'Audiobookshelf returned ${method.toUpperCase()} $path failed.'
+        : 'Audiobookshelf: $detail';
+  }
+
   Future<Map<String, dynamic>> _get(String path,
       [Map<String, String>? query]) async {
     final response = await http
@@ -61,8 +81,8 @@ class AudiobookshelfApi {
           'Audiobookshelf rejected that API token.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AudiobookshelfApiException(
-          'Audiobookshelf returned ${response.statusCode}.');
+      throw AudiobookshelfApiException(_statusMessage(
+          'get', path, response.body));
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>)
@@ -82,8 +102,8 @@ class AudiobookshelfApi {
           'Audiobookshelf rejected that API token.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AudiobookshelfApiException(
-          'Audiobookshelf returned ${response.statusCode}.');
+      throw AudiobookshelfApiException(_statusMessage(
+          'post', path, response.body));
     }
     if (response.body.isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(response.body);
@@ -102,8 +122,8 @@ class AudiobookshelfApi {
           'Audiobookshelf rejected that API token.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AudiobookshelfApiException(
-          'Audiobookshelf returned ${response.statusCode}.');
+      throw AudiobookshelfApiException(_statusMessage(
+          'patch', path, response.body));
     }
   }
 
@@ -301,11 +321,14 @@ class AudiobookshelfApi {
         'If this item is ebook-only there is nothing to stream.';
   }
 
-  /// Full stream URL for a session track - `contentUrl` plus the token the
-  /// media endpoint needs (session URLs are not bearer-authenticated).
+  /// Full stream URL for a session track. Session contentUrls already carry
+  /// their own auth (`?token=<sessionId>`); appending a SECOND `token=`
+  /// param makes the server read an array and reject the stream - so the
+  /// API token is only appended when the URL has none.
   String streamUrlOf(AbsTrack track) {
     final raw = track.contentUrl;
     final url = raw.startsWith('http') ? raw : '$_base$raw';
+    if (url.contains('token=')) return url;
     return '$url${url.contains('?') ? '&' : '?'}token=$token';
   }
 
@@ -375,8 +398,8 @@ class AudiobookshelfApi {
           'Audiobookshelf rejected that API token.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AudiobookshelfApiException(
-          'Audiobookshelf returned ${response.statusCode}.');
+      throw AudiobookshelfApiException(_statusMessage(
+          'delete', path, response.body));
     }
   }
 
