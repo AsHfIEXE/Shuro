@@ -601,10 +601,21 @@ class AppState extends ChangeNotifier {
     final p = _persistence;
     if (p == null) return;
     // The secret never touches prefs: it goes to OS-backed secure storage
-    // (plan §7). Writing the current map also prunes entries for removed
-    // servers.
-    await ServerSecretStore.writeAll(
-        {for (final s in servers) s.id: s.password});
+    // (plan §7). Server passwords are the only entries this feature OWNS:
+    // the stored map also holds feature secrets it must never touch (the
+    // Audiobookshelf API token under 'audiobookshelf'). Replacing the whole
+    // map here is what silently deleted the ABS connection on every
+    // Navidrome save/remove - reported as "ABS setup isn't saving, it gets
+    // deleted". Keep every non-server entry, write ours, and prune only
+    // passwords of servers that no longer exist.
+    final stored = await ServerSecretStore.readAll();
+    final owned = {for (final s in servers) s.id: s.password};
+    final merged = <String, String>{
+      for (final e in stored.entries)
+        if (!e.key.startsWith('server_')) e.key: e.value,
+      ...owned,
+    };
+    await ServerSecretStore.writeAll(merged);
     final list = servers
         .map((s) => {
               'id': s.id,
