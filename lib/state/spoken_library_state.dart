@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'dart:ui' show Color;
+
 import '../backend/audiobookshelf_api.dart';
+import '../models/song.dart';
 import '../models/spoken_media.dart';
 import '../services/app_persistence.dart';
 import '../services/server_secret_store.dart';
@@ -23,6 +26,11 @@ class SpokenLibraryState extends ChangeNotifier {
   bool loading = false;
   String? error;
   AudiobookshelfApi? _api;
+
+  /// The API token, kept in memory to build direct-play stream URLs
+  /// (ABS accepts ?token= on media endpoints). Never persisted here -
+  /// it lives in [ServerSecretStore].
+  String? _token;
 
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
@@ -63,6 +71,7 @@ class SpokenLibraryState extends ChangeNotifier {
       connection = AudiobookshelfConnection(
           url: json['url'] as String, name: json['name'] as String);
       _api = AudiobookshelfApi(baseUrl: connection!.url, token: token);
+      _token = token;
       await refresh();
     } catch (_) {
       error = 'Saved Audiobookshelf connection could not be restored.';
@@ -83,6 +92,7 @@ class SpokenLibraryState extends ChangeNotifier {
     notifyListeners();
     final api = AudiobookshelfApi(baseUrl: trimmed, token: token.trim());
     try {
+      _token = token.trim();
       await api.validate();
       connection = AudiobookshelfConnection(
           name: (name?.trim().isNotEmpty ?? false)
@@ -151,5 +161,68 @@ class SpokenLibraryState extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+  }
+
+  // --- Classification & playback -------------------------------------------
+
+  /// Every fetched item, across libraries.
+  Iterable<SpokenItem> get allItems sync* {
+    for (final items in itemsByLibrary.values) {
+      yield* items;
+    }
+  }
+
+  /// An item is a BOOK when it has no episodes to play independently -
+  /// regardless of how the ABS library is typed. Audiobooks filed inside a
+  /// podcast-type library (common single-library setup) classify correctly
+  /// here; shows with real episodes stay podcasts.
+  /// Items that behave as audiobooks: book-type items, or episode-less
+  /// items from podcast libraries.
+  List<SpokenItem> get bookItems => [
+        for (final item in allItems)
+          if (item.type == SpokenMediaType.book ||
+              item.episodes.isEmpty && item.duration > Duration.zero)
+            item,
+      ];
+
+  /// Items that behave as podcast shows (they have episodes).
+  List<SpokenItem> get podcastShows => [
+        for (final item in allItems)
+          if (item.episodes.isNotEmpty) item,
+      ];
+
+  /// Direct-play URL for a book (its first audio file) or an episode.
+  String? streamUrlFor(SpokenItem item, {SpokenEpisode? episode}) {
+    final api = _api;
+    final token = _token;
+    if (api == null || token == null || connection == null) return null;
+    final index = episode?.fileIndex ?? 0;
+    final base = connection!.url;
+    return '$base/api/items/${item.id}/file/$index?token=$token';
+  }
+
+  /// A playable [Song] for a book or episode, carrying a direct-play URL
+  /// the engine opens as-is. Progress seeds `startAt` for resume.
+  Song? songFor(SpokenItem item, {SpokenEpisode? episode}) {
+    final url = streamUrlFor(item, episode: episode);
+    if (url == null) return null;
+    final dur = episode?.duration ?? item.duration;
+    return Song(
+      id: episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}',
+      title: episode?.title ?? item.title,
+      artist: item.creator,
+      artistId: '',
+      albumId: '',
+      duration: dur,
+      gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
+      localFilePath: url,
+    );
+  }
+
+  /// Where playback should resume, if partway through.
+  Duration resumeAt(SpokenItem item, {SpokenEpisode? episode}) {
+    final seconds = episode?.progressSeconds ?? item.progressSeconds;
+    if (seconds <= 0) return Duration.zero;
+    return Duration(seconds: seconds.round());
   }
 }

@@ -1,4 +1,5 @@
 ## 2.6.2
+- Audiobookshelf works: books and episodes actually play (direct stream URLs via the engine, progress-aware resume with startAt), and classification is trait-based — an item with no episodes is an audiobook wherever it lives, so audiobooks inside a podcast-typed library land in the right section. Podcase shows list their episodes inline; Continue cards resume.
 - Shuro Pulse, redesigned: real listening stats (time, plays, top genre, streak, weekday chart, top artists) from your actual play log on the new pulse design kit, plus real self-building mixes (Tonight's Flow, For You, Rediscover, Deep Cuts) that play your library. Routed from Discover; the old orphaned dashboard is gone.
 - Now Playing: the header's output-device chip, info and "..." no longer sit under the window caption buttons, and the redundant floating expand button is gone (the pane header already expands; the caption bar owns the corner) - no more "two fullscreen buttons".
 - Lyrics: a cached "no lyrics for this song" expires after 90 s, so a miss from a flaky moment is retried instead of sticking for the session.

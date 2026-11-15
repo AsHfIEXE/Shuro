@@ -54,6 +54,7 @@ class SpokenEpisode {
     this.publishedAt,
     this.description = '',
     this.progressSeconds = 0,
+    this.fileIndex = 0,
   });
   final String id;
   final String title;
@@ -61,4 +62,8 @@ class SpokenEpisode {
   final DateTime? publishedAt;
   final String description;
   final double progressSeconds;
+
+  /// The item's audio-file slot this episode plays from (ABS
+  /// /api/items/<id>/file/<index>).
+  final int fileIndex;
 }

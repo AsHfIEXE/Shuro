@@ -102,6 +102,10 @@ class AudiobookshelfApi {
         .map((episode) => SpokenEpisode(
               id: episode['id'] as String? ?? '',
               title: episode['title'] as String? ?? 'Untitled episode',
+              fileIndex: ((episode['audioFile']
+                          as Map<String, dynamic>?)?['index'] as num?)
+                      ?.toInt() ??
+                  0,
               duration: Duration(
                   milliseconds:
                       (((episode['duration'] as num?)?.toDouble() ?? 0) * 1000)

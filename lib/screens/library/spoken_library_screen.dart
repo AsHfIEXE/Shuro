@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/spoken_media.dart';
+import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/desktop_tokens.dart';
@@ -22,6 +23,28 @@ class SpokenLibraryScreen extends StatefulWidget {
 
 class _SpokenLibraryScreenState extends State<SpokenLibraryScreen> {
   _SpokenFilter _filter = _SpokenFilter.all;
+
+  /// Plays a book or an episode through the normal player: the state builds
+  /// a direct-play URL (ABS ?token= media endpoint) carried on a synthetic
+  /// Song, and any saved progress seeds startAt so playback resumes.
+  void _play(SpokenItem item, {SpokenEpisode? episode}) {
+    final state = context.read<SpokenLibraryState>();
+    final player = context.read<PlayerController>();
+    final song = state.songFor(item, episode: episode);
+    if (song == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Not ready - refresh libraries and try again.')));
+      return;
+    }
+    final at = state.resumeAt(item, episode: episode);
+    final queue = [
+      for (final b in state.bookItems)
+        if (identical(b, item) || b.id != item.id) state.songFor(b) ?? song,
+    ];
+    player.playSong(song,
+        startAt: at > Duration.zero ? at : null,
+        queue: queue.isNotEmpty ? queue : [song]);
+  }
 
   Future<void> _connect(BuildContext context) async {
     final url = TextEditingController();
@@ -102,16 +125,10 @@ class _SpokenLibraryScreenState extends State<SpokenLibraryScreen> {
                 child: DesktopContentFrame(
                     maxWidth: DesktopTokens.contentText,
                     child: Builder(builder: (context) {
-                      final libraries = switch (_filter) {
-                        _SpokenFilter.all => state.libraries,
-                        _SpokenFilter.audiobooks => state.bookLibraries,
-                        _SpokenFilter.podcasts => state.podcastLibraries,
-                      };
-                      final books = [
-                        for (final library in state.bookLibraries)
-                          ...(state.itemsByLibrary[library.id] ??
-                              const <SpokenItem>[])
-                      ];
+                      // Trait-based, not library-typed: an item with no
+                      // episodes is an audiobook wherever it lives - files
+                      // added to a podcast-type library classify correctly.
+                      final books = state.bookItems;
                       final inProgress = books
                           .where((b) => b.progress > 0 && b.progress < 1)
                           .toList()
@@ -174,15 +191,67 @@ class _SpokenLibraryScreenState extends State<SpokenLibraryScreen> {
                                   mainAxisExtent: 132,
                                 ),
                                 itemCount: inProgress.length,
-                                itemBuilder: (context, i) => _ContinueCard(item: inProgress[i]),
+                                itemBuilder: (context, i) => _ContinueCard(
+                                    item: inProgress[i],
+                                    onTap: () => _play(inProgress[i])),
                               ),
                             ),
                           ],
-                          for (final library in libraries)
-                            _LibrarySection(
-                              library: library,
-                              items: state.itemsByLibrary[library.id] ?? const [],
+                          if (_filter != _SpokenFilter.podcasts &&
+                              books.isNotEmpty) ...[
+                            _BoardLabel('Audiobooks'),
+                            Entrance(
+                              child: GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 140,
+                                  mainAxisSpacing: 16,
+                                  crossAxisSpacing: 12,
+                                  childAspectRatio: 118 / 226,
+                                ),
+                                itemCount: books.length,
+                                itemBuilder: (context, i) => Entrance(
+                                  delay: Entrance.stagger(i),
+                                  child: _BookCoverTile(
+                                      item: books[i],
+                                      onTap: () => _play(books[i])),
+                                ),
+                              ),
                             ),
+                          ],
+                          if (_filter != _SpokenFilter.audiobooks) ...[
+                            for (final show in state.podcastShows) ...[
+                              _BoardLabel(show.title),
+                              Entrance(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: kRaisedColor,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: kHairline),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      for (final (i, ep)
+                                          in show.episodes.take(8).indexed) ...[
+                                        _EpisodeRow(
+                                            show: show,
+                                            episode: ep,
+                                            onTap: () =>
+                                                _play(show, episode: ep)),
+                                        if (i <
+                                            show.episodes.take(8).length - 1)
+                                          Container(
+                                              height: 1, color: kHairline),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ],
                           if (_filter != _SpokenFilter.audiobooks &&
                               latestEpisodes.isNotEmpty) ...[
                             _BoardLabel('Podcasts · Latest episodes'),
@@ -395,14 +464,18 @@ class _CoverProgressLine extends StatelessWidget {
 /// "CONTINUE LISTENING" card: cover, title, creator, a real progress bar
 /// and the exact percent + time left, all from the server's progress data.
 class _ContinueCard extends StatelessWidget {
-  const _ContinueCard({required this.item});
+  const _ContinueCard({required this.item, this.onTap});
 
   final SpokenItem item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final left = item.duration - Duration(seconds: item.progressSeconds.round());
-    return Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: kRaisedColor,
@@ -454,91 +527,44 @@ class _ContinueCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
-  }
-}
-
-/// One library's items, board style: audiobooks become a cover grid with
-/// progress lines; podcasts stay listable shows (whole shows are not
-/// playable — their episodes are).
-class _LibrarySection extends StatelessWidget {
-  const _LibrarySection({required this.library, required this.items});
-  final SpokenLibrary library;
-  final List<SpokenItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _BoardLabel(
-          '${library.name} · ${library.type == SpokenMediaType.book ? 'Audiobooks' : 'Podcasts'}'),
-      if (items.isEmpty)
-        Text('No items found in this library.',
-            style: GoogleFonts.getFont(currentFontFamily, color: kMutedTextColor))
-      else if (library.type == SpokenMediaType.book)
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 140,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 12,
-            childAspectRatio: 118 / 226,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, i) => Entrance(
-            delay: Entrance.stagger(i),
-            child: _BookCoverTile(item: items[i]),
-          ),
-        )
-      else
-        Entrance(
-          child: Container(
-            decoration: BoxDecoration(
-              color: kRaisedColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: kHairline),
-            ),
-            child: Column(
-              children: [
-                for (final (i, item) in items.indexed) ...[
-                  _PodcastShowRow(item: item),
-                  if (i < items.length - 1) Container(height: 1, color: kHairline),
-                ],
-              ],
-            ),
-          ),
-        ),
-    ]);
   }
 }
 
 class _BookCoverTile extends StatelessWidget {
-  const _BookCoverTile({required this.item});
+  const _BookCoverTile({required this.item, this.onTap});
 
   final SpokenItem item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _SpokenCover(item: item, icon: Icons.menu_book_rounded, radius: 10, iconSize: 28)),
-        const SizedBox(height: 4),
-        _CoverProgressLine(progress: item.progress),
-        const SizedBox(height: 4),
-        Text(item.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.getFont(currentFontFamily,
-                color: kTextColor, fontSize: 13, fontWeight: FontWeight.w600)),
-        Text(item.creator,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.getFont(currentFontFamily, color: kStatusText, fontSize: 12)),
-      ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _SpokenCover(item: item, icon: Icons.menu_book_rounded, radius: 10, iconSize: 28)),
+          const SizedBox(height: 4),
+          _CoverProgressLine(progress: item.progress),
+          const SizedBox(height: 4),
+          Text(item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.getFont(currentFontFamily,
+                  color: kTextColor, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(item.creator,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.getFont(currentFontFamily, color: kStatusText, fontSize: 12)),
+        ],
+      ),
     );
   }
 }
+
 
 class _PodcastShowRow extends StatelessWidget {
   const _PodcastShowRow({required this.item});
@@ -607,10 +633,11 @@ class _EpisodesCard extends StatelessWidget {
 }
 
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.show, required this.episode});
+  const _EpisodeRow({required this.show, required this.episode, this.onTap});
 
   final SpokenItem show;
   final SpokenEpisode episode;
+  final VoidCallback? onTap;
 
   bool get _isNew {
     final published = episode.publishedAt;
@@ -621,7 +648,9 @@ class _EpisodeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
@@ -673,6 +702,7 @@ class _EpisodeRow extends StatelessWidget {
                 style: GoogleFonts.getFont(currentFontFamily, color: kMuted2, fontSize: 12)),
           ),
         ],
+      ),
       ),
     );
   }
