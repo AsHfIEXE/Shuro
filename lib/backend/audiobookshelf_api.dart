@@ -445,6 +445,20 @@ class AudiobookshelfApi {
     }
   }
 
+  /// Lightweight existence probe: a 1-byte range request. 206 (or 200)
+  /// means the URL streams real bytes; anything else means it does not.
+  /// Used to discover raw file indexes the API refuses to list.
+  Future<int?> probeRange(String url) async {
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: {'Range': 'bytes=0-0'})
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   /// Full stream URL for a session track. Session contentUrls already carry
   /// their own auth (`?token=<sessionId>`); appending a SECOND `token=`
   /// param makes the server read an array and reject the stream - so the
@@ -577,7 +591,30 @@ class AudiobookshelfApi {
             ))
         .where((track) => track.contentUrl.isNotEmpty)
         .toList();
-    final episodes = (media['episodes'] as List<dynamic>? ?? const [])
+    final episodes = _episodesOf(media);
+    return SpokenItem(
+      id: row['id'] as String,
+      libraryId: row['libraryId'] as String? ?? '',
+      type: type,
+      title: metadata['title'] as String? ?? 'Untitled',
+      creator: type == SpokenMediaType.book
+          ? ((metadata['authorName'] ?? metadata['narratorName']) as String? ??
+              'Unknown creator')
+          : (metadata['author'] as String? ?? 'Podcast'),
+      duration: Duration(milliseconds: (duration * 1000).round()),
+      description: metadata['description'] as String? ?? '',
+      coverUrl: _uri('/items/${row['id']}/cover').toString(),
+      progressSeconds: (progress?['currentTime'] as num?)?.toDouble() ?? 0,
+      episodes: episodes,
+      chapters: chapters,
+      seriesNames: seriesNames,
+      isFinished: (progress?['isFinished'] as bool? ?? false),
+      tracks: directTracks,
+    );
+  }
+
+  List<SpokenEpisode> _episodesOf(Map<String, dynamic>? media) {
+    return (media?['episodes'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((episode) => SpokenEpisode(
               id: episode['id'] as String? ?? '',
@@ -598,25 +635,15 @@ class AudiobookshelfApi {
               publishedAt: _parseDate(episode['publishedAt']),
             ))
         .toList();
-    return SpokenItem(
-      id: row['id'] as String,
-      libraryId: row['libraryId'] as String? ?? '',
-      type: type,
-      title: metadata['title'] as String? ?? 'Untitled',
-      creator: type == SpokenMediaType.book
-          ? ((metadata['authorName'] ?? metadata['narratorName']) as String? ??
-              'Unknown creator')
-          : (metadata['author'] as String? ?? 'Podcast'),
-      duration: Duration(milliseconds: (duration * 1000).round()),
-      description: metadata['description'] as String? ?? '',
-      coverUrl: _uri('/items/${row['id']}/cover').toString(),
-      progressSeconds: (progress?['currentTime'] as num?)?.toDouble() ?? 0,
-      episodes: episodes,
-      chapters: chapters,
-      seriesNames: seriesNames,
-      isFinished: (progress?['isFinished'] as bool? ?? false),
-      tracks: directTracks,
-    );
+  }
+
+  /// All episodes of a podcast via the dedicated endpoint. The item GET
+  /// can report an empty episodes array even when episodes exist - the
+  /// server logs showed sessions dying on "episode not found null" while
+  /// the podcast itself plays fine on other clients.
+  Future<List<SpokenEpisode>> podcastEpisodes(String itemId) async {
+    final data = await _get('/podcasts/$itemId');
+    return _episodesOf(data['media'] as Map<String, dynamic>?);
   }
 
   /// ABS sends episode publish stamps as epoch milliseconds; some builds

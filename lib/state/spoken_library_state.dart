@@ -369,20 +369,32 @@ class SpokenLibraryState extends ChangeNotifier {
       } else if (direct.isEmpty) {
         try {
           final expanded = await api.itemExpanded(item);
-          if (expanded.item.episodes.isNotEmpty) {
+          var episodes = expanded.item.episodes;
+          var via = 'item';
+          if (episodes.isEmpty && item.type == SpokenMediaType.podcast) {
+            // The item GET can say episodes: [] while episodes exist -
+            // the dedicated podcast endpoint is the source of truth.
+            try {
+              episodes = await api.podcastEpisodes(item.id);
+              via = 'podcast';
+            } catch (_) {}
+          }
+          if (episodes.isNotEmpty) {
             // A PODCAST SHOW the minified listing disguised as an
             // audiobook (episodes hidden, so the trait rule shelved it as
             // a book). Playing a show is what made the server answer with
-            // an HLS transcode and zero tracks - no include= would ever
-            // fix that. Play an episode instead, and remember the truth
-            // so the shelves reclassify immediately.
+            // an HLS transcode and zero tracks - the server logs show
+            // ffmpeg dying on an empty files.txt. Play an episode
+            // instead, and remember the truth so the shelves reclassify
+            // immediately.
             _expandedShows[item.id] = expanded.item;
             notifyListeners();
-            final pick = _pickEpisode(expanded.item);
+            final pick = _pickEpisode(episodes);
             PlaybackEventLog.instance.add('abs.redirect', {
               'item': item.id,
               'episode': pick.id,
-              'episodes': expanded.item.episodes.length,
+              'episodes': episodes.length,
+              'via': via,
             });
             return await openSession(item,
                 episode: pick,
@@ -395,6 +407,46 @@ class SpokenLibraryState extends ChangeNotifier {
           direct = expanded.tracks;
           src = 'itemFetch';
         } catch (_) {}
+      }
+      if (direct.isEmpty) {
+        // The server transcoded SOMETHING for this item, so audio exists
+        // even though no API surface lists it (podcast-typed items hide
+        // their files everywhere - and their HLS sessions can be empty
+        // 404s). Probe the raw file indexes with 1-byte range requests:
+        // whatever answers 206 becomes the playlist.
+        var index = 0;
+        while (index < 8) {
+          final candidate = AbsTrack(
+            contentUrl: '/api/items/${item.id}/file/$index',
+            mimeType: 'audio/mpeg',
+            startOffset: 0,
+            duration: index == 0 && item.duration > Duration.zero
+                ? item.duration.inMilliseconds / 1000.0
+                : 0,
+          );
+          final status =
+              await api.probeRange(api.streamUrlOf(candidate));
+          if (status != 200 && status != 206) break;
+          direct.add(candidate);
+          index++;
+        }
+        if (direct.isNotEmpty) src = 'fileProbe';
+        PlaybackEventLog.instance
+            .add('abs.probe', {'item': item.id, 'files': direct.length});
+      }
+      if (direct.isEmpty) {
+        // Nothing anywhere: no session tracks the engine can open, no
+        // listing tracks, no item/audioFiles/count, no probeable raw
+        // files. Fail fast and honestly instead of stalling 20 s on an
+        // HLS URL that cannot play on this build. (The server's own log
+        // for such sessions: "episode not found null", zero segments,
+        // ffmpeg exits 183, stream deleted.)
+        throw AudiobookshelfApiException(
+            episode == null && item.type == SpokenMediaType.podcast
+                ? 'This podcast has no playable episodes yet - open it in '
+                    'Audiobookshelf and check its episodes.'
+                : 'No directly playable audio found, and this Windows '
+                    'build cannot open the server\'s HLS stream.');
       }
       if (direct.isNotEmpty && src.isNotEmpty) {
         playTracks = direct;
@@ -545,8 +597,7 @@ class SpokenLibraryState extends ChangeNotifier {
 
   /// The episode a disguised-show tap should play: the one in progress,
   /// else the newest unplayed, else the newest.
-  SpokenEpisode _pickEpisode(SpokenItem show) {
-    final episodes = show.episodes;
+  SpokenEpisode _pickEpisode(List<SpokenEpisode> episodes) {
     for (final episode in episodes) {
       final unfinished = episode.duration <= Duration.zero ||
           episode.progressSeconds < episode.duration.inSeconds;
