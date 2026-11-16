@@ -20,6 +20,7 @@ import '../../widgets/artwork_thumb.dart';
 import '../../widgets/cache_helpers.dart';
 import '../../widgets/click_region.dart';
 import '../../widgets/desktop_context_menu.dart';
+import '../../widgets/mobile_kit/mobile_detail_header.dart';
 import '../../widgets/motion.dart';
 import '../../widgets/page_transitions.dart';
 import '../../widgets/song_actions_sheet.dart';
@@ -521,6 +522,68 @@ class _ArtistHeader extends StatelessWidget {
               ),
             );
 
+        // Android kit: narrow artists use the shared detail header (216 dp
+        // centred portrait on one accent wash) with the secondary actions as
+        // quiet round buttons under it.
+        if (!wide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MobileDetailHeader(
+                title: artist.name,
+                cover: ArtworkThumb(
+                  gradientColors: artist.gradientColors,
+                  artwork: artwork,
+                  size: 216,
+                  radius: 16,
+                  icon: Icons.person_rounded,
+                  iconSize: 76,
+                ),
+                accent: artist.gradientColors.first,
+                meta: [
+                  '$albumCount ${albumCount == 1 ? 'album' : 'albums'}',
+                  '$songCount ${songCount == 1 ? 'song' : 'songs'}',
+                  if (totalDuration.inMinutes > 0) hoursMinutes(totalDuration),
+                  '$cachedCount cached',
+                ],
+                onPlay: hasSongs ? onPlay : null,
+                onShuffle: hasSongs ? onShuffle : null,
+                trailingAction: MobileRoundButton(
+                    icon: Icons.more_vert_rounded,
+                    tooltip: 'More options',
+                    onTap: onMore),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    MobileRoundButton(
+                        icon: Icons.download_rounded,
+                        tooltip: 'Cache all',
+                        onTap: hasSongs ? onCacheAll : null),
+                    MobileRoundButton(
+                        icon: Icons.auto_awesome_rounded,
+                        tooltip: 'Similar mix',
+                        onTap: hasSongs ? onSimilar : null),
+                    MobileRoundButton(
+                        icon: isFav
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        tooltip: isFav
+                            ? 'Remove from favorites'
+                            : 'Add to favorites',
+                        active: isFav,
+                        activeColor: kPinkLight,
+                        onTap: onFavorite),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -575,25 +638,6 @@ class _ArtistHeader extends StatelessWidget {
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      portraitWidget(),
-                      const SizedBox(height: 12),
-                      Text('ARTIST', style: eyebrow),
-                      const SizedBox(height: 2),
-                      Text(artist.name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: nameStyle),
-                      const SizedBox(height: 4),
-                      Text(meta, textAlign: TextAlign.center, style: metaStyle),
-                      const SizedBox(height: 12),
-                      actions(centered: true),
                     ],
                   ),
                 ),

@@ -217,6 +217,64 @@ class _SongsTabState extends State<_SongsTab> {
 
   /// The sort popup items, shared by the mobile trigger and the desktop
   /// sort chip.
+  IconData _sortIcon(_SongSort sort) {
+    switch (sort) {
+      case _SongSort.titleAz:
+        return Icons.sort_by_alpha_rounded;
+      case _SongSort.artistAz:
+        return Icons.person_rounded;
+      case _SongSort.recentlyAdded:
+        return Icons.schedule_rounded;
+    }
+  }
+
+  /// Kit sort bottom sheet: raised card, one tile per option, violet check
+  /// on the current one.
+  void _showSortSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kRaisedColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: kHairline),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Sort by',
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ),
+          for (final entry in <(String, _SongSort)>[
+            ('Title', _SongSort.titleAz),
+            ('Artist', _SongSort.artistAz),
+            ('Recently added', _SongSort.recentlyAdded),
+          ])
+            ListTile(
+              dense: true,
+              title: Text(entry.$1,
+                  style: GoogleFonts.getFont(currentFontFamily,
+                      color: Colors.white, fontSize: 14)),
+              leading: widget.sort == entry.$2
+                  ? const Icon(Icons.check_rounded, color: kBrandColor, size: 20)
+                  : const SizedBox(width: 20),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                widget.onSortChanged(entry.$2);
+              },
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
   List<PopupMenuItem<_SongSort>> _sortMenuItems() => [
         PopupMenuItem(
             value: _SongSort.titleAz,
@@ -328,54 +386,59 @@ class _SongsTabState extends State<_SongsTab> {
             },
           )
         else
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-            child: Row(
-              children: [
-                Text('${songs.length} songs',
-                    style: GoogleFonts.getFont(currentFontFamily,
-                        color: kMutedTextColor, fontSize: 12)),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () =>
-                      player.playSong(visible.first, queue: visible),
-                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                  label: const Text('Play all'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 8)),
-                ),
-                const SizedBox(width: 4),
-                TextButton.icon(
-                  onPressed: () {
-                    final shuffled = [...visible]..shuffle();
-                    player.playSong(shuffled.first, queue: shuffled);
-                  },
-                  icon: const Icon(Icons.shuffle_rounded, size: 18),
-                  label: const Text('Shuffle'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 8)),
-                ),
-                // Mobile keeps the sort popup; desktop uses the sort chip
-                // in the toolbar plus the table's own column headers.
-                PopupMenuButton<_SongSort>(
-                  color: kCardColor,
-                  initialValue: widget.sort,
-                  onSelected: widget.onSortChanged,
-                  itemBuilder: (context) => _sortMenuItems(),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.sort_rounded,
-                          color: kMutedTextColor, size: 16),
-                      SizedBox(width: 4),
-                      Icon(Icons.keyboard_arrow_down_rounded,
-                          color: kMutedTextColor, size: 16),
-                    ],
+          // Android kit sub-bar: 44 dp - count left, play/shuffle at 48 dp,
+          // current sort right (violet, arrow) opening the sort sheet.
+          SizedBox(
+            height: 44,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
+              child: Row(
+                children: [
+                  Text('${songs.length} songs',
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: kMutedTextColor, fontSize: 12)),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Play all',
+                    onPressed: () =>
+                        player.playSong(visible.first, queue: visible),
+                    icon: const Icon(Icons.play_arrow_rounded,
+                        size: 22, color: Colors.white),
                   ),
-                ),
-              ],
+                  IconButton(
+                    tooltip: 'Shuffle',
+                    onPressed: () {
+                      final shuffled = [...visible]..shuffle();
+                      player.playSong(shuffled.first, queue: visible);
+                    },
+                    icon: const Icon(Icons.shuffle_rounded,
+                        size: 20, color: Colors.white),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () => _showSortSheet(context),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_sortIcon(widget.sort),
+                              color: kVioletLight, size: 16),
+                          const SizedBox(width: 6),
+                          Text(widget.sort.label,
+                              style: GoogleFonts.getFont(currentFontFamily,
+                                  color: kVioletLight,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.keyboard_arrow_down_rounded,
+                              color: kVioletLight, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         Expanded(

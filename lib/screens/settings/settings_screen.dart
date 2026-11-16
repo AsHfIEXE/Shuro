@@ -1637,6 +1637,12 @@ class _NavRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = destructive ? const Color(0xFFFCA5A5) : kTextColor;
     final tappable = onTap != null;
+    // Android kit rows lead with a flat 36 dp tile (violet 16 %, 10 dp
+    // radius, pale icon) and 60 dp of breathing room; desktop keeps the
+    // bare 18 dp muted icon.
+    final desktop =
+        !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    final mobile = !desktop;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: _HoverRow(
@@ -1645,9 +1651,24 @@ class _NavRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
             children: [
-              Icon(icon,
-                  size: 18,
-                  color: destructive ? const Color(0xFFFCA5A5) : kMuted2),
+              if (mobile)
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: (destructive ? const Color(0xFFFCA5A5) : kBrandColor)
+                        .withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon,
+                      size: 20,
+                      color:
+                          destructive ? const Color(0xFFFCA5A5) : kVioletPale),
+                )
+              else
+                Icon(icon,
+                    size: 18,
+                    color: destructive ? const Color(0xFFFCA5A5) : kMuted2),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1656,8 +1677,9 @@ class _NavRow extends StatelessWidget {
                     Text(label,
                         style: GoogleFonts.getFont(currentFontFamily,
                             color: color,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
+                            fontSize: mobile ? 15 : 14,
+                            fontWeight:
+                                mobile ? FontWeight.w500 : FontWeight.w600)),
                     if (description != null) ...[
                       const SizedBox(height: 2),
                       Text(description!,
@@ -1685,8 +1707,11 @@ class _NavRow extends StatelessWidget {
                         ),
                       ),
               ] else if (tappable)
-                const Icon(Icons.chevron_right_rounded,
-                    color: kMuted2, size: 18),
+                mobile
+                    ? const Icon(Icons.chevron_right_rounded,
+                        color: kMuted3, size: 22)
+                    : const Icon(Icons.chevron_right_rounded,
+                        color: kMuted2, size: 18),
             ],
           ),
         ),
@@ -2543,12 +2568,12 @@ class _SettingsGroupCard extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-            child: Text(title,
+            child: Text(title.toUpperCase(),
                 style: GoogleFonts.getFont(currentFontFamily,
                     color: kMuted2,
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8)),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9)),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -2566,6 +2591,7 @@ class _SettingsGroupCard extends StatelessWidget {
                     Divider(
                         height: 1,
                         thickness: 1,
+                        indent: 66,
                         color: Colors.white.withValues(alpha: 0.06)),
                   rows[i],
                 ],

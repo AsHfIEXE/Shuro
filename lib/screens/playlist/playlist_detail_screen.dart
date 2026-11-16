@@ -23,6 +23,7 @@ import '../../widgets/sheet_scroll.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
 import '../../widgets/click_region.dart';
+import '../../widgets/mobile_kit/mobile_detail_header.dart';
 
 /// "08. Playlists > Playlist detail" — redesigned per the Playlist detail
 /// board: a collage/cover + meta header with Play/Shuffle pills and the
@@ -657,12 +658,65 @@ class _PlaylistHeader extends StatelessWidget {
               ],
             );
           }
+          // Android kit: centred 216 collage (tap = change artwork), wash,
+          // violet Play pill, shuffle + rename rounds, quiet rounds for the
+          // cache/add-songs actions the kit header has no slots for.
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              art,
-              const SizedBox(height: 16),
-              textBlock,
+              MobileDetailHeader(
+                title: playlist.name,
+                cover: Tooltip(
+                  message: 'Change playlist artwork',
+                  child: ClickRegion(
+                    onTap: onChangeArtwork,
+                    child: SizedBox(
+                      width: 216,
+                      height: 216,
+                      child: PlaylistCollageArt(
+                          playlist: playlist, radius: 16),
+                    ),
+                  ),
+                ),
+                accent: playlist.gradientColors.first,
+                byline: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.person_rounded,
+                        size: 16, color: kVioletLight),
+                    const SizedBox(width: 8),
+                    Text('You',
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kVioletLight,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                meta: [meta],
+                onPlay: onPlay,
+                onShuffle: onShuffle,
+                trailingAction: MobileRoundButton(
+                  icon: Icons.edit_rounded,
+                  tooltip: 'Rename playlist',
+                  onTap: onRename,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    MobileRoundButton(
+                        icon: Icons.download_rounded,
+                        tooltip: 'Cache for offline',
+                        onTap: onCache),
+                    const SizedBox(width: 12),
+                    MobileRoundButton(
+                        icon: Icons.add_rounded,
+                        tooltip: 'Add songs',
+                        onTap: onAddSongs),
+                  ],
+                ),
+              ),
             ],
           );
         }),

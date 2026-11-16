@@ -25,6 +25,7 @@ import '../../widgets/motion.dart';
 import '../../widgets/song_actions_sheet.dart';
 import '../../widgets/state_views.dart';
 import '../artist/artist_detail_screen.dart';
+import '../../widgets/mobile_kit/mobile_detail_header.dart';
 
 /// "05. Albums > Album detail" — redesigned per the Album detail board.
 ///
@@ -294,9 +295,16 @@ class _AlbumHeader extends StatelessWidget {
   final Album album;
   final List<Song> songs;
   final int cachedCount;
+  final VoidCallback? onPlay;
+  final VoidCallback? onShuffle;
 
-  const _AlbumHeader(
-      {required this.album, required this.songs, this.cachedCount = 0});
+  const _AlbumHeader({
+    required this.album,
+    required this.songs,
+    this.cachedCount = 0,
+    this.onPlay,
+    this.onShuffle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -314,6 +322,7 @@ class _AlbumHeader extends StatelessWidget {
       if (songs.isNotEmpty) '$cachedCount of ${songs.length} cached',
     ].join(' · ');
     final artistModel = context.read<AppState>().artistById(album.artistId);
+    final player = context.read<PlayerController>();
 
     return LayoutBuilder(builder: (context, constraints) {
       final wide = constraints.maxWidth >= 640;
@@ -401,15 +410,59 @@ class _AlbumHeader extends StatelessWidget {
           ),
         );
       }
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Column(
-          children: [
-            cover(),
-            const SizedBox(height: 16),
-            textBlock(centered: true),
-          ],
+      // Android kit: centred 216 cover, artwork wash, violet Play pill,
+      // tappable artist byline, 52 dp shuffle round.
+      return MobileDetailHeader(
+        title: album.title,
+        cover: ArtworkThumb(
+          gradientColors: album.gradientColors,
+          artwork: album.artwork,
+          size: 216,
+          radius: 16,
+          icon: Icons.album_rounded,
+          iconSize: 56,
         ),
+        accent: album.gradientColors.first,
+        byline: artistModel == null
+            ? null
+            : ClickRegion(
+                onTap: () => Navigator.of(context).push(
+                    drillDownRoute(ArtistDetailScreen(artist: artistModel))),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ArtworkThumb(
+                      gradientColors:
+                          artistModel.gradientColors,
+                      artwork: artistModel.artwork,
+                      size: 24,
+                      radius: 999,
+                      icon: Icons.person_rounded,
+                      iconSize: 12,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(album.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.getFont(currentFontFamily,
+                              color: kVioletLight,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
+        meta: [meta],
+        onPlay: songs.isEmpty
+            ? null
+            : () => player.playSong(songs.first, queue: songs),
+        onShuffle: songs.isEmpty
+            ? null
+            : () {
+                player.playSong(songs.first, queue: songs);
+                if (!player.shuffle) player.toggleShuffle();
+              },
       );
     });
   }
@@ -457,11 +510,26 @@ class _AlbumBody extends StatelessWidget {
       if (album.added != null)
         'Added ${album.added!.day} ${_months[album.added!.month - 1]} ${album.added!.year}',
     ].join(' · ');
+    final albumOnPlay = songs.isEmpty
+        ? null
+        : () =>
+            context.read<PlayerController>().playSong(songs.first, queue: songs);
+    final albumOnShuffle = songs.isEmpty
+        ? null
+        : () {
+            context
+                .read<PlayerController>()
+                .playSong(songs.first, queue: songs);
+            final player = context.read<PlayerController>();
+            if (!player.shuffle) player.toggleShuffle();
+          };
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
         Entrance(
             child: _AlbumHeader(
+          onPlay: albumOnPlay,
+          onShuffle: albumOnShuffle,
                 album: album,
                 songs: songs,
                 cachedCount: cachedIds.length)),
