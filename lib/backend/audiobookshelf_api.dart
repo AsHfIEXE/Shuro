@@ -232,12 +232,19 @@ class AudiobookshelfApi {
       };
       final Map<String, dynamic> data;
       try {
-        // ABS reads the podcast episodeId from the QUERY string, not the
-        // JSON body - a body-only episodeId is silently ignored, the
-        // session comes back with an empty tracklist and the server logs
-        // "episode not found null" (the whole episode playback saga).
-        data = await _post('/items/$itemId/play', body,
-            episodeId != null ? {'episodeId': episodeId} : null);
+        // Podcast episodes have their OWN route in the ABS server
+        // (routers/ApiRouter.js):
+        //   POST /items/:id/play            -> books, episode = null
+        //   POST /items/:id/play/:episodeId -> podcast episodes
+        // Calling the plain route for a podcast passes a literal null
+        // episode into the podcast manager - "episode not found null",
+        // empty tracklist, empty files.txt - no body/query field is ever
+        // read. The body (deviceInfo, supportedMimeTypes, direct-play
+        // flags) is honored on both routes.
+        final playPath = episodeId == null
+            ? '/items/$itemId/play'
+            : '/items/$itemId/play/$episodeId';
+        data = await _post(playPath, body);
       } on AudiobookshelfApiException {
         rethrow; // real HTTP errors surface immediately
       } catch (_) {
