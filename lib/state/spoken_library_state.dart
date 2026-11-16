@@ -11,6 +11,7 @@ import '../models/spoken_media.dart';
 import '../playback/event_log.dart';
 import '../services/app_persistence.dart';
 import '../services/server_secret_store.dart';
+import '../services/stream_proxy.dart';
 
 @immutable
 class AudiobookshelfConnection {
@@ -335,30 +336,24 @@ class SpokenLibraryState extends ChangeNotifier {
       // in order of cheapness: the listing's media.tracks (some servers
       // include them), then the FULL item fetch - GET /api/items/:id is
       // the response that actually carries each file's /s/ contentUrl.
-      var direct = item.tracks;
+      var direct = <AbsTrack>[
+        for (final track in item.tracks)
+          AbsTrack(
+            contentUrl: track.contentUrl,
+            mimeType: track.mimeType,
+            startOffset: track.startOffset,
+            duration: track.duration,
+          ),
+      ];
       if (direct.isEmpty && episode == null) {
         try {
-          direct = [
-            for (final track in await api.directTracks(item.id))
-              SpokenTrack(
-                contentUrl: track.contentUrl,
-                mimeType: track.mimeType,
-                startOffset: track.startOffset,
-                duration: track.duration,
-              ),
-          ];
+          // media.tracks first; on servers without them this falls to
+          // audioFiles -> /api/items/:id/file/:n raw streams.
+          direct = await api.directTracks(item.id);
         } catch (_) {}
       }
       if (direct.isNotEmpty) {
-        playTracks = [
-          for (final track in direct)
-            AbsTrack(
-              contentUrl: track.contentUrl,
-              mimeType: track.mimeType,
-              startOffset: track.startOffset,
-              duration: track.duration,
-            ),
-        ];
+        playTracks = direct;
         trackSource = item.tracks.isNotEmpty ? 'itemTracks' : 'itemFetch';
       }
       // Diagnostics: what does the HLS URL itself answer? (Non-blocking.)
@@ -374,7 +369,7 @@ class SpokenLibraryState extends ChangeNotifier {
       currentTime: session.currentTime,
       tracks: playTracks,
     );
-    final songs = _sessionSongs(api, session2, item, episode);
+    final songs = await _sessionSongs(api, session2, item, episode);
     // Which track holds the resume point, and how far into it. The session
     // currentTime is item/episode-relative; each track has its offset.
     var trackIndex = session2.tracks.length - 1;
@@ -471,30 +466,37 @@ class SpokenLibraryState extends ChangeNotifier {
     );
   }
 
-  List<Song> _sessionSongs(AudiobookshelfApi api, AbsSession session,
-      SpokenItem item, SpokenEpisode? episode) {
+  Future<List<Song>> _sessionSongs(AudiobookshelfApi api, AbsSession session,
+      SpokenItem item, SpokenEpisode? episode) async {
     final baseId =
         episode == null ? 'abs_${item.id}' : 'abs_${item.id}_${episode.id}';
     final cover = NetworkImage(api.coverUrl(item.id).toString());
-    return <Song>[
-      for (var i = 0; i < session.tracks.length; i++)
-        Song(
-          // Track 0 keeps the plain id the playing-highlight keys expect;
-          // later tracks suffix _t<i> so queue ids stay unique.
-          id: i == 0 ? baseId : '${baseId}_t$i',
-          title: session.tracks.length > 1
-              ? '${episode?.title ?? item.title} (${i + 1}/${session.tracks.length})'
-              : (episode?.title ?? item.title),
-          artist: episode == null ? item.creator : item.title,
-          artistId: '',
-          albumId: '',
-          duration: Duration(
-              milliseconds: (session.tracks[i].duration * 1000).round()),
-          gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
-          artwork: cover,
-          localFilePath: api.streamUrlOf(session.tracks[i]),
-        ),
-    ];
+    final songs = <Song>[];
+    for (var i = 0; i < session.tracks.length; i++) {
+      // Every ABS stream goes through the loopback proxy: the engine's
+      // audio-only desktop libs cannot parse HLS, and its direct fetches
+      // from this class of server have stalled where the app's own HTTP
+      // stack succeeds. The proxy forwards Range, so seeking survives.
+      final url =
+          await StreamProxy.proxyUrl(api.streamUrlOf(session.tracks[i]));
+      songs.add(Song(
+        // Track 0 keeps the plain id the playing-highlight keys expect;
+        // later tracks suffix _t<i> so queue ids stay unique.
+        id: i == 0 ? baseId : '${baseId}_t$i',
+        title: session.tracks.length > 1
+            ? '${episode?.title ?? item.title} (${i + 1}/${session.tracks.length})'
+            : (episode?.title ?? item.title),
+        artist: episode == null ? item.creator : item.title,
+        artistId: '',
+        albumId: '',
+        duration: Duration(
+            milliseconds: (session.tracks[i].duration * 1000).round()),
+        gradientColors: const [Color(0xFF7C3AED), Color(0xFFFF6B9D)],
+        artwork: cover,
+        localFilePath: url,
+      ));
+    }
+    return songs;
   }
 
   void _startSyncTimer() {

@@ -119,6 +119,23 @@ class StreamProxy {
     return client;
   }
 
+  /// Always-on variant of [wrap]: rewrites an http(s) URL to the loopback
+  /// proxy unconditionally (wrap only engages when the device resolver is
+  /// broken). Used for sources the ENGINE itself cannot fetch or parse -
+  /// e.g. Audiobookshelf HLS playlists, which the audio-only media_kit
+  /// libs cannot demux: the engine talks to 127.0.0.1 only, this app's
+  /// own HTTP stack (proven working to that server) does the real fetch
+  /// with Range forwarding.
+  static Future<String> proxyUrl(String url) async {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return url;
+    }
+    await start();
+    final server = _server;
+    if (server == null) return url;
+    return 'http://127.0.0.1:${server.port}/stream?u=${Uri.encodeComponent(url)}';
+  }
+
   static String wrap(String url) {
     final server = _server;
     if (server == null) return url;

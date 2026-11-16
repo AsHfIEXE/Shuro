@@ -337,9 +337,18 @@ class AudiobookshelfApi {
   Future<List<AbsTrack>> directTracks(String itemId) async {
     final data = await _get('/items/$itemId');
     final media = data['media'] as Map<String, dynamic>?;
-    final rows = _trackRows(media?['tracks']);
-    return [
-      for (final row in rows)
+    final trackRows = _trackRows(media?['tracks']);
+    final audioFiles =
+        (media?['audioFiles'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    PlaybackEventLog.instance.add('abs.item', {
+      'item': itemId,
+      'tracks': trackRows.length,
+      'audioFiles': audioFiles.length,
+    });
+    final fromTracks = [
+      for (final row in trackRows)
         AbsTrack(
           contentUrl: row['contentUrl'] as String? ?? '',
           mimeType: row['mimeType'] as String? ?? 'audio/mpeg',
@@ -347,6 +356,26 @@ class AudiobookshelfApi {
           duration: (row['duration'] as num?)?.toDouble() ?? 0,
         ),
     ].where((track) => track.contentUrl.isNotEmpty).toList();
+    if (fromTracks.isNotEmpty) return fromTracks;
+    // No direct-play Track objects on this server - but the FILES exist.
+    // /api/items/:id/file/:index streams each raw file; startOffsets come
+    // from the cumulative file durations.
+    var offset = 0.0;
+    return [
+      for (final file in audioFiles)
+        () {
+          final duration = (file['duration'] as num?)?.toDouble() ?? 0;
+          final index = (file['index'] as num?)?.toInt() ?? 0;
+          final track = AbsTrack(
+            contentUrl: '/api/items/$itemId/file/$index',
+            mimeType: 'audio/mpeg',
+            startOffset: offset,
+            duration: duration,
+          );
+          offset += duration;
+          return track;
+        }(),
+    ];
   }
 
   /// One-off status probe for a stream URL (diagnostics: names the exact
