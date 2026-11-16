@@ -426,7 +426,11 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
                               () => setState(() => _showAll = !_showAll))
                           : null),
                   const SizedBox(height: 14),
-                  _audiobookShelf(books, playingId),
+                  if (books.isEmpty)
+                    _empty('No audiobooks in this library yet - they will '
+                        'appear here once the server has audiobooks to show.')
+                  else
+                    _audiobookShelf(books, playingId),
                   const SizedBox(height: 30),
                 ],
                 if (showPods && latest.isNotEmpty) ...[
@@ -559,6 +563,11 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
         onTap: onTap,
         child: Text(label,
             style: _ts(12, w: FontWeight.w600, c: _C.violetLight)),
+      );
+
+  Widget _empty(String m) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(m, style: _ts(13, c: _C.faint)),
       );
 
   // ── Continue listening ────────────────────────────────────────────────────
