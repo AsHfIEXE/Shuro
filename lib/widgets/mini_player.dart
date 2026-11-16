@@ -14,6 +14,7 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/desktop_tokens.dart';
 import 'animated_favorite_icon.dart';
+import 'artwork_thumb.dart';
 import 'artwork_ring.dart';
 import 'smooth_position_builder.dart';
 import 'page_transitions.dart';
@@ -65,8 +66,13 @@ class _MiniPlayerBar extends StatelessWidget {
     final isActive = player.currentSong?.id == song.id;
     final isPlaying = isActive && player.isPlaying;
     final isBuffering = isActive && player.isBuffering;
-    final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= MiniPlayer._kWideBreakpoint;
+    final wide = MediaQuery.sizeOf(context).width >= MiniPlayer._kWideBreakpoint;
+
+    final bar = wide
+        ? _desktopBar(context, player, appState, isFav, isActive, isPlaying,
+            isBuffering)
+        : _androidBar(context, player, appState, isFav, isActive, isPlaying,
+            isBuffering);
 
     return ClickRegion(
       onTap: () => pushRisingOnce(context, NowPlayingScreen(initialSong: song)),
@@ -83,94 +89,262 @@ class _MiniPlayerBar extends StatelessWidget {
           pushRisingOnce(context, NowPlayingScreen(initialSong: song));
         }
       },
-      child: Container(
-        // Palette-tinted: the bar quietly picks up the track's own colours —
-        // same design language as the NPV backdrop — over the base card color.
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              kCardColor,
-              Color.lerp(kCardColor, song.gradientColors.first, 0.22) ??
-                  kCardColor,
+      child: bar,
+    );
+  }
+
+  /// Desktop / wide window: the redesign bar — palette-tinted surface, the
+  /// 44 px ring artwork as the scrubber, queue peek on the side.
+  Widget _desktopBar(
+      BuildContext context,
+      PlayerController player,
+      AppState appState,
+      bool isFav,
+      bool isActive,
+      bool isPlaying,
+      bool isBuffering) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kCardColor,
+            Color.lerp(kCardColor, song.gradientColors.first, 0.22) ??
+                kCardColor,
+          ],
+        ),
+      ),
+      child: SizedBox(
+        height: 64,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _RingScrubber(song: song, player: player, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${song.artist} · ${appState.albumById(song.albumId)?.title ?? ''}'
+                          .trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(currentFontFamily,
+                          color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              AnimatedFavoriteIcon(
+                isFavorite: isFav,
+                activeColor: song.gradientColors.last,
+                inactiveColor: Colors.white70,
+                size: 22,
+                onTap: () => Favorites.toggle(context, song.id),
+              ),
+              QueuePeekButton(
+                color: Colors.white70,
+                iconSize: 22,
+                onOpen: () => pushRisingOnce(context, const QueueScreen()),
+              ),
+              _TransportButton(
+                icon: ShuroGlyph.previous,
+                label: 'Previous track',
+                onPressed: player.previous,
+              ),
+              _PlayPauseButton(
+                isPlaying: isPlaying,
+                isBuffering: isBuffering,
+                accent: song.gradientColors.last,
+                onPressed: player.togglePlayPause,
+              ),
+              _TransportButton(
+                icon: ShuroGlyph.next,
+                label: 'Next track',
+                onPressed: player.next,
+              ),
             ],
           ),
-          // No border of its own: the mini player lives INSIDE the nav bar's
-          // rounded block now (see ShuroNavBar.header), so its own edges would
-          // draw mismatched corners against the bar's.
         ),
-        child: SizedBox(
-          // 64 px mini player bar (docs/01): ring + title row, one line tall.
-          height: 64,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 12),
+      ),
+    );
+  }
+
+  /// Android kit bar (mobile, < 1024): 60 dp, flat raised surface with a
+  /// hairline top, 44 dp square artwork (playing = dim scrim + bars), and a
+  /// 2 dp violet progress line along the top edge. Violet is the only state
+  /// colour; no gradients, no glows. Every touch target is >= 48 dp.
+  Widget _androidBar(
+      BuildContext context,
+      PlayerController player,
+      AppState appState,
+      bool isFav,
+      bool isActive,
+      bool isPlaying,
+      bool isBuffering) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: kRaisedColor,
+        border: Border(top: BorderSide(color: Color(0x14FFFFFF))),
+      ),
+      child: Stack(
+        children: [
+          SizedBox(
+            height: 60,
             child: Row(
               children: [
-                _RingScrubber(song: song, player: player, size: 44),
-                const SizedBox(width: 12),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white,
-                              fontSize: wide ? 14 : 13.5,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          wide
-                              ? '${song.artist} · ${appState.albumById(song.albumId)?.title ?? ''}'
-                                  .trim()
-                              : song.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.getFont(currentFontFamily,
-                              color: Colors.white60, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
                 const SizedBox(width: 8),
-                AnimatedFavoriteIcon(
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: ArtworkThumb(
+                    gradientColors: song.gradientColors,
+                    artwork: song.artwork,
+                    size: 44,
+                    radius: 8,
+                    iconSize: 18,
+                    playing: isActive && isPlaying,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(currentFontFamily,
+                            color: kMuted2, fontSize: 12.5),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: AnimatedFavoriteIcon(
                     isFavorite: isFav,
-                    activeColor: song.gradientColors.last,
-                    inactiveColor: Colors.white70,
+                    activeColor: kVioletPale,
+                    inactiveColor: kMuted2,
                     size: 22,
                     onTap: () => Favorites.toggle(context, song.id),
                   ),
-                  if (wide)
-                    QueuePeekButton(
-                      color: Colors.white70,
-                      iconSize: 22,
-                      onOpen: () =>
-                          pushRisingOnce(context, const QueueScreen()),
-                    ),
-                  _TransportButton(
-                    icon: ShuroGlyph.previous,
-                    label: 'Previous track',
-                    onPressed: player.previous,
-                  ),
-                  _PlayPauseButton(
-                    isPlaying: isPlaying,
-                    isBuffering: isBuffering,
-                    accent: song.gradientColors.last,
-                    onPressed: player.togglePlayPause,
-                  ),
-                  _TransportButton(
-                    icon: ShuroGlyph.next,
-                    label: 'Next track',
+                ),
+                _KitPlayPause(
+                  isPlaying: isPlaying,
+                  isBuffering: isBuffering,
+                  onPressed: player.togglePlayPause,
+                ),
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: IconButton(
+                    tooltip: 'Next track',
                     onPressed: player.next,
+                    icon: ShuroIcon(ShuroGlyph.next,
+                        color: Colors.white, size: 24),
                   ),
-                ],
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+          // 2 dp violet progress line along the top edge - the flat Android
+          // equivalent of the desktop ring.
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: SmoothPositionBuilder(
+              builder: (context, p, position, progress) => Container(
+                height: 2,
+                color: Colors.transparent,
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  child: Container(color: kBrandColor),
+                ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The kit's play/pause: a flat 48 dp violet disc - no glow, violet is the
+/// only state colour on the Android surface.
+class _KitPlayPause extends StatelessWidget {
+  final bool isPlaying;
+  final bool isBuffering;
+  final VoidCallback onPressed;
+
+  const _KitPlayPause(
+      {required this.isPlaying,
+      required this.isBuffering,
+      required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: isBuffering ? 'Loading' : (isPlaying ? 'Pause' : 'Play'),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: kBrandColor,
+            ),
+            child: IconButton(
+              tooltip: isPlaying ? 'Pause' : 'Play',
+              onPressed: onPressed,
+              padding: EdgeInsets.zero,
+              icon: isBuffering
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Padding(
+                          padding: EdgeInsets.all(2),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white)))
+                  : ShuroIcon(isPlaying ? ShuroGlyph.pause : ShuroGlyph.play,
+                      color: Colors.white, size: 24),
+            ),
           ),
         ),
       ),
