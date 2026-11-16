@@ -91,9 +91,10 @@ class AudiobookshelfApi {
     return decoded;
   }
 
-  Future<Map<String, dynamic>> _post(String path, Object? body) async {
+  Future<Map<String, dynamic>> _post(String path, Object? body,
+      [Map<String, String>? query]) async {
     final response = await http
-        .post(_uri(path),
+        .post(_uri(path, query),
             headers: {..._headers, 'Content-Type': 'application/json'},
             body: body == null ? null : jsonEncode(body))
         .timeout(const Duration(seconds: 15));
@@ -231,7 +232,12 @@ class AudiobookshelfApi {
       };
       final Map<String, dynamic> data;
       try {
-        data = await _post('/items/$itemId/play', body);
+        // ABS reads the podcast episodeId from the QUERY string, not the
+        // JSON body - a body-only episodeId is silently ignored, the
+        // session comes back with an empty tracklist and the server logs
+        // "episode not found null" (the whole episode playback saga).
+        data = await _post('/items/$itemId/play', body,
+            episodeId != null ? {'episodeId': episodeId} : null);
       } on AudiobookshelfApiException {
         rethrow; // real HTTP errors surface immediately
       } catch (_) {
