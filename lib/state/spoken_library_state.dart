@@ -354,18 +354,34 @@ class SpokenLibraryState extends ChangeNotifier {
           ),
       ];
       var src = item.tracks.isNotEmpty ? 'itemTracks' : '';
+      var episodeNotDownloaded = false;
       if (direct.isEmpty && episode != null) {
         // Episodes keep their file in the episode object - the audioFile
         // index parsed from the listing is exactly what /file/:index wants.
-        direct = [
-          AbsTrack(
-            contentUrl: '/api/items/${item.id}/file/${episode.fileIndex}',
-            mimeType: 'audio/mpeg',
-            startOffset: 0,
-            duration: episode.duration.inMilliseconds / 1000.0,
-          ),
-        ];
-        src = 'episodeFile';
+        // PROBE it first: RSS-feed podcasts carry the episode metadata but
+        // no local audio until someone downloads it server-side, and their
+        // own HLS sessions die on the missing file - playing blind would
+        // stall 20 s on a URL the server can never serve.
+        final candidate = AbsTrack(
+          contentUrl: '/api/items/${item.id}/file/${episode.fileIndex}',
+          mimeType: 'audio/mpeg',
+          startOffset: 0,
+          duration: episode.duration.inMilliseconds / 1000.0,
+        );
+        final status =
+            await api.probeRange(api.streamUrlOf(candidate));
+        if (status == 200 || status == 206) {
+          direct = [candidate];
+          src = 'episodeFile';
+        } else {
+          episodeNotDownloaded = true;
+          PlaybackEventLog.instance.add('abs.probe', {
+            'item': item.id,
+            'episode': episode.id,
+            'file': episode.fileIndex,
+            'status': status,
+          });
+        }
       } else if (direct.isEmpty) {
         try {
           final expanded = await api.itemExpanded(item);
@@ -414,7 +430,7 @@ class SpokenLibraryState extends ChangeNotifier {
         // their files everywhere - and their HLS sessions can be empty
         // 404s). Probe the raw file indexes with 1-byte range requests:
         // whatever answers 206 becomes the playlist.
-        var index = 0;
+        var index = item.type == SpokenMediaType.podcast ? 1 : 0;
         while (index < 8) {
           final candidate = AbsTrack(
             contentUrl: '/api/items/${item.id}/file/$index',
@@ -442,11 +458,15 @@ class SpokenLibraryState extends ChangeNotifier {
         // for such sessions: "episode not found null", zero segments,
         // ffmpeg exits 183, stream deleted.)
         throw AudiobookshelfApiException(
-            episode == null && item.type == SpokenMediaType.podcast
-                ? 'This podcast has no playable episodes yet - open it in '
-                    'Audiobookshelf and check its episodes.'
-                : 'No directly playable audio found, and this Windows '
-                    'build cannot open the server\'s HLS stream.');
+            episode != null && episodeNotDownloaded
+                ? 'This episode is not downloaded on the server yet. '
+                    'Download it in Audiobookshelf (episode menu -> '
+                    'Download), then play it here.'
+                : episode == null && item.type == SpokenMediaType.podcast
+                    ? 'This podcast has no playable episodes yet - open it '
+                        'in Audiobookshelf and check its episodes.'
+                    : 'No directly playable audio found, and this Windows '
+                        'build cannot open the server\'s HLS stream.');
       }
       if (direct.isNotEmpty && src.isNotEmpty) {
         playTracks = direct;
