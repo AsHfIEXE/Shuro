@@ -334,13 +334,29 @@ class AudiobookshelfApi {
   /// library LISTING omits media.tracks - this is the response that
   /// carries each file's own /s/ contentUrl, i.e. the URLs ABS clients
   /// stream when they direct-play.
-  Future<List<AbsTrack>> directTracks(String itemId) async {
-    // Some servers omit media.tracks / media.audioFiles from the item
-    // response unless explicitly requested - pass include anyway; servers
-    // that do not support the parameter ignore it.
-    final data = await _get('/items/$itemId', {
-      'include': 'progress,tracks,chapters,audioFiles',
-    });
+  /// The full single-item response - the one that can carry media.tracks,
+  /// media.audioFiles and media.episodes. include= is passed explicitly;
+  /// servers that gate those fields reveal them, others ignore it.
+  Future<Map<String, dynamic>> itemRaw(String itemId) => _get(
+      '/items/$itemId',
+      {'include': 'progress,tracks,chapters,audioFiles'});
+
+  /// Full item parsed into the model PLUS its direct-play tracks, in ONE
+  /// fetch. The parsed item can carry what minified listings hide - most
+  /// importantly a podcast show's episodes.
+  Future<({SpokenItem item, List<AbsTrack> tracks})> itemExpanded(
+      SpokenItem listed) async {
+    final raw = await itemRaw(listed.id);
+    return (
+      item: _item(raw, listed.type),
+      tracks: directTracksOf(raw, listed.id),
+    );
+  }
+
+  Future<List<AbsTrack>> directTracks(String itemId) async =>
+      directTracksOf(await itemRaw(itemId), itemId);
+
+  List<AbsTrack> directTracksOf(Map<String, dynamic> data, String itemId) {
     final media = data['media'] as Map<String, dynamic>?;
     final trackRows = _trackRows(media?['tracks']);
     final audioFiles =

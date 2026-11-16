@@ -57,6 +57,12 @@ class SpokenLibraryState extends ChangeNotifier {
   /// so queued books sync progress too.
   final Map<String, _QueuedAbsSession> _queuedSessions = {};
 
+  /// Items the minified listing disguised as audiobooks (episodes hidden,
+  /// so the trait rule shelved them as books) but the full item fetch
+  /// revealed as podcast shows. The expanded item - WITH episodes -
+  /// replaces the listing one in podcastShows, and bookItems drops it.
+  final Map<String, SpokenItem> _expandedShows = {};
+
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
   List<SpokenLibrary> get podcastLibraries =>
@@ -205,14 +211,16 @@ class SpokenLibraryState extends ChangeNotifier {
   /// items from podcast libraries.
   List<SpokenItem> get bookItems => [
         for (final item in allItems)
-          if (item.type == SpokenMediaType.book || item.episodes.isEmpty)
+          if (!_expandedShows.containsKey(item.id) &&
+              (item.type == SpokenMediaType.book || item.episodes.isEmpty))
             item,
       ];
 
   /// Items that behave as podcast shows (they have episodes).
   List<SpokenItem> get podcastShows => [
         for (final item in allItems)
-          if (item.episodes.isNotEmpty) item,
+          if (_expandedShows.containsKey(item.id) || item.episodes.isNotEmpty)
+            _expandedShows[item.id] ?? item,
       ];
 
   // --- Playback sessions -----------------------------------------------------
@@ -360,9 +368,31 @@ class SpokenLibraryState extends ChangeNotifier {
         src = 'episodeFile';
       } else if (direct.isEmpty) {
         try {
+          final expanded = await api.itemExpanded(item);
+          if (expanded.item.episodes.isNotEmpty) {
+            // A PODCAST SHOW the minified listing disguised as an
+            // audiobook (episodes hidden, so the trait rule shelved it as
+            // a book). Playing a show is what made the server answer with
+            // an HLS transcode and zero tracks - no include= would ever
+            // fix that. Play an episode instead, and remember the truth
+            // so the shelves reclassify immediately.
+            _expandedShows[item.id] = expanded.item;
+            notifyListeners();
+            final pick = _pickEpisode(expanded.item);
+            PlaybackEventLog.instance.add('abs.redirect', {
+              'item': item.id,
+              'episode': pick.id,
+              'episodes': expanded.item.episodes.length,
+            });
+            return await openSession(item,
+                episode: pick,
+                positionReader: positionReader,
+                songIdReader: songIdReader,
+                forQueue: forQueue);
+          }
           // media.tracks first; on servers without them this falls to
           // audioFiles -> numAudioFiles -> /api/items/:id/file/:n streams.
-          direct = await api.directTracks(item.id);
+          direct = expanded.tracks;
           src = 'itemFetch';
         } catch (_) {}
       }
@@ -511,6 +541,21 @@ class SpokenLibraryState extends ChangeNotifier {
       ));
     }
     return songs;
+  }
+
+  /// The episode a disguised-show tap should play: the one in progress,
+  /// else the newest unplayed, else the newest.
+  SpokenEpisode _pickEpisode(SpokenItem show) {
+    final episodes = show.episodes;
+    for (final episode in episodes) {
+      final unfinished = episode.duration <= Duration.zero ||
+          episode.progressSeconds < episode.duration.inSeconds;
+      if (episode.progressSeconds > 0 && unfinished) return episode;
+    }
+    for (var i = episodes.length - 1; i >= 0; i--) {
+      if (episodes[i].progressSeconds <= 0) return episodes[i];
+    }
+    return episodes.last;
   }
 
   void _startSyncTimer() {
