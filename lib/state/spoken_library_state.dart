@@ -345,16 +345,30 @@ class SpokenLibraryState extends ChangeNotifier {
             duration: track.duration,
           ),
       ];
-      if (direct.isEmpty && episode == null) {
+      var src = item.tracks.isNotEmpty ? 'itemTracks' : '';
+      if (direct.isEmpty && episode != null) {
+        // Episodes keep their file in the episode object - the audioFile
+        // index parsed from the listing is exactly what /file/:index wants.
+        direct = [
+          AbsTrack(
+            contentUrl: '/api/items/${item.id}/file/${episode.fileIndex}',
+            mimeType: 'audio/mpeg',
+            startOffset: 0,
+            duration: episode.duration.inMilliseconds / 1000.0,
+          ),
+        ];
+        src = 'episodeFile';
+      } else if (direct.isEmpty) {
         try {
           // media.tracks first; on servers without them this falls to
-          // audioFiles -> /api/items/:id/file/:n raw streams.
+          // audioFiles -> numAudioFiles -> /api/items/:id/file/:n streams.
           direct = await api.directTracks(item.id);
+          src = 'itemFetch';
         } catch (_) {}
       }
-      if (direct.isNotEmpty) {
+      if (direct.isNotEmpty && src.isNotEmpty) {
         playTracks = direct;
-        trackSource = item.tracks.isNotEmpty ? 'itemTracks' : 'itemFetch';
+        trackSource = src;
       }
       // Diagnostics: what does the HLS URL itself answer? (Non-blocking.)
       unawaited(api

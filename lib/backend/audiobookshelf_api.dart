@@ -335,17 +335,28 @@ class AudiobookshelfApi {
   /// carries each file's own /s/ contentUrl, i.e. the URLs ABS clients
   /// stream when they direct-play.
   Future<List<AbsTrack>> directTracks(String itemId) async {
-    final data = await _get('/items/$itemId');
+    // Some servers omit media.tracks / media.audioFiles from the item
+    // response unless explicitly requested - pass include anyway; servers
+    // that do not support the parameter ignore it.
+    final data = await _get('/items/$itemId', {
+      'include': 'progress,tracks,chapters,audioFiles',
+    });
     final media = data['media'] as Map<String, dynamic>?;
     final trackRows = _trackRows(media?['tracks']);
     final audioFiles =
         (media?['audioFiles'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .toList();
+    final mediaDuration = (media?['duration'] as num?)?.toDouble() ?? 0;
+    final numAudioFiles = (media?['numAudioFiles'] as num?)?.toInt() ?? 0;
+    // The media keys go to diagnostics so ONE paste shows exactly which
+    // fields this server's item response actually carries.
     PlaybackEventLog.instance.add('abs.item', {
       'item': itemId,
       'tracks': trackRows.length,
       'audioFiles': audioFiles.length,
+      'numAudioFiles': numAudioFiles,
+      'mediaKeys': (media?.keys.toList() ?? const <String>[]).join(','),
     });
     final fromTracks = [
       for (final row in trackRows)
@@ -360,22 +371,50 @@ class AudiobookshelfApi {
     // No direct-play Track objects on this server - but the FILES exist.
     // /api/items/:id/file/:index streams each raw file; startOffsets come
     // from the cumulative file durations.
-    var offset = 0.0;
-    return [
-      for (final file in audioFiles)
-        () {
-          final duration = (file['duration'] as num?)?.toDouble() ?? 0;
-          final index = (file['index'] as num?)?.toInt() ?? 0;
-          final track = AbsTrack(
-            contentUrl: '/api/items/$itemId/file/$index',
+    if (audioFiles.isNotEmpty) {
+      var offset = 0.0;
+      return [
+        for (final file in audioFiles)
+          () {
+            final duration = (file['duration'] as num?)?.toDouble() ?? 0;
+            final index = (file['index'] as num?)?.toInt() ?? 0;
+            final track = AbsTrack(
+              contentUrl: '/api/items/$itemId/file/$index',
+              mimeType: 'audio/mpeg',
+              startOffset: offset,
+              duration: duration,
+            );
+            offset += duration;
+            return track;
+          }(),
+      ];
+    }
+    // Minified media: the COUNT is reported even when the files are not.
+    // File indexes are stable (0..N-1); a single-file book takes the media
+    // duration so resume math still works, multi-file books play in order
+    // without per-file offsets.
+    if (numAudioFiles > 0) {
+      if (numAudioFiles == 1) {
+        return [
+          AbsTrack(
+            contentUrl: '/api/items/$itemId/file/0',
             mimeType: 'audio/mpeg',
-            startOffset: offset,
-            duration: duration,
-          );
-          offset += duration;
-          return track;
-        }(),
-    ];
+            startOffset: 0,
+            duration: mediaDuration,
+          ),
+        ];
+      }
+      return [
+        for (var i = 0; i < numAudioFiles; i++)
+          AbsTrack(
+            contentUrl: '/api/items/$itemId/file/$i',
+            mimeType: 'audio/mpeg',
+            startOffset: 0,
+            duration: 0,
+          ),
+      ];
+    }
+    return const <AbsTrack>[];
   }
 
   /// One-off status probe for a stream URL (diagnostics: names the exact
