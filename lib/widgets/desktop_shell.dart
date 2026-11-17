@@ -12,7 +12,7 @@ import '../models/download_state.dart' show PlayerRepeatMode;
 import '../models/song.dart';
 import '../screens/downloads/downloads_screen.dart';
 import '../screens/library/personal_shelves_screen.dart';
-import '../screens/books/books_podcasts_screen.dart';
+import '../screens/abs/abs_home_screen.dart';
 import '../screens/now_playing/lyrics_screen.dart';
 import '../screens/now_playing/now_playing_screen.dart';
 import '../screens/now_playing/queue_screen.dart';
@@ -108,7 +108,7 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _openShelves() => _openContentPage(const PersonalShelvesScreen());
 
-  void _openSpoken() => _openContentPage(const BooksPodcastsScreen());
+  void _openSpoken() => _openContentPage(const AbsHomeScreen());
 
   /// Ctrl+Shift+P launcher. Every entry closes over an action that already
   /// exists elsewhere in the shell, so there is exactly one implementation of
