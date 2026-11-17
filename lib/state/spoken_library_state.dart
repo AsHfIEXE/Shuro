@@ -12,6 +12,7 @@ import '../playback/event_log.dart';
 import '../services/app_persistence.dart';
 import '../services/server_secret_store.dart';
 import '../services/stream_proxy.dart';
+import '../models/abs_stats.dart';
 
 @immutable
 class AudiobookshelfConnection {
@@ -195,6 +196,11 @@ class SpokenLibraryState extends ChangeNotifier {
   }
 
   // --- Classification & playback -------------------------------------------
+
+  /// Listening stats from the server (null when not connected). The UI
+  /// asks on open and on pull-to-refresh; nothing is cached here so the
+  /// numbers are always the server's.
+  Future<AbsListeningStats?> loadStats() async => _api?.listeningStats();
 
   /// Every fetched item, across libraries.
   Iterable<SpokenItem> get allItems sync* {

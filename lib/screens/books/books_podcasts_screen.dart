@@ -6,6 +6,7 @@ import '../../backend/audiobookshelf_api.dart';
 import '../../models/spoken_media.dart';
 import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
+import 'abs_stats_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Design tokens (from the Figma CSS)
@@ -488,6 +489,13 @@ class _BooksPodcastsScreenState extends State<BooksPodcastsScreen> {
           Text('Books & podcasts',
               style: _ts(32, w: FontWeight.w800, ls: -0.6)),
           const Spacer(),
+          _iconButton(
+            icon: Icons.insights_rounded,
+            tooltip: 'Listening stats',
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AbsStatsScreen())),
+          ),
+          const SizedBox(width: 8),
           _iconButton(
             icon: Icons.refresh_rounded,
             tooltip: 'Refresh libraries',

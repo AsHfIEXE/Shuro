@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/spoken_media.dart';
 import '../playback/event_log.dart';
+import '../models/abs_stats.dart';
 
 class AudiobookshelfApiException implements Exception {
   const AudiobookshelfApiException(this.message);
@@ -129,6 +130,11 @@ class AudiobookshelfApi {
   }
 
   Future<void> validate() async => _get('/me');
+
+  /// Listening stats for the signed-in user (totals, per-day seconds, top
+  /// items, recent sessions). See [AbsListeningStats].
+  Future<AbsListeningStats> listeningStats() async =>
+      AbsListeningStats.fromJson(await _get('/me/listening-stats'));
 
   Future<List<SpokenLibrary>> libraries() async {
     final data = await _get('/libraries');
