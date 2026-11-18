@@ -1248,7 +1248,7 @@ class _Header extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (showOutputChip) ...[
-                  _OutputChip(width: 148, height: 40),
+                  OutputChip(width: 148, height: 40),
                   const SizedBox(width: 8),
                 ],
                 // (No favourite here: the heart lives in the action row under
@@ -2285,7 +2285,7 @@ class _NpvActionRow extends StatelessWidget {
           if (desktop)
             _InlineVolume(player: player)
           else
-            _OutputChip(
+            OutputChip(
                 width: 128, height: 36, defaultLabel: 'This phone'),
           const SizedBox(width: 12),
           _CircleAction(
@@ -2560,23 +2560,23 @@ class _InlineVolumeState extends State<_InlineVolume> {
 /// monitor the old "Playing from ..." line did - route changes repaint it
 /// live - under the same honesty rule: an unknown route falls back to the
 /// platform default label rather than a guess.
-class _OutputChip extends StatefulWidget {
+class OutputChip extends StatefulWidget {
   /// Fixed pill width (mobile action row: 128). Null sizes to the label.
   final double? width;
   final double height;
   final String defaultLabel;
 
-  const _OutputChip({
+  const OutputChip({
     this.width,
     this.height = 36,
     this.defaultLabel = 'This computer',
   });
 
   @override
-  State<_OutputChip> createState() => _OutputChipState();
+  State<OutputChip> createState() => OutputChipState();
 }
 
-class _OutputChipState extends State<_OutputChip> {
+class OutputChipState extends State<OutputChip> {
   AudioCapabilityReport? _report;
 
   @override

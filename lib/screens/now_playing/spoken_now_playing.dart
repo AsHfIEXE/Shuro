@@ -7,7 +7,10 @@ import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
 import '../abs/abs_book_screen.dart';
+import '../abs/abs_podcast_screen.dart';
 import '../abs/abs_widgets.dart';
+import 'audio_info_sheet.dart';
+import 'now_playing_screen.dart';
 
 /// Now playing for audiobooks and podcast episodes. Music keeps its own
 /// screens; both of them hand over to this one when
@@ -83,6 +86,63 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
     _seekTo(t < Duration.zero ? Duration.zero : (t > _total ? _total : t));
   }
 
+  /// The ⋯ menu: details, audio info, mark-played. Everything else already
+  /// has a dedicated control on this screen.
+  void _showMoreSheet() {
+    final s = context.read<SpokenLibraryState>();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kRaisedColor,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_book)
+            ListTile(
+              leading: const Icon(Icons.menu_book_rounded, color: kNavText),
+              title: Text('Open book details', style: absText(14)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => AbsBookScreen(item: widget.item)));
+              },
+            )
+          else
+            ListTile(
+              leading: const Icon(Icons.podcasts_rounded, color: kNavText),
+              title: Text('Open show page', style: absText(14)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => AbsPodcastScreen(show: widget.item)));
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.graphic_eq_rounded, color: kNavText),
+            title: Text('Audio information', style: absText(14)),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              showAudioInfoSheet(context, widget.song);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.done_all_rounded, color: kNavText),
+            title: Text(
+                _book ? 'Mark book as played' : 'Mark episode as played',
+                style: absText(14)),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              if (_book) {
+                s.markPlayed(widget.item);
+              } else {
+                s.markPlayed(widget.item, episode: widget.episode);
+              }
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.watch<PlayerController>();
@@ -115,12 +175,23 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                   wide: wide,
                 );
                 if (wide) {
+                  // On big windows the transport pane floats centred between
+                  // two equal flex spaces, so the COVER sits on the window's
+                  // centreline instead of hugging the left; the reading pane
+                  // gets a centred 780 dp column rather than edge-to-edge rows.
+                  final centred = c.maxWidth >= 1200;
                   return Row(children: [
+                    if (centred) const Spacer(),
                     SizedBox(width: 520, child: main),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(8, 48, 48, 0),
-                        child: _panel(context, pos, wide: true),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 780),
+                            child: _panel(context, pos, wide: true),
+                          ),
+                        ),
                       ),
                     ),
                   ]);
@@ -383,11 +454,38 @@ class _Transport extends StatelessWidget {
                 child: Center(
                     child: Text(book ? 'AUDIOBOOK' : 'PODCAST',
                         style: absText(12, color: kVioletLight, w: FontWeight.w700, ls: 1.4)))),
-            const SizedBox(width: 48),
+            if (!wide)
+              SizedBox(
+                width: 48,
+                child: Center(
+                    child: _GlassCircle(
+                        icon: Icons.more_horiz_rounded,
+                        tooltip: 'More options',
+                        onTap: state._showMoreSheet)),
+              )
+            else
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                OutputChip(width: 148, height: 40),
+                const SizedBox(width: 8),
+                _GlassCircle(
+                    icon: Icons.speaker_rounded,
+                    tooltip: 'Audio information',
+                    onTap: () => showAudioInfoSheet(context, w.song)),
+                const SizedBox(width: 8),
+                _GlassCircle(
+                    icon: Icons.more_horiz_rounded,
+                    tooltip: 'More options',
+                    onTap: state._showMoreSheet),
+              ]),
           ]),
         ),
         SizedBox(height: wide ? 24 : 12),
-        AbsCover(w.item, width: size, height: size, radius: 16),
+        // Books are 2:3, shows square — honour the natural shape instead of
+        // cropping a portrait cover into a square tile.
+        AbsCover(w.item,
+            width: book ? size * 2 / 3 : size,
+            height: size,
+            radius: 16),
         SizedBox(height: wide ? 28 : 18),
         Text(title,
             textAlign: TextAlign.center,
@@ -440,6 +538,7 @@ class _Transport extends StatelessWidget {
         ]),
         const SizedBox(height: 16),
         Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+          if (!wide) OutputChip(width: 148, height: 36),
           _Pill(
             label: speedLabel,
             strong: true,
@@ -697,5 +796,36 @@ class _Empty extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(child: Text(text, style: absText(13, color: kMuted2))),
+      );
+}
+
+/// 32 dp glass circle for the ABS now-playing header (audio info, ⋯) — the
+/// same affordance the music header uses, sized to its row.
+class _GlassCircle extends StatelessWidget {
+  const _GlassCircle(
+      {required this.icon, required this.tooltip, required this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: Icon(icon, size: 16, color: kNavText),
+              ),
+            ),
+          ),
+        ),
       );
 }
