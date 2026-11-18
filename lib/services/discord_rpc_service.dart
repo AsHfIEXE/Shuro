@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HttpClient, HttpException, Platform;
-import 'dart:math' as math;
 
 import 'package:dart_discord_presence/dart_discord_presence.dart';
 import 'package:flutter/foundation.dart';
@@ -165,10 +164,6 @@ class DiscordRpcService {
   Duration _mbBackoff = Duration.zero;
   bool _drainingArt = false;
 
-  /// Waveform phase, advanced by the 10 s refresh tick so the state line
-  /// dances like a visualizer.
-  int _frame = 0;
-
   void _start(PlayerController player) {
     if (_running) return;
     _running = true;
@@ -184,8 +179,7 @@ class DiscordRpcService {
       }
       final player = _player;
       if (player != null && player.isPlaying) {
-        _frame++; // next waveform frame...
-        _lastSignature = null; // ...which needs an actual push
+        _lastSignature = null;
       }
       // Re-push even mid-track: re-syncs Discord's progress bar with fresh
       // timestamps, so the card never drifts or feels stale.
@@ -233,7 +227,7 @@ class DiscordRpcService {
     // NOT in it: the bar advances client-side from the timestamps between
     // pushes, and seeks arrive through [onSeek].
     final sig =
-        '${song.id}|${player.isPlaying}|${player.queueIndex}|${player.queue.length}|$_frame';
+        '${song.id}|${player.isPlaying}|${player.queueIndex}|${player.queue.length}';
     if (sig == _lastSignature) return;
 
     final meta = player.metadataResolver?.call(song);
@@ -264,7 +258,7 @@ class DiscordRpcService {
       DiscordPresence(
         type: DiscordActivityType.listening, // "Listening to Shuro"
         details: song.title,
-        state: '${song.artist} · ${_waveform(song)}',
+        state: song.artist,
         largeAsset: (_artCache[song.id] != null)
             ? DiscordAsset.fromUrl(_artCache[song.id]!,
                 text: meta?.albumTitle == null
@@ -306,24 +300,6 @@ class DiscordRpcService {
     }
     buttons.add(const DiscordButton(label: 'Get Shuro', url: _projectUrl));
     return buttons;
-  }
-
-  /// A tiny per-track "spectrum": deterministic pseudo-bars from the song's
-  /// identity, phase-advanced by the 10 s tick so the state line moves like
-  /// a visualizer. Unicode blocks render in every Discord theme.
-  String _waveform(Song song) {
-    const bars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    final seed = song.id.hashCode ^ song.title.length;
-    final out = StringBuffer();
-    for (var i = 0; i < 10; i++) {
-      final w1 = math.sin(i * 1.7 + _frame * 0.9 + seed * 0.001);
-      final w2 = math.sin(i * 0.53 + _frame * 0.35 + seed * 0.017);
-      var v = (w1 * 0.5 + w2 * 0.5 + 1.0) / 2.0;
-      if (v < 0) v = 0;
-      if (v > 1) v = 1;
-      out.write(bars[(v * 7.99).floor()]);
-    }
-    return out.toString();
   }
 
   /// Discord's servers build the presence card cloud-side, so a LAN or

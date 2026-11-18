@@ -531,38 +531,33 @@ class _Transport extends StatelessWidget {
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: w.onClose ?? () => Navigator.maybePop(context),
-                  child: const Icon(Icons.keyboard_arrow_down_rounded,
+                  child: const Icon(Icons.arrow_back_rounded,
                       size: 24, color: kTextColor),
                 ),
               ),
             ),
             Expanded(
                 child: Center(
-                    child: Text(book ? 'AUDIOBOOK' : 'PODCAST',
-                        style: absText(12, color: kVioletLight, w: FontWeight.w700, ls: 1.4)))),
-            if (!wide)
-              SizedBox(
-                width: 48,
-                child: Center(
-                    child: _GlassCircle(
-                        icon: Icons.more_horiz_rounded,
-                        tooltip: 'More options',
-                        onTap: state._showMoreSheet)),
-              )
-            else
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                OutputChip(width: 148, height: 40),
-                const SizedBox(width: 8),
-                _GlassCircle(
-                    icon: Icons.speaker_rounded,
-                    tooltip: 'Audio information',
-                    onTap: () => showAudioInfoSheet(context, w.song)),
-                const SizedBox(width: 8),
-                _GlassCircle(
-                    icon: Icons.more_horiz_rounded,
-                    tooltip: 'More options',
-                    onTap: state._showMoreSheet),
-              ]),
+                    child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(book ? 'AUDIOBOOK' : 'PODCAST',
+                            style: absText(12,
+                                color: kVioletLight,
+                                w: FontWeight.w700,
+                                ls: 1.4))))),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              OutputChip(width: wide ? 148 : 128, height: wide ? 40 : 36),
+              const SizedBox(width: 8),
+              _GlassCircle(
+                  icon: Icons.speaker_rounded,
+                  tooltip: 'Audio information',
+                  onTap: () => showAudioInfoSheet(context, w.song)),
+              const SizedBox(width: 8),
+              _GlassCircle(
+                  icon: Icons.more_horiz_rounded,
+                  tooltip: 'More options',
+                  onTap: state._showMoreSheet),
+            ]),
           ]),
         ),
         SizedBox(height: wide ? 24 : 12),
@@ -622,7 +617,6 @@ class _Transport extends StatelessWidget {
         ]),
         const SizedBox(height: 16),
         Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
-          if (!wide) OutputChip(width: 148, height: 36),
           _Pill(
             label: speedLabel,
             strong: true,
