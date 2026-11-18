@@ -12,6 +12,11 @@ import 'abs_widgets.dart';
 
 /// Books & podcasts home: Continue listening card, audiobook rail, podcast
 /// rail. >= 900 dp = desktop layout, narrower = Android.
+///
+/// Loads on open when the shelves are still empty, and renders the state
+/// class's error / loading / empty outcomes explicitly — a silent blank page
+/// with no retry read like a broken feature (the connection lives on another
+/// machine, so "server down" is a normal state here, not an edge case).
 class AbsHomeScreen extends StatefulWidget {
   const AbsHomeScreen({super.key});
   @override
@@ -20,6 +25,21 @@ class AbsHomeScreen extends StatefulWidget {
 
 class _AbsHomeScreenState extends State<AbsHomeScreen> {
   String _filter = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    // First open in a session where the restore-refresh already ran, the
+    // shelves are populated and this is free. If the server was unreachable
+    // at app start, this is the moment the user actually looks at the page —
+    // try again instead of showing yesterday's nothing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final s = context.read<SpokenLibraryState>();
+      if (s.connection == null || s.loading || s.error != null) return;
+      if (s.bookItems.isEmpty && s.podcastShows.isEmpty) s.refresh();
+    });
+  }
 
   void _open(SpokenItem i) => Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => i.isBook ? AbsBookScreen(item: i) : AbsPodcastScreen(show: i)));
@@ -51,16 +71,14 @@ class _AbsHomeScreenState extends State<AbsHomeScreen> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: DesktopTokens.contentStandard),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Row(children: [
                         Expanded(
                             child: Text('Books & podcasts',
                                 style: absHeading(wide ? 36 : 28, ls: -0.9))),
-                        IconButton(
-                          tooltip: 'Listening stats',
-                          icon: const Icon(Icons.insights_rounded, color: kNavText),
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                              builder: (_) => const AbsStatsScreen())),
-                        ),
+                        AbsGhostButton('Stats',
+                            icon: Icons.insights_rounded,
+                            onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const AbsStatsScreen()))),
                       ]),
                       const SizedBox(height: 14),
                       SingleChildScrollView(
@@ -76,30 +94,62 @@ class _AbsHomeScreenState extends State<AbsHomeScreen> {
                         ]),
                       ),
                       const SizedBox(height: 28),
-                      if (current != null && showBooks) ...[
-                        _Continue(
-                            item: current,
-                            wide: wide,
-                            onOpen: () => _open(current)),
-                        const SizedBox(height: 32),
-                      ],
-                      if (showBooks && books.isNotEmpty)
-                        _Rail(
-                            title: 'Audiobooks',
-                            items: books,
-                            wide: wide,
-                            onOpen: _open),
-                      if (showPods && shows.isNotEmpty) ...[
-                        const SizedBox(height: 32),
-                        _Rail(title: 'Podcasts', items: shows, wide: wide, onOpen: _open),
-                      ],
-                      if (books.isEmpty && shows.isEmpty)
+                      if (s.connection == null)
+                        _StateCard(
+                          icon: Icons.link_off_rounded,
+                          title: 'Audiobookshelf is not connected',
+                          body:
+                              'Connect your server under Settings → Servers, then come back — your audiobooks and podcasts appear here.',
+                        )
+                      else if (s.error != null)
+                        _StateCard(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'Could not reach the server',
+                          body: '${s.error} Check that the Audiobookshelf machine is on and reachable, then try again.',
+                          action: AbsPrimaryButton('Try again',
+                              onTap: s.loading ? null : s.refresh),
+                        )
+                      else if (s.loading)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 80),
+                          padding: const EdgeInsets.symmetric(vertical: 72),
                           child: Center(
-                              child: Text('Nothing here yet — pull to refresh.',
-                                  style: absText(14, color: kMuted2))),
-                        ),
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              const CircularProgressIndicator(color: kBrandColor),
+                              if (s.progress != null) ...[
+                                const SizedBox(height: 16),
+                                Text(s.progress!, style: absText(13, color: kMuted2)),
+                              ],
+                            ]),
+                          ),
+                        )
+                      else if (books.isEmpty && shows.isEmpty)
+                        _StateCard(
+                          icon: Icons.library_books_rounded,
+                          title: 'No books or podcasts here yet',
+                          body:
+                              'The server answered, but this user sees no audiobook or podcast libraries. Give the user access to at least one library in Audiobookshelf (Users → permissions), or pull down to refresh.',
+                          action: AbsGhostButton('Refresh',
+                              icon: Icons.refresh_rounded, onTap: s.refresh),
+                        )
+                      else ...[
+                        if (current != null && showBooks) ...[
+                          _Continue(
+                              item: current,
+                              wide: wide,
+                              onOpen: () => _open(current)),
+                          const SizedBox(height: 32),
+                        ],
+                        if (showBooks && books.isNotEmpty)
+                          _Rail(
+                              title: 'Audiobooks',
+                              items: books,
+                              wide: wide,
+                              onOpen: _open),
+                        if (showPods && shows.isNotEmpty) ...[
+                          const SizedBox(height: 32),
+                          _Rail(title: 'Podcasts', items: shows, wide: wide, onOpen: _open),
+                        ],
+                      ],
                     ]),
                   ),
                 ),
@@ -108,6 +158,42 @@ class _AbsHomeScreenState extends State<AbsHomeScreen> {
           );
         }),
       ),
+    );
+  }
+}
+
+/// Full-width state card: an actual explanation plus the action that fixes
+/// it — never a bare "nothing here" over a silent failure.
+class _StateCard extends StatelessWidget {
+  const _StateCard(
+      {required this.icon, required this.title, required this.body, this.action});
+  final IconData icon;
+  final String title;
+  final String body;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    return Container(
+      padding: EdgeInsets.all(wide ? 24 : 16),
+      decoration: BoxDecoration(
+        color: kRaisedColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: kHairline),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 28, color: kVioletLight),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Text(title,
+                  style: absHeading(wide ? 20 : 17, ls: -0.4))),
+        ]),
+        const SizedBox(height: 10),
+        Text(body, style: absText(14, color: kNavText, h: 1.5)),
+        if (action != null) ...[const SizedBox(height: 16), action!],
+      ]),
     );
   }
 }
@@ -238,25 +324,66 @@ class _Rail extends StatelessWidget {
             final p = it.isBook && it.duration.inSeconds > 0
                 ? ((prog ?? it.progressSeconds) / it.duration.inSeconds)
                 : 0.0;
-            return InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => onOpen(it),
-              child: SizedBox(
-                width: w,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  AbsCover(it, width: w, height: h),
-                  const SizedBox(height: 10),
-                  if (p > 0 && p < 1) ...[AbsProgressBar(p, height: 3), const SizedBox(height: 8)],
-                  Text(it.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: absText(14, w: FontWeight.w600)),
-                  Text(it.creator,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: absText(13, color: kMuted2)),
+            return SizedBox(
+              width: w,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Stack(children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => onOpen(it),
+                    child: AbsCover(it, width: w, height: h),
+                  ),
+                  // Direct play: the disc starts it now, the rest of the
+                  // cover opens the detail page. A rail that only opens
+                  // pages read as "can't play" to anyone used to tapping
+                  // a shelf to listen.
+                  Positioned(
+                    right: 6,
+                    bottom: 6,
+                    child: Semantics(
+                      button: true,
+                      label: 'Play ${it.title}',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => AbsActions.play(context, it),
+                          child: Tooltip(
+                            message: 'Play ${it.title}',
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: kBrandColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Colors.black.withValues(alpha: 0.25)),
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded,
+                                  size: 28, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ]),
-              ),
+                const SizedBox(height: 10),
+                if (p > 0 && p < 1) ...[AbsProgressBar(p, height: 3), const SizedBox(height: 8)],
+                InkWell(
+                  onTap: () => onOpen(it),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(it.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: absText(14, w: FontWeight.w600)),
+                    Text(it.creator,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: absText(13, color: kMuted2)),
+                  ]),
+                ),
+              ]),
             );
           },
         ),
