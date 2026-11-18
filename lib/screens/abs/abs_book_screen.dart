@@ -5,7 +5,6 @@ import '../../models/spoken_media.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/desktop_tokens.dart';
-import 'abs_player_screen.dart';
 import 'abs_widgets.dart';
 
 /// Book detail: cover + title block, progress, Resume / Bookmarks, summary
@@ -86,11 +85,8 @@ class _AbsBookScreenState extends State<AbsBookScreen> {
             ]);
 
             final actions = Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              AbsPrimaryButton(at > 0 ? 'Resume' : 'Play', onTap: () {
-                AbsActions.play(context, item);
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => AbsPlayerScreen(item: item)));
-              }),
+              AbsPrimaryButton(at > 0 ? 'Resume' : 'Play',
+                  onTap: () => AbsActions.play(context, item)),
               AbsGhostButton('Bookmarks',
                   icon: Icons.bookmark_border_rounded, onTap: () => _bookmarks(context)),
               IconButton(

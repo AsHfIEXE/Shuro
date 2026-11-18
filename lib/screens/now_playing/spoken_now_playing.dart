@@ -59,8 +59,10 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
   }
 
   bool get _book => widget.episode == null;
+  // Show notes / description tabs dropped: server notes rendered broken
+  // (raw HTML, empty bodies) and the chapter list already tells the story.
   List<String> get _tabs =>
-      _book ? const ['Chapters', 'More books', 'Notes'] : const ['Episodes', 'Show notes'];
+      _book ? const ['Chapters', 'More books'] : const ['Episodes'];
   Duration get _total => widget.episode?.duration ?? widget.item.duration;
 
   /// Seeks inside the current file when the target is in it; otherwise
@@ -123,8 +125,17 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                     ),
                   ]);
                 }
-                return Stack(children: [
-                  Positioned.fill(child: main),
+                // Keep the transport in the area ABOVE the sheet's rest
+                // position so none of its buttons hide behind it.
+                return LayoutBuilder(builder: (context, sheetBox) {
+                  final sheetH = sheetBox.maxHeight * 0.3;
+                  return Stack(children: [
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: sheetH),
+                      child: main,
+                    ),
+                  ),
                   DraggableScrollableSheet(
                     initialChildSize: 0.3,
                     minChildSize: 0.3,
@@ -141,6 +152,7 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                     ),
                   ),
                 ]);
+                });
               },
             );
           }),
@@ -153,9 +165,11 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
   Widget _panel(BuildContext context, Duration pos,
       {required bool wide, ScrollController? controller}) {
     final tabs = Row(children: [
-      _Segmented(
-          labels: _tabs, value: _tab, onChanged: (i) => setState(() => _tab = i)),
-      const Spacer(),
+      if (_tabs.length > 1) ...[
+        _Segmented(
+            labels: _tabs, value: _tab, onChanged: (i) => setState(() => _tab = i)),
+        const Spacer(),
+      ],
       Text(_headline(), style: absText(12, color: kMuted2, tabular: true)),
     ]);
     final body = _body(context, pos, wide);
@@ -221,15 +235,10 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                 ),
             if (wide) ..._moreBooks(context, shelf: true),
           ];
-        case 1:
-          return _moreBooks(context, shelf: false);
         default:
-          return [_Notes(item.description)];
+          return _moreBooks(context, shelf: false);
       }
     }
-    if (_tab == 1) return [_Notes(widget.episode!.description.isNotEmpty
-        ? widget.episode!.description
-        : item.description)];
     final s = context.watch<SpokenLibraryState>();
     final eps = [...item.episodes]..sort((a, b) =>
         (b.publishedAt ?? DateTime(0)).compareTo(a.publishedAt ?? DateTime(0)));
@@ -355,9 +364,13 @@ class _Transport extends StatelessWidget {
     final speedLabel = '${speed == speed.roundToDouble() ? speed.toStringAsFixed(1) : speed}×';
 
     final size = wide ? 300.0 : 224.0;
+    // Center the whole transport block in its pane (it used to hug the top
+    // left corner) and scroll instead of overflowing on short windows.
     return Padding(
       padding: EdgeInsets.fromLTRB(wide ? 48 : 24, wide ? 48 : 8, wide ? 48 : 24, 0),
-      child: Column(children: [
+      child: Center(
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
           height: 40,
           child: Row(children: [
@@ -466,7 +479,9 @@ class _Transport extends StatelessWidget {
                   .markPlayed(w.item, episode: w.episode),
             ),
         ]),
-      ]),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -672,17 +687,6 @@ class _ListRow extends StatelessWidget {
             ]),
           ),
         ),
-      );
-}
-
-class _Notes extends StatelessWidget {
-  const _Notes(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(text.isEmpty ? 'No description.' : text,
-            style: absText(14, color: kNavText, h: 1.6)),
       );
 }
 

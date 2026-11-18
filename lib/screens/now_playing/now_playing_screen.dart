@@ -110,13 +110,12 @@ class NowPlayingScreen extends StatelessWidget {
       );
     }
 
-    // Audiobooks and podcast episodes get their own view.
+    // Audiobooks and podcast episodes get their own view — a normal page,
+    // not the immersive/fullscreen treatment the music view uses.
     final spoken = context.watch<SpokenLibraryState>().resolveSong(song.id);
     if (spoken != null) {
-      return ImmersiveScope(
-        child: SpokenNowPlaying(
-            song: song, item: spoken.item, episode: spoken.episode),
-      );
+      return SpokenNowPlaying(
+          song: song, item: spoken.item, episode: spoken.episode);
     }
 
     final isCurrent = current?.id == song.id;
