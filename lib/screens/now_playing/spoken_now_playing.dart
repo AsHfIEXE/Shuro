@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../backend/audiobookshelf_api.dart';
 import '../../models/song.dart';
 import '../../models/spoken_media.dart';
 import '../../state/player_controller.dart';
@@ -562,15 +563,27 @@ class _Transport extends StatelessWidget {
               onTap: () async {
                 final s = context.read<SpokenLibraryState>();
                 final messenger = ScaffoldMessenger.of(context);
-                await s.addBookmark(w.item.id,
-                    time: pos.inSeconds.toDouble(),
-                    title: chIdx >= 0 ? w.item.chapters[chIdx].title : absClock(pos));
-                messenger
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                      content: Text('Bookmarked ${absClock(pos)}', style: absText(13)),
-                      backgroundColor: kRaisedColor,
-                      behavior: SnackBarBehavior.floating));
+                try {
+                  await s.addBookmark(w.item.id,
+                      time: pos.inSeconds.toDouble(),
+                      title:
+                          chIdx >= 0 ? w.item.chapters[chIdx].title : absClock(pos));
+                  messenger
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(SnackBar(
+                        content: Text('Bookmarked ${absClock(pos)}',
+                            style: absText(13)),
+                        backgroundColor: kRaisedColor,
+                        behavior: SnackBarBehavior.floating));
+                } on AudiobookshelfApiException catch (e) {
+                  messenger
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(SnackBar(
+                        content: Text('Bookmark failed — ${e.message}',
+                            style: absText(13)),
+                        backgroundColor: kRaisedColor,
+                        behavior: SnackBarBehavior.floating));
+                }
               },
             )
           else

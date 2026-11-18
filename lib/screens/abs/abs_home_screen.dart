@@ -50,8 +50,10 @@ class _AbsHomeScreenState extends State<AbsHomeScreen> {
     final books = s.bookItems;
     final shows = s.podcastShows;
     final inProgress = books
-        .where((b) => (s.liveProgressSecondsFor(b) ?? b.progressSeconds) > 0 && !b.isFinished)
-        .toList();
+        .where((b) => (s.liveProgressSecondsFor(b) ?? b.progressSeconds) > 0 &&
+            !s.isFinishedFor(b))
+        .toList()
+      ..sort((a, b) => s.lastProgressAt(b.id).compareTo(s.lastProgressAt(a.id)));
     final current = inProgress.isEmpty ? null : inProgress.first;
 
     return Scaffold(
@@ -137,6 +139,16 @@ class _AbsHomeScreenState extends State<AbsHomeScreen> {
                               item: current,
                               wide: wide,
                               onOpen: () => _open(current)),
+                          const SizedBox(height: 32),
+                        ],
+                        if (showBooks && inProgress.length > 1) ...[
+                          // Every book mid-flight, most recent first — the
+                          // featured card above is just the newest one.
+                          _Rail(
+                              title: 'Continue listening',
+                              items: inProgress,
+                              wide: wide,
+                              onOpen: _open),
                           const SizedBox(height: 32),
                         ],
                         if (showBooks && books.isNotEmpty)

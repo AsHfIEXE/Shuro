@@ -64,6 +64,12 @@ class SpokenLibraryState extends ChangeNotifier {
   /// replaces the listing one in podcastShows, and bookItems drops it.
   final Map<String, SpokenItem> _expandedShows = {};
   final Map<String, SpokenItem> _expandedBooks = {};
+  /// Item ids the server flags as finished — the listing rows never carry
+  /// that flag, so it comes from the bulk progress pull instead.
+  final Set<String> _serverFinished = {};
+  /// Server lastUpdate (epoch ms) per item's progress row — orders the
+  /// continue-listening rail by recency.
+  final Map<String, int> _serverLastUpdate = {};
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
   List<SpokenLibrary> get podcastLibraries =>
@@ -185,6 +191,29 @@ class SpokenLibraryState extends ChangeNotifier {
       itemsByLibrary
         ..clear()
         ..addEntries(entries);
+      // The listing carries no progress of its own — pull every progress row
+      // in one request so continue-listening, rails and detail screens show
+      // real positions (the sync timer overwrites the active one as it plays).
+      try {
+        final rows = await api.mediaProgresses();
+        for (final row in rows) {
+          final itemId = row['libraryItemId'] as String? ?? '';
+          if (itemId.isEmpty) continue;
+          final seconds = (row['currentTime'] as num?)?.toDouble() ?? 0;
+          final episodeId = row['episodeId'] as String?;
+          if (episodeId != null && episodeId.isNotEmpty) {
+            _liveProgress['$itemId/$episodeId'] = seconds;
+          } else {
+            _liveProgress[itemId] = seconds;
+            if (row['isFinished'] as bool? ?? false) _serverFinished.add(itemId);
+            final lastUpdate = row['lastUpdate'];
+            if (lastUpdate is num) _serverLastUpdate[itemId] = lastUpdate.toInt();
+          }
+        }
+      } catch (_) {
+        // Progress is garnish: a failed pull must never fail the refresh.
+      }
+      notifyListeners();
     } on AudiobookshelfApiException catch (e) {
       error = e.message;
     } catch (_) {
@@ -229,6 +258,14 @@ class SpokenLibraryState extends ChangeNotifier {
   /// Seconds into the item at which the active ABS track [songId] starts
   /// (multi-file books play one track per file); 0 when unknown.
   double trackOffsetFor(String songId) => _activeStartOffsetById[songId] ?? 0;
+
+  /// Whether the server marks this item finished (listing rows never do).
+  bool isFinishedFor(SpokenItem item) =>
+      item.isFinished || _serverFinished.contains(item.id);
+
+  /// Server lastUpdate (epoch ms) for the item's progress row; 0 unknown —
+  /// orders the continue-listening rail by recency.
+  int lastProgressAt(String itemId) => _serverLastUpdate[itemId] ?? 0;
 
   /// Test hook: seed the expanded-show cache directly.
   @visibleForTesting
@@ -402,6 +439,7 @@ class SpokenLibraryState extends ChangeNotifier {
         duration: total,
         forceFinished: true);
     _liveProgress[progressId] = total;
+    if (episode == null) _serverFinished.add(item.id);
     notifyListeners();
     PlaybackEventLog.instance.add('abs.mark', {'id': progressId});
   }

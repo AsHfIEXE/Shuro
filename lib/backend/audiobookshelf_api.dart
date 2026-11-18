@@ -561,10 +561,32 @@ class AudiobookshelfApi {
   }
 
   /// All of the user's bookmarks (raw rows; filtered per item by the state).
+  ///
+  /// Current servers serve them at GET /me/bookmarks; older builds only
+  /// embedded them in the /me payload — try the endpoint first, fall back.
   Future<List<Map<String, dynamic>>> bookmarks() async {
-    final me = await _get('/me');
+    try {
+      final data = await _get('/me/bookmarks');
+      return [
+        for (final row in (data['bookmarks'] as List<dynamic>? ?? const []))
+          if (row is Map<String, dynamic>) row
+      ];
+    } on AudiobookshelfApiException {
+      final me = await _get('/me');
+      return [
+        for (final row in (me['bookmarks'] as List<dynamic>? ?? const []))
+          if (row is Map<String, dynamic>) row
+      ];
+    }
+  }
+
+  /// Every media-progress row the server holds for this user — the bulk
+  /// source for continue-listening cards, rails and detail screens (the
+  /// library listing itself carries no progress at all).
+  Future<List<Map<String, dynamic>>> mediaProgresses() async {
+    final data = await _get('/me/progress');
     return [
-      for (final row in (me['bookmarks'] as List<dynamic>? ?? const []))
+      for (final row in (data['mediaProgress'] as List<dynamic>? ?? const []))
         if (row is Map<String, dynamic>) row
     ];
   }
