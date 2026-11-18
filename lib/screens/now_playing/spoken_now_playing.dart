@@ -65,8 +65,9 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
   bool get _book => widget.episode == null;
   // Show notes / description tabs dropped: server notes rendered broken
   // (raw HTML, empty bodies) and the chapter list already tells the story.
-  List<String> get _tabs =>
-      _book ? const ['Chapters', 'More books'] : const ['Episodes'];
+  List<String> get _tabs => _book
+      ? const ['Chapters', 'Series', 'Notes']
+      : const ['Episodes', 'Notes'];
   Duration get _total => widget.episode?.duration ?? widget.item.duration;
 
   /// Seeks inside the current file when the target is in it; otherwise
@@ -152,10 +153,13 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
       backgroundColor: kSurfaceColor,
       body: DecoratedBox(
         decoration: BoxDecoration(
+          // ~160° wash from the cover's own palette, gone by ~60% — the
+          // mock's backdrop.
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: const Alignment(0, 0.2),
+            begin: const Alignment(-0.35, -1),
+            end: const Alignment(0.25, 0.45),
             colors: [bg.withValues(alpha: 0.5), kSurfaceColor],
+            stops: const [0, 0.6],
           ),
         ),
         child: SafeArea(
@@ -311,9 +315,19 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                 ),
             if (wide) ..._moreBooks(context, shelf: true),
           ];
+        case 1:
+          return _seriesList(context);
+        case 2:
+          return [_Notes(_cleanNotes(item.description))];
         default:
           return _moreBooks(context, shelf: false);
       }
+    }
+    if (_tab == 1) {
+      final notes = widget.episode!.description.isNotEmpty
+          ? widget.episode!.description
+          : item.description;
+      return [_Notes(_cleanNotes(notes))];
     }
     final s = context.watch<SpokenLibraryState>();
     final eps = [...item.episodes]..sort((a, b) =>
@@ -341,8 +355,7 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
   }
 
   /// Other books by the same author, series mates first.
-  List<Widget> _moreBooks(BuildContext context, {required bool shelf}) {
-    final s = context.read<SpokenLibraryState>();
+  List<Widget> _moreBooks(BuildContext context, {required bool shelf}) {    final s = context.read<SpokenLibraryState>();
     final item = widget.item;
     final others = s.bookItems.where((b) => b.id != item.id).toList()
       ..sort((a, b) {
@@ -374,8 +387,7 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: absText(13, w: FontWeight.w600)),
-                Text(absClock(b.duration), style: absText(12, color: kMuted2)),
-              ]),
+                Text(_shelfMeta(s, b, item), style: absText(12, color: kMuted2)),              ]),
             ),
           );
         },
@@ -386,8 +398,22 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
         const SizedBox(height: 20),
         Divider(height: 1, color: kHairline),
         const SizedBox(height: 24),
-        Text('MORE BY ${item.creator.toUpperCase()}',
-            style: absText(12, color: kMuted2, w: FontWeight.w700, ls: 0.9)),
+        Row(children: [
+          Expanded(
+              child: Text('MORE BY ${item.creator.toUpperCase()}',
+                  style:
+                      absText(12, color: kMuted2, w: FontWeight.w700, ls: 0.9))),
+          InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => setState(() => _tab = 1),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text('See all',
+                  style:
+                      absText(13, color: kVioletPale, w: FontWeight.w600)),
+            ),
+          ),
+        ]),
         const SizedBox(height: 14),
         rail,
       ];
@@ -403,6 +429,52 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
               .push(MaterialPageRoute(builder: (_) => AbsBookScreen(item: b))),
         ),
     ];
+  }
+
+  /// Series tab: every book sharing one of this book's series, with the
+  /// shared series named under the title.
+  List<Widget> _seriesList(BuildContext context) {
+    final s = context.read<SpokenLibraryState>();
+    final item = widget.item;
+    if (item.seriesNames.isEmpty) return [_Empty('Not part of a series.')];
+    final mates = s.bookItems
+        .where((b) =>
+            b.id != item.id &&
+            b.seriesNames.any(item.seriesNames.contains))
+        .toList()
+      ..sort((a, b) => a.title.compareTo(b.title));
+    if (mates.isEmpty) {
+      return [_Empty('No other books in this series yet.')];
+    }
+    return [
+      for (final b in mates)
+        _ListRow(
+          lead: '',
+          title: b.title,
+          subtitle: b.seriesNames.where(item.seriesNames.contains).join(' · '),
+          trail: absClock(b.duration),
+          onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => AbsBookScreen(item: b))),
+        ),
+    ];
+  }
+
+  /// Server notes are HTML in the wild — strip tags and entities before they
+  /// reach a Text widget, or the tab reads like markup soup.
+  static String _cleanNotes(String raw) => raw
+      .replaceAll(RegExp(r'<[^>]*>'), ' ')
+      .replaceAll(RegExp(r'&nbsp;|&amp;|&quot;|&lt;|&gt;|&#\d+;'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// The mock's rail meta: "Book 3 · 14 h" / "Standalone · 9 h" / "Finished".
+  String _shelfMeta(SpokenLibraryState s, SpokenItem b, SpokenItem item) {
+    final shared = b.seriesNames.where(item.seriesNames.contains).toList();
+    if (s.isFinishedFor(b)) {
+      return shared.isEmpty ? 'Finished' : '${shared.first} · Finished';
+    }
+    final dur = absLength(b.duration);
+    return shared.isEmpty ? 'Standalone · $dur' : '${shared.first} · $dur';
   }
 }
 
@@ -450,10 +522,19 @@ class _Transport extends StatelessWidget {
         SizedBox(
           height: 40,
           child: Row(children: [
-            IconButton(
-              tooltip: 'Close',
-              onPressed: w.onClose ?? () => Navigator.maybePop(context),
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28, color: kTextColor),
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: w.onClose ?? () => Navigator.maybePop(context),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 24, color: kTextColor),
+                ),
+              ),
             ),
             Expanded(
                 child: Center(
@@ -522,10 +603,9 @@ class _Transport extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(iconSize: 32, tooltip: 'Back 15 s',
-              onPressed: () => state._skip(pos, -15),
-              icon: const Icon(Icons.replay_10_rounded, color: kTextColor)),
-          const SizedBox(width: 12),
+          _SkipArc(
+              seconds: 15, forward: false, onSkip: () => state._skip(pos, -15)),
+          const SizedBox(width: 16),
           SizedBox(
             width: 68, height: 68,
             child: FilledButton(
@@ -536,10 +616,9 @@ class _Transport extends StatelessWidget {
                   size: 38, color: Colors.white),
             ),
           ),
-          const SizedBox(width: 12),
-          IconButton(iconSize: 32, tooltip: 'Forward 30 s',
-              onPressed: () => state._skip(pos, 30),
-              icon: const Icon(Icons.forward_30_rounded, color: kTextColor)),
+          const SizedBox(width: 16),
+          _SkipArc(
+              seconds: 30, forward: true, onSkip: () => state._skip(pos, 30)),
         ]),
         const SizedBox(height: 16),
         Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
@@ -844,5 +923,98 @@ class _GlassCircle extends StatelessWidget {
             ),
           ),
         ),
+      );
+}
+
+/// The mock's 48 dp skip control: the arc arrow with the seconds overlaid at
+/// its foot ("15" / "30"), instead of a material icon that spells its own
+/// number.
+class _SkipArc extends StatelessWidget {
+  const _SkipArc(
+      {required this.seconds, required this.forward, required this.onSkip});
+  final int seconds;
+  final bool forward;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: 'Skip ${forward ? 'forward' : 'back'} $seconds seconds',
+        child: Tooltip(
+          message: '${forward ? 'Forward' : 'Back'} $seconds s',
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onSkip,
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Stack(alignment: Alignment.center, children: [
+                CustomPaint(
+                    size: const Size(30, 30),
+                    painter: _SkipArcPainter(forward: forward)),
+                Positioned(
+                  bottom: 1,
+                  child: Text('$seconds',
+                      style: absText(10, color: kTextColor, w: FontWeight.w700)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+}
+
+/// Draws the mock's arc-arrow path ("M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5" and
+/// its mirror) on a 24-unit grid scaled to the widget.
+class _SkipArcPainter extends CustomPainter {
+  const _SkipArcPainter({required this.forward});
+  final bool forward;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    if (forward) {
+      canvas.translate(size.width, 0);
+      canvas.scale(-1, 1);
+    }
+    final s = size.width / 24;
+    canvas.scale(s, s);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = kTextColor;
+    // The arc: from (12,7) sweeping the long way around to (7,12).
+    final arc = Path()
+      ..moveTo(12, 7)
+      ..arcToPoint(const Offset(7, 12),
+          radius: const Radius.circular(5), largeArc: true, clockwise: true);
+    canvas.drawPath(arc, stroke);
+    // The arrow chevron: (12,5)→(12,2)→(7,6)→(12,10)→(12,7).
+    final head = Path()
+      ..moveTo(12, 5)
+      ..lineTo(12, 2)
+      ..lineTo(7, 6)
+      ..lineTo(12, 10)
+      ..lineTo(12, 7);
+    canvas.drawPath(head, stroke);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_SkipArcPainter oldDelegate) =>
+      oldDelegate.forward != forward;
+}
+
+/// Show notes / book description — HTML stripped before it hits a Text.
+class _Notes extends StatelessWidget {
+  const _Notes(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(text.isEmpty ? 'No notes.' : text,
+            style: absText(14, color: kNavText, h: 1.6)),
       );
 }
