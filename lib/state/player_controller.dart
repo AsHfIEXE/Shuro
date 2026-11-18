@@ -1272,6 +1272,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     if (_isPlaying) {
       _isPlaying = false;
       notifyListeners();
+      // Cancel any resume ramp that is still mid-flight before pausing, so
+      // the two cannot fight over the volume.
+      _rampGeneration++;
       if (fadeOnPause) {
         await _rampVolume(_targetVolume, 0.0);
         await _audioPlayer.pause();
@@ -1298,6 +1301,9 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       await _audioPlayer.seek(Duration.zero);
     }
     try {
+      // This resume owns the volume from here: a stale pause-ramp can no
+      // longer pin it at zero after the button was pressed again.
+      _rampGeneration++;
       if (fadeOnPause) {
         try {
           await _audioPlayer.setVolume(0.0);
@@ -1311,10 +1317,18 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
     }
   }
 
+  /// Generation counter for volume ramps: a quick pause→play (or the sleep
+  /// fade racing a manual toggle) used to interleave two ramps, and the
+  /// stale one could land last — leaving the player at volume 0, silently
+  /// "playing". The newest ramp cancels every older one.
+  int _rampGeneration = 0;
+
   /// ~140 ms linear volume ramp used by fade-on-pause/resume.
   Future<void> _rampVolume(double from, double to) async {
+    final gen = ++_rampGeneration;
     const steps = 7;
     for (var i = 1; i <= steps; i++) {
+      if (gen != _rampGeneration) return;
       try {
         await _audioPlayer.setVolume(from + (to - from) * i / steps);
       } catch (_) {

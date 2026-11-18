@@ -32,8 +32,13 @@ Future<void> _showAnchoredPopover(
   final anchor = topLeft & box.size;
   final screen = overlay.size;
   final left = (anchor.center.dx - width / 2).clamp(8.0, screen.width - width - 8);
-  // Player bars sit at the bottom edge: open upward from the control.
-  final bottom = screen.height - anchor.top + 8;
+  // Player bars sit at the bottom edge: open upward from the control. Chips
+  // near the top of the screen (now-playing headers) must open DOWNWARD —
+  // the fixed upward card used to fly straight out of the window and get
+  // cut off. Open toward whichever side actually has room for the card.
+  final spaceBelow = screen.height - anchor.bottom;
+  final spaceAbove = anchor.top;
+  final opensUpward = spaceBelow < 340 && spaceAbove > spaceBelow;
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -44,7 +49,8 @@ Future<void> _showAnchoredPopover(
       children: [
         Positioned(
           left: left,
-          bottom: bottom,
+          top: opensUpward ? null : (anchor.bottom + 8).clamp(8.0, screen.height - 8),
+          bottom: opensUpward ? screen.height - anchor.top + 8 : null,
           width: width,
           child: Material(
             color: kCardColor,

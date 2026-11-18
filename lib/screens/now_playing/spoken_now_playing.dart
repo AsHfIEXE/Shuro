@@ -181,9 +181,13 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                   // gets a centred 780 dp column rather than edge-to-edge rows.
                   final centred = c.maxWidth >= 1200;
                   return Row(children: [
-                    if (centred) const Spacer(),
+                    // A touch more room on the right than the left puts the
+                    // cover a little LEFT of the centreline, which reads
+                    // better with the reading pane beside it.
+                    if (centred) const Spacer(flex: 4),
                     SizedBox(width: 520, child: main),
                     Expanded(
+                      flex: 5,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(8, 48, 48, 0),
                         child: Center(
