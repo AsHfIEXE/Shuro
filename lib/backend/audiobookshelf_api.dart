@@ -633,27 +633,56 @@ class AudiobookshelfApi {
   }
 
   List<SpokenEpisode> _episodesOf(Map<String, dynamic>? media) {
-    return (media?['episodes'] as List<dynamic>? ?? const [])
+    final rows = (media?['episodes'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
-        .map((episode) => SpokenEpisode(
-              id: episode['id'] as String? ?? '',
-              title: episode['title'] as String? ?? 'Untitled episode',
-              fileIndex: ((episode['audioFile']
-                          as Map<String, dynamic>?)?['index'] as num?)
-                      ?.toInt() ??
-                  0,
-              duration: Duration(
-                  milliseconds:
-                      (((episode['duration'] as num?)?.toDouble() ?? 0) * 1000)
-                          .round()),
-              description: episode['description'] as String? ?? '',
-              progressSeconds: ((episode['userMediaProgress']
-                          as Map<String, dynamic>?)?['currentTime'] as num?)
-                      ?.toDouble() ??
-                  0,
-              publishedAt: _parseDate(episode['publishedAt']),
-            ))
         .toList();
+    if (rows.isNotEmpty) {
+      // One paste shows exactly which fields this server's episode rows
+      // actually carry — the duration mystery died here.
+      final first = rows.first;
+      PlaybackEventLog.instance.add('abs.episodes', {
+        'count': rows.length,
+        'keys': (first.keys.toList()..sort()).join(','),
+        'durationRaw': '${first['duration']}',
+        'durationType': '${first['duration'].runtimeType}',
+      });
+    }
+    return [
+      for (final episode in rows)
+        SpokenEpisode(
+          id: episode['id'] as String? ?? '',
+          title: episode['title'] as String? ?? 'Untitled episode',
+          fileIndex: ((episode['audioFile']
+                      as Map<String, dynamic>?)?['index'] as num?)
+                  ?.toInt() ??
+              0,
+          duration: Duration(milliseconds: (episodeSeconds(episode) * 1000).round()),
+          description: episode['description'] as String? ?? '',
+          progressSeconds: ((episode['userMediaProgress']
+                      as Map<String, dynamic>?)?['currentTime'] as num?)
+                  ?.toDouble() ??
+              0,
+          publishedAt: _parseDate(episode['publishedAt']),
+        )
+    ];
+  }
+
+  /// Episode length in seconds. Some server versions serialize numeric
+  /// fields as strings (the same trap that hit listening stats'
+  /// timeListening), and not-downloaded episodes carry their length on the
+  /// audio file instead of the episode row — accept every shape before
+  /// giving up and rendering "0 min".
+  static double episodeSeconds(Map<String, dynamic> episode) {
+    Object? v = episode['duration'];
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0;
+    final audio = episode['audioFile'];
+    if (audio is Map) {
+      v = audio['duration'];
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v) ?? 0;
+    }
+    return 0;
   }
 
   /// All episodes of a podcast via the dedicated endpoint. The item GET

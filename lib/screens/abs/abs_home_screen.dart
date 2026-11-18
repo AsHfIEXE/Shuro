@@ -237,7 +237,7 @@ class _Continue extends StatelessWidget {
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('${absClock(Duration(seconds: at.round()))} listened',
               style: absText(12, color: kMuted2, tabular: true)),
-          Text('${absLength(left)} left', style: absText(12, color: kMuted2, tabular: true)),
+          Text('${absClock(left)} left', style: absText(12, color: kMuted2, tabular: true)),
         ]),
         const SizedBox(height: 20),
         Wrap(spacing: 12, runSpacing: 8, children: [
@@ -283,7 +283,7 @@ class _Continue extends StatelessWidget {
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('${absClock(Duration(seconds: at.round()))} listened',
                     style: absText(12, color: kMuted2, tabular: true)),
-                Text('${absLength(left)} left',
+                Text('${absClock(left)} left',
                     style: absText(12, color: kMuted2, tabular: true)),
               ]),
               const SizedBox(height: 16),

@@ -241,6 +241,102 @@ class SpokenLibraryState extends ChangeNotifier {
   double? liveProgressSecondsFor(SpokenItem item, {SpokenEpisode? episode}) =>
       _liveProgress[episode == null ? item.id : '${item.id}/${episode.id}'];
 
+  /// The full item behind a listing row. ABS's library listing hides a
+  /// podcast's episodes — and the item GET often does too (the dedicated
+  /// podcast endpoint is the source of truth) — and hides book chapters, so
+  /// detail screens ask for the whole thing here instead of rendering
+  /// "0 episodes" forever. Podcasts found to carry episodes are cached in
+  /// the same map playback uses, so the shelves reclassify and the rail
+  /// picks up episodes. Books are returned but never cached: bookItems
+  /// excludes expanded shows, and a book must stay on the book rail.
+  Future<SpokenItem?> expandShow(SpokenItem listed) async {
+    final api = _api;
+    if (api == null) return null;
+    var full = listed;
+    var via = 'listing';
+    try {
+      final expanded = await api.itemExpanded(listed);
+      full = expanded.item;
+      via = 'item';
+    } catch (_) {
+      // A failed item GET is not fatal — the podcast endpoint may still
+      // answer below.
+    }
+    // Zero-length rows count as missing too: some servers serialize the
+    // length somewhere the parser has to dig for, and the podcast endpoint
+    // is the source of truth for the real numbers.
+    final episodesLookEmpty = full.episodes.isEmpty ||
+        full.episodes.every((e) => e.duration <= Duration.zero);
+    if (episodesLookEmpty && full.type == SpokenMediaType.podcast) {
+      try {
+        final eps = await api.podcastEpisodes(listed.id);
+        if (eps.isNotEmpty) {
+          full = _withEpisodes(full, _mergeEpisodeTruth(full.episodes, eps));
+          via = via == 'listing' ? 'podcast' : 'item+podcast';
+        }
+      } catch (_) {}
+    }
+    PlaybackEventLog.instance.add('abs.expand', {
+      'id': listed.id,
+      'via': via,
+      'episodes': full.episodes.length,
+      'chapters': full.chapters.length,
+    });
+    // Both fetches failed and we are still holding the listing row: report
+    // failure so the screen can offer a retry.
+    if (identical(full, listed)) return null;
+    if (full.episodes.isNotEmpty) {
+      _expandedShows[full.id] = full;
+      notifyListeners();
+    }
+    return full;
+  }
+
+  /// [item] with [eps] swapped in — the item GET and the podcast endpoint
+  /// each carry half the truth, and the shelves must carry both.
+  SpokenItem _withEpisodes(SpokenItem item, List<SpokenEpisode> eps) => SpokenItem(        id: item.id,
+        libraryId: item.libraryId,
+        type: item.type,
+        title: item.title,
+        creator: item.creator,
+        duration: item.duration,
+        description: item.description,
+        coverUrl: item.coverUrl,
+        progressSeconds: item.progressSeconds,
+        episodes: eps,
+        chapters: item.chapters,
+        seriesNames: item.seriesNames,
+        isFinished: item.isFinished,
+        tracks: item.tracks,
+      );
+
+  /// The podcast endpoint carries the truth about lengths; the item GET and
+  /// the listing carry the truth about this user's progress. Keep the best
+  /// of both per episode id — neither source alone is complete.
+  List<SpokenEpisode> _mergeEpisodeTruth(
+      List<SpokenEpisode> have, List<SpokenEpisode> truth) {
+    if (have.isEmpty) return truth;
+    final byId = {for (final h in have) h.id: h};
+    return [
+      for (final t in truth)
+        SpokenEpisode(
+          id: t.id,
+          title: t.title,
+          fileIndex: t.fileIndex,
+          duration: t.duration > Duration.zero
+              ? t.duration
+              : byId[t.id]?.duration ?? Duration.zero,
+          description: t.description.isNotEmpty
+              ? t.description
+              : byId[t.id]?.description ?? '',
+          progressSeconds: (byId[t.id]?.progressSeconds ?? 0) > t.progressSeconds
+              ? byId[t.id]!.progressSeconds
+              : t.progressSeconds,
+          publishedAt: t.publishedAt ?? byId[t.id]?.publishedAt,
+        ),
+    ];
+  }
+
   /// Series name -> books carrying that series (from item metadata; ABS
   /// maintains series on scan). Sorted by name, books in library order.
   Map<String, List<SpokenItem>> get seriesGroups {
@@ -409,7 +505,12 @@ class SpokenLibraryState extends ChangeNotifier {
             // ffmpeg dying on an empty files.txt. Play an episode
             // instead, and remember the truth so the shelves reclassify
             // immediately.
-            _expandedShows[item.id] = expanded.item;
+            // Cache the MERGED item: the item GET often says episodes: []
+            // while the episodes came from the podcast endpoint — caching
+            // the bare item kept every shelf copy of this show at "0
+            // episodes" even after a successful play.
+            _expandedShows[item.id] =
+                episodes.isEmpty ? expanded.item : _withEpisodes(expanded.item, episodes);
             notifyListeners();
             final pick = _pickEpisode(episodes);
             PlaybackEventLog.instance.add('abs.redirect', {
