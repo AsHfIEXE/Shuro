@@ -206,6 +206,14 @@ class HomeScreen extends StatelessWidget {
       }
       heroAlbums.sort((x, y) =>
           (y.artwork != null ? 1 : 0).compareTo(x.artwork != null ? 1 : 0));
+      // Covers without artwork would render as blank gradient tiles in the
+      // spotlight/wall looks — keep only real covers when we have enough.
+      final withArt = heroAlbums.where((a) => a.artwork != null).toList();
+      if (withArt.length >= 4) {
+        heroAlbums
+          ..clear()
+          ..addAll(withArt);
+      }
       if (heroAlbums.length > 16) heroAlbums.removeRange(16, heroAlbums.length);
     }
     final heroIsCurrent =

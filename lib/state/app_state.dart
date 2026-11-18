@@ -1110,34 +1110,71 @@ class AppState extends ChangeNotifier {
   List<Song> songsForGenre(String genre) =>
       songsByIds(catalogGenres[genre] ?? const []);
 
+  /// Catalog search with relevance ranking: exact name first, then
+  /// starts-with, then loose contains — so typing a full title puts THAT
+  /// song on top instead of burying it under every artist containing the
+  /// letters anywhere.
+  int _searchQuality(String name, String title, String q) {
+    if (title == q) return 0;
+    if (title.startsWith(q)) return 1;
+    if (name == q) return 2;
+    if (name.startsWith(q)) return 3;
+    return 4;
+  }
+
   List<Song> searchCatalogSongs(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogSongs
+    final hits = catalogSongs
         .where((s) =>
             s.title.toLowerCase().contains(q) ||
             s.artist.toLowerCase().contains(q))
-        .toList();
+        .toList()
+      ..sort((x, y) {
+        final byQuality = _searchQuality(
+                x.title.toLowerCase(), x.artist.toLowerCase(), q)
+            .compareTo(
+                _searchQuality(y.title.toLowerCase(), y.artist.toLowerCase(), q));
+        if (byQuality != 0) return byQuality;
+        return x.title.toLowerCase().compareTo(y.title.toLowerCase());
+      });
+    return hits;
   }
 
   List<Album> searchCatalogAlbums(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogAlbums
+    final hits = catalogAlbums
         .where((a) =>
             a.title.toLowerCase().contains(q) ||
             a.artist.toLowerCase().contains(q))
-        .toList();
+        .toList()
+      ..sort((x, y) {
+        final byQuality = _searchQuality(
+                x.title.toLowerCase(), x.artist.toLowerCase(), q)
+            .compareTo(
+                _searchQuality(y.title.toLowerCase(), y.artist.toLowerCase(), q));
+        if (byQuality != 0) return byQuality;
+        return x.title.toLowerCase().compareTo(y.title.toLowerCase());
+      });
+    return hits;
   }
 
   List<Artist> searchCatalogArtists(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return catalogArtists
+    final hits = catalogArtists
         .where((a) => a.name.toLowerCase().contains(q))
-        .toList();
+        .toList()
+      ..sort((x, y) {
+        final nx = x.name.toLowerCase();
+        final ny = y.name.toLowerCase();
+        final byQuality = _searchQuality(nx, nx, q).compareTo(_searchQuality(ny, ny, q));
+        if (byQuality != 0) return byQuality;
+        return nx.compareTo(ny);
+      });
+    return hits;
   }
-
   /// A directly-playable source for [song] — its own file path if it was
   /// imported from the device, otherwise a stream URL from whichever
   /// backend is connected right now, built for [effectiveStreamingQuality]

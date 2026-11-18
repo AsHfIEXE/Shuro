@@ -194,7 +194,7 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                     Expanded(
                       flex: 5,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 48, 48, 0),
+                        padding: const EdgeInsets.fromLTRB(8, 88, 48, 0),
                         child: Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 780),
