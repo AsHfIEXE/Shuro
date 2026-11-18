@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../state/spoken_library_state.dart';
+import 'spoken_now_playing.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -105,6 +107,15 @@ class NowPlayingScreen extends StatelessWidget {
               style: GoogleFonts.getFont(currentFontFamily,
                   color: Colors.white70, fontSize: 14)),
         ),
+      );
+    }
+
+    // Audiobooks and podcast episodes get their own view.
+    final spoken = context.watch<SpokenLibraryState>().resolveSong(song.id);
+    if (spoken != null) {
+      return ImmersiveScope(
+        child: SpokenNowPlaying(
+            song: song, item: spoken.item, episode: spoken.episode),
       );
     }
 

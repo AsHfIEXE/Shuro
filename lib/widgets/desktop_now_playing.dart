@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../screens/now_playing/spoken_now_playing.dart';
+import '../state/spoken_library_state.dart';
 
 
 
@@ -438,6 +441,16 @@ class DesktopNowPlaying extends StatelessWidget {
 
 
 
+    // Audiobooks and podcast episodes get their own view (chapters /
+    // episodes / more books) instead of the music layout.
+    final spoken = context.watch<SpokenLibraryState>().resolveSong(song.id);
+    if (spoken != null) {
+      return SpokenNowPlaying(
+          song: song,
+          item: spoken.item,
+          episode: spoken.episode,
+          onClose: onClose);
+    }
     final size = MediaQuery.sizeOf(context);
 
 

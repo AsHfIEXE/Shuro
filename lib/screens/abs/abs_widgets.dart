@@ -57,10 +57,15 @@ class AbsCover extends StatelessWidget {
     (Color(0xFF3A5A6B), Color(0xFFCDE3F2)),
   ];
 
+  /// The (background, foreground) pair a title gets, so screens can tint
+  /// their backdrop to match the cover.
+  static (Color, Color) colorsFor(String title) =>
+      _palette[title.hashCode.abs() % _palette.length];
+
   @override
   Widget build(BuildContext context) {
     final h = height ?? width * 1.5;
-    final (bg, fg) = _palette[item.title.hashCode.abs() % _palette.length];
+    final (bg, fg) = colorsFor(item.title);
     final url = context.read<SpokenLibraryState>().coverUrlFor(item);
     final pad = width * 0.1;
     return ClipRRect(

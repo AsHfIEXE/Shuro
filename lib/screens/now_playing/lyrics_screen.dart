@@ -857,10 +857,7 @@ class _LyricsScreenState extends State<LyricsScreen> {
               onAppearance: () => showLyricsAppearanceSheet(context),
               onToggleSync: () =>
                   setState(() => _showSyncPane = !_showSyncPane),
-              onEdit: _song == null ? null : _openLyricsEditor,
-              onExpand: song == null
-                  ? null
-                  : () => openLyricsScreen(context, song)),
+              onEdit: _song == null ? null : _openLyricsEditor),
         if (widget.embedded && !widget.compact && _showSyncPane)
           _SyncBar(
               accent: accent,
@@ -1524,10 +1521,8 @@ class _EmbeddedPaneHeader extends StatelessWidget {
   /// Expands/collapses the inline [_SyncBar] under this header.
   final VoidCallback onToggleSync;
   final VoidCallback? onEdit;
-  final VoidCallback? onExpand;
 
   const _EmbeddedPaneHeader({
-    this.onExpand,
     required this.track,
     required this.offsetMs,
     required this.onAppearance,
@@ -1658,17 +1653,6 @@ class _EmbeddedPaneHeader extends StatelessWidget {
                   icon: const Icon(Icons.edit_rounded,
                       size: 16, color: Colors.white70),
                 ),
-                if (onExpand != null)
-                  IconButton(
-                    tooltip: 'Full-screen lyrics',
-                    onPressed: onExpand,
-                    visualDensity: VisualDensity.compact,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    padding: const EdgeInsets.all(4),
-                    icon: const Icon(Icons.open_in_full_rounded,
-                        size: 15, color: Colors.white70),
-                  ),
               ],
             ),
           ),

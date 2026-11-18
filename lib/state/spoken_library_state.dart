@@ -63,7 +63,7 @@ class SpokenLibraryState extends ChangeNotifier {
   /// revealed as podcast shows. The expanded item - WITH episodes -
   /// replaces the listing one in podcastShows, and bookItems drops it.
   final Map<String, SpokenItem> _expandedShows = {};
-
+  final Map<String, SpokenItem> _expandedBooks = {};
   List<SpokenLibrary> get bookLibraries =>
       libraries.where((l) => l.type == SpokenMediaType.book).toList();
   List<SpokenLibrary> get podcastLibraries =>
@@ -202,6 +202,40 @@ class SpokenLibraryState extends ChangeNotifier {
   /// numbers are always the server's.
   Future<AbsListeningStats?> loadStats() async => _api?.listeningStats();
 
+  /// Maps a player song id (`abs_<item>`, `abs_<item>_t<n>`,
+  /// `abs_<item>_<episode>`) back to the book / show + episode it belongs
+  /// to, or null when it is not an ABS song (music). Item ids contain
+  /// underscores (`li_...`), so this matches known ids instead of splitting.
+  /// Expanded copies are checked first: the listing hides a show's episodes
+  /// and a book's chapters, and only the expanded copy knows both.
+  ({SpokenItem item, SpokenEpisode? episode})? resolveSong(String? songId) {
+    if (songId == null || !songId.startsWith('abs_')) return null;
+    for (final item in [..._expandedShows.values, ..._expandedBooks.values, ...allItems]) {
+      final base = 'abs_${item.id}';
+      if (!songId.startsWith(base)) continue;
+      for (final e in item.episodes) {
+        final eb = '${base}_${e.id}';
+        if (songId == eb || songId.startsWith('${eb}_t')) {
+          return (item: item, episode: e);
+        }
+      }
+      if (songId == base || songId.startsWith('${base}_t')) {
+        return (item: item, episode: null);
+      }
+    }
+    return null;
+  }
+
+  /// Seconds into the item at which the active ABS track [songId] starts
+  /// (multi-file books play one track per file); 0 when unknown.
+  double trackOffsetFor(String songId) => _activeStartOffsetById[songId] ?? 0;
+
+  /// Test hook: seed the expanded-show cache directly.
+  @visibleForTesting
+  void debugCacheExpandedShow(SpokenItem item) {
+    _expandedShows[item.id] = item;
+  }
+
   /// Every fetched item, across libraries.
   Iterable<SpokenItem> get allItems sync* {
     for (final items in itemsByLibrary.values) {
@@ -287,6 +321,11 @@ class SpokenLibraryState extends ChangeNotifier {
     if (identical(full, listed)) return null;
     if (full.episodes.isNotEmpty) {
       _expandedShows[full.id] = full;
+      notifyListeners();
+    } else if (full.chapters.isNotEmpty) {
+      // Books are cached separately: bookItems excludes expanded shows, and
+      // a book must stay on the book rail. resolveSong checks both caches.
+      _expandedBooks[full.id] = full;
       notifyListeners();
     }
     return full;
