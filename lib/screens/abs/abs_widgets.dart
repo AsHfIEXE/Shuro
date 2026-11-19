@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../backend/audiobookshelf_api.dart';
 import '../../models/spoken_media.dart';
+import '../../services/abs_download_service.dart';
 import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
@@ -210,6 +211,33 @@ class AbsActions {
           backgroundColor: kRaisedColor,
           behavior: SnackBarBehavior.floating));
     try {
+      // Offline first: a fully-downloaded book/episode plays from disk —
+      // no session, no network. The 15 s sync tick PATCHes progress to the
+      // server whenever it is reachable again, and saves it locally when
+      // it is not.
+      final downloads = context.read<AbsDownloadService>();
+      final coverUrl = state.coverUrlFor(item);
+      final local = downloads.buildSession(item,
+          episode: episode,
+          artwork: coverUrl == null ? null : Uri.tryParse(coverUrl));
+      if (local != null) {
+        if (queue) {
+          state.queueLocalSession(local);
+          return toast('Added to queue');
+        }
+        final at =
+            startAt ?? (local.resumeAt > Duration.zero ? local.resumeAt : null);
+        await player.playSong(local.song, queue: local.songs, startAt: at);
+        state.beginLocalSession(local,
+            positionReader: () => player.position,
+            songIdReader: () => player.currentSong?.id);
+        final speed = await state.savedSpeedFor(local.progressId);
+        if (speed > 0 && speed != player.playbackSpeed) {
+          player.playbackSpeed = speed;
+          await player.applyPlaybackTweaksNow();
+        }
+        return;
+      }
       final session = await state.openSession(item,
           episode: episode,
           forQueue: queue,

@@ -374,6 +374,7 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
             _output(e),
             _signalPath(e, prefs, player),
             _leveling(e, prefs),
+            _comfort(prefs),
             _equalizer(e),
             _profiles(e, prefs),
             _streaming(app, e),
@@ -702,6 +703,41 @@ class _AudioEqBodyState extends State<_AudioEqBody> {
               'A safety net at −0.1 dBFS. Shows "Idle" while total gain is 0 dB or below.',
           value: e.limiter,
           onChanged: (v) => _audioChange(e, () => e.limiter = v),
+        ),
+      ]),
+    );
+  }
+
+  // --- Audiobook comfort ----------------------------------------------------
+  Widget _comfort(PlaybackPrefs prefs) {
+    return _BoardCardGroup(
+      title: 'AUDIOBOOK COMFORT',
+      children: _withHairlines([
+        _switchRow(
+          label: 'Skip silence',
+          description:
+              'The engine drops long silences while a title plays. Real DSP on Android; desktop builds play as recorded.',
+          value: prefs.skipSilence,
+          onChanged: prefs.setSkipSilence,
+        ),
+        _sliderRow(
+          label: 'Volume boost',
+          description:
+              '0 to +6 dB of gain for Audiobookshelf playback only, so quiet narrations catch up with the music.',
+          value: prefs.spokenBoostDb,
+          min: 0,
+          max: 6,
+          divisions: 12,
+          format: _formatDb,
+          onCommit: prefs.setSpokenBoostDb,
+        ),
+        _ControlRow(
+          label: 'Normalize loudness',
+          description:
+              'Follow-up: needs engine-level loudnorm (mpv on desktop, ExoPlayer on Android). ReplayGain above already covers tagged files.',
+          trailing: Text('Follow-up',
+              style: GoogleFonts.getFont(currentFontFamily,
+                  fontSize: 12, color: kStatusText)),
         ),
       ]),
     );

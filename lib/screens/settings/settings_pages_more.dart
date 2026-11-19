@@ -235,6 +235,19 @@ extension _MorePages on _SettingsScreenState {
             onTap: () => _pickDownloadLocation(context),
           ),
           _NavRow(
+            icon: Icons.auto_stories_rounded,
+            label: 'Audiobookshelf downloads',
+            description: 'Books and podcast episodes saved on this device.',
+            value: context
+                    .watch<AbsDownloadService>()
+                    .handles
+                    .isEmpty
+                ? 'None'
+                : '${context.watch<AbsDownloadService>().handles.length}',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const AbsDownloadsScreen())),
+          ),
+          _NavRow(
             icon: Icons.delete_outline_rounded,
             label: 'Clear downloads',
             description: 'Downloaded songs are removed from this device.',
@@ -510,6 +523,22 @@ extension _MorePages on _SettingsScreenState {
                 DiscordRpcService.active?.clearArtCache();
               },
             ),
+          ),
+          _ToggleRow(
+            label: 'Autoplay next episode',
+            value: context.watch<SpokenLibraryState>().autoplayNext,
+            onChanged: (v) =>
+                context.read<SpokenLibraryState>().setAutoplayNext(v),
+            description:
+                'When an episode or book finishes, the next one is offered — and starts after five seconds unless you cancel.',
+          ),
+          _ToggleRow(
+            label: 'Live sync across devices',
+            value: context.watch<SpokenLibraryState>().liveSyncEnabled,
+            onChanged: (v) =>
+                context.read<SpokenLibraryState>().setLiveSync(v),
+            description:
+                'Progress written on another device raises a jump banner instead of silently moving playback.',
           ),
           _ToggleRow(
             label: 'Private listening',

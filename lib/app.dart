@@ -23,6 +23,7 @@ import 'services/desktop_lifecycle.dart';
 import 'services/discord_rpc_service.dart';
 import 'services/global_hotkeys.dart';
 import 'services/download_service.dart';
+import 'services/abs_download_service.dart';
 import 'services/local_tag_enrichment.dart';
 import 'services/metadata/lastfm_client.dart';
 import 'services/playback_prefs.dart';
@@ -39,11 +40,13 @@ import 'screens/onboarding/server_setup_screen.dart';
 import 'screens/search/search_screen.dart';
 import 'state/app_state.dart';
 import 'state/player_controller.dart';
+import 'state/spoken_library_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/desktop_shell.dart';
 import 'services/server_link.dart';
 import 'services/stream_proxy.dart';
 import 'widgets/app_logo.dart';
+import 'widgets/abs_overlay_cards.dart';
 import 'widgets/shuro_nav.dart';
 import 'widgets/mini_player.dart';
 import 'widgets/page_transitions.dart';
@@ -571,6 +574,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         player.replayGainEnabled = playbackPrefs.replayGain;
         player.playbackSpeed = playbackPrefs.playbackSpeed;
         player.skipSilence = playbackPrefs.skipSilence;
+        player.spokenBoostDb = playbackPrefs.spokenBoostDb;
         unawaited(player.setPlayerVolume(playbackPrefs.appVolume));
         unawaited(player.applyPlaybackTweaksNow());
       }
@@ -602,6 +606,57 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         return tagged + extras.rgPreampDb;
       };
       player.metadataResolver = appState.nowPlayingMetadataFor;
+
+      // --- Audiobookshelf roadmap wiring (up-next autoplay, offline
+      // downloads, comfort boost, cross-device sync). Everything stays
+      // behind SpokenLibraryState + PlayerController: the NPV is still the
+      // only spoken surface, no new top-level player path.
+      final spoken = context.read<SpokenLibraryState>();
+      final absDownloads = context.read<AbsDownloadService>();
+      await spoken.restoreRoadmapFlags();
+      spoken.remotePlayRequest = (item, episode) async {
+        try {
+          final session = await spoken.openSession(item,
+              episode: episode,
+              positionReader: () => player.position,
+              songIdReader: () => player.currentSong?.id);
+          if (session == null) return;
+          final at =
+              session.resumeAt > Duration.zero ? session.resumeAt : null;
+          await player.playSong(session.song, queue: session.queue,
+              startAt: at);
+          final speed = await spoken.savedSpeedFor(session.progressId);
+          if (speed > 0 && speed != player.playbackSpeed) {
+            player.playbackSpeed = speed;
+            await player.applyPlaybackTweaksNow();
+          }
+        } catch (_) {
+          // Auto-advance / sync-jump failures must never take the shell down.
+        }
+      };
+      spoken.showUpNextCard = (offer) => showUpNextCard(
+          SpokenLibraryState.messengerKey.currentState,
+          offer,
+          () => unawaited(spoken.acceptUpNext()),
+          spoken.dismissUpNext);
+      spoken.showSyncBanner = (nudge) => showSyncNudgeBanner(
+          SpokenLibraryState.messengerKey.currentState,
+          nudge,
+          () => unawaited(spoken.jumpToSyncNudge()),
+          spoken.dismissSyncNudge);
+      spoken.offlineProgressSaver = (progressId, seconds) =>
+          absDownloads.saveOfflineProgress(progressId, seconds);
+      spoken.onItemMarkedPlayed = (item, episode) {
+        if (absDownloads.autoRemoveFinished) {
+          unawaited(absDownloads.remove(item.id, episodeId: episode?.id));
+        }
+      };
+      player.onQueueEnded = spoken.handleQueueEnded;
+      // Offline first: a downloaded ABS song id resolves to its local file,
+      // chained AFTER the resolver above so music behaviour is untouched.
+      final musicResolver = player.audioSourceResolver;
+      player.audioSourceResolver = (song) =>
+          absDownloads.locate(song.id) ?? musicResolver?.call(song);
 
       // Desktop: Discord Rich Presence. The service gates itself to
       // Windows/Linux and no-ops until a real Discord Application ID is

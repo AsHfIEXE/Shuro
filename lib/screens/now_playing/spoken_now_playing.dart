@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../backend/audiobookshelf_api.dart';
 import '../../models/song.dart';
 import '../../models/spoken_media.dart';
+import '../../services/abs_download_service.dart';
 import '../../state/player_controller.dart';
 import '../../state/spoken_library_state.dart';
 import '../../theme/app_theme.dart';
@@ -850,6 +853,20 @@ class _Transport extends StatelessWidget {
     final speedLabel = '${speed == speed.roundToDouble() ? speed.toStringAsFixed(1) : speed}×';
 
     final size = wide ? 300.0 : 224.0;
+
+    // Offline badge state + the little toast helper for it.
+    final spoken = context.watch<SpokenLibraryState>();
+    final dl = context.watch<AbsDownloadService>();
+    final dlEpisodeId = book ? null : w.episode?.id;
+    final dlKey = dl.folderNameFor(w.item.id, dlEpisodeId);
+    final dlProgress = dl.progressOf(dlKey);
+    final dlDone = dl.isDownloaded(w.item.id, dlEpisodeId);
+    void toast(String m) => ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(m, style: absText(13)),
+          backgroundColor: kRaisedColor,
+          behavior: SnackBarBehavior.floating));
     // Center the whole transport block in its pane (it used to hug the top
     // left corner) and scroll instead of overflowing on short windows.
     return Padding(
@@ -872,6 +889,23 @@ class _Transport extends StatelessWidget {
             OutputChip(height: 32),
             const SizedBox(width: 10),
             _GlassCircle(
+                icon: spoken.syncNudge != null
+                    ? Icons.sync_problem_rounded
+                    : (!spoken.liveSyncEnabled
+                        ? Icons.cloud_off_outlined
+                        : Icons.cloud_done_outlined),
+                tooltip: spoken.syncNudge != null
+                    ? 'Another device is ahead — jump?'
+                    : 'Cross-device sync',
+                onTap: () {
+                  if (spoken.syncNudge != null) {
+                    unawaited(spoken.jumpToSyncNudge());
+                  } else {
+                    unawaited(spoken.checkRemoteProgressNow());
+                  }
+                }),
+            const SizedBox(width: 10),
+            _GlassCircle(
                 icon: Icons.speaker_rounded,
                 tooltip: 'Audio information',
                 onTap: () => showAudioInfoSheet(context, w.song)),
@@ -885,27 +919,52 @@ class _Transport extends StatelessWidget {
         SizedBox(height: wide ? 24 : 12),
         // Clean cover: a single rounded square with a shadow — no extra mat
         // around the artwork's own frame.
-        Container(
-          width: book ? size * 2 / 3 : size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 40,
-                  offset: const Offset(0, 16)),
-            ],
+        Stack(children: [
+          Container(
+            width: book ? size * 2 / 3 : size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 40,
+                    offset: const Offset(0, 16)),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: coverUrl != null
+                  ? Image.network(coverUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          Container(color: kRaisedColor))
+                  : Container(color: kRaisedColor),
+            ),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: coverUrl != null
-                ? Image.network(coverUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(color: kRaisedColor))
-                : Container(color: kRaisedColor),
+          Positioned(
+            right: 10,
+            bottom: 10,
+            child: _DownloadBadge(
+                done: dlDone,
+                progress: dlProgress,
+                onTap: () {
+                  if (dlProgress != null) {
+                    toast('Downloading ${(dlProgress * 100).round()}%…');
+                  } else if (dlDone) {
+                    toast('Downloaded — plays offline');
+                  } else {
+                    final api = spoken.apiOrNull;
+                    if (api == null) {
+                      toast('Connect Audiobookshelf to download.');
+                      return;
+                    }
+                    unawaited(dl.downloadItem(w.item,
+                        episode: book ? null : w.episode, api: api));
+                  }
+                }),
           ),
-        ),
+        ]),
         SizedBox(height: wide ? 28 : 18),
         Text(title,
             textAlign: TextAlign.center,
@@ -1304,4 +1363,50 @@ class _Notes extends StatelessWidget {
         child: Text(text.isEmpty ? 'No notes.' : text,
             style: absText(14, color: kNavText, h: 1.6)),
       );
+}
+
+/// Cover-corner offline badge: download → progress ring → done check.
+/// Tap starts the download (book = whole book, podcast = this episode),
+/// reports progress, or confirms it plays from this device.
+class _DownloadBadge extends StatelessWidget {
+  const _DownloadBadge({
+    required this.done,
+    required this.progress,
+    required this.onTap,
+  });
+  final bool done;
+  final double? progress;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final downloading = progress != null;
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          child: downloading
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      value: progress == 0 ? null : progress,
+                      strokeWidth: 2,
+                      valueColor:
+                          const AlwaysStoppedAnimation(kVioletPale)))
+              : Icon(done
+                      ? Icons.check_circle_rounded
+                      : Icons.download_rounded,
+                  size: 20,
+                  color: done ? const Color(0xFF34D399) : Colors.white),
+        ),
+      ),
+    );
+  }
 }

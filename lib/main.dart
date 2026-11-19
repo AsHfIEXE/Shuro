@@ -14,6 +14,7 @@ import 'services/artist_artwork_service.dart';
 import 'services/device_profile.dart';
 import 'services/desktop_lifecycle.dart';
 import 'services/download_service.dart';
+import 'services/abs_download_service.dart';
 import 'services/image_disk_cache.dart';
 import 'services/playback_prefs.dart';
 import 'services/stream_proxy.dart';
@@ -183,6 +184,9 @@ class MusicStreamApp extends StatelessWidget {
             create: (_) => ArtistArtworkService()..restore()),
         // Real offline downloads (files on disk, persistent across updates).
         ChangeNotifierProvider(create: (_) => DownloadService()..restore()),
+        // Audiobookshelf offline downloads (books + podcast episodes, one
+        // folder + manifest per title under documents/abs_downloads).
+        ChangeNotifierProvider(create: (_) => AbsDownloadService()..restore()),
         // Playback settings (fade, replay gain, speed, skip silence).
         ChangeNotifierProvider(create: (_) => PlaybackPrefs()..restore()),
         // View preferences that live outside AppState (see the class doc): the
@@ -206,6 +210,10 @@ class MusicStreamApp extends StatelessWidget {
             title: 'Shuro',
             debugShowCheckedModeBanner: false,
             theme: buildAppTheme(fontFamily: fontFamily),
+            // The ABS up-next card and sync jump banner ride the app's
+            // snackbar so they work over every surface without a global
+            // overlay (the builder: wrapper was removed on purpose).
+            scaffoldMessengerKey: SpokenLibraryState.messengerKey,
             // Deliberately no `builder:` here. An earlier version wrapped
             // `child` in Center + ConstrainedBox(maxWidth: 460) to cap
             // width on a wide desktop browser — but that never actually

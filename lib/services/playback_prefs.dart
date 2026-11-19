@@ -19,6 +19,7 @@ class PlaybackPrefs extends ChangeNotifier {
   static const String _kSpeed = 'playback_speed_v1';
   static const String _kSkipSilence = 'playback_skip_silence_v1';
   static const String _kAppVolume = 'playback_app_volume_v1';
+  static const String _kSpokenBoost = 'playback_spoken_boost_db_v1';
 
   /// 0 = off. Otherwise the fade length in seconds (2/4/6 in the picker).
   int crossfadeSeconds = 0;
@@ -30,6 +31,10 @@ class PlaybackPrefs extends ChangeNotifier {
   double playbackSpeed = 1.0;
 
   bool skipSilence = false;
+
+  /// Volume boost (dB, 0..6) for Audiobookshelf playback ("Audiobook
+  /// comfort"). The player applies it to abs_* songs only.
+  double spokenBoostDb = 0.0;
 
   /// Shuro's own output level. This is deliberately separate from the OS
   /// media volume: desktop users can lower Shuro without changing the volume
@@ -62,6 +67,8 @@ class PlaybackPrefs extends ChangeNotifier {
       replayGain = prefs.getBool(_kReplayGain) ?? replayGain;
       playbackSpeed = prefs.getDouble(_kSpeed) ?? playbackSpeed;
       skipSilence = prefs.getBool(_kSkipSilence) ?? skipSilence;
+      spokenBoostDb =
+          (prefs.getDouble(_kSpokenBoost) ?? spokenBoostDb).clamp(0.0, 6.0);
       appVolume = (prefs.getDouble(_kAppVolume) ?? appVolume).clamp(0.0, 1.0);
       replayGainMode = prefs.getString(_kRgMode) ?? replayGainMode;
       untaggedPreampDb = prefs.getDouble(_kRgPreamp) ?? untaggedPreampDb;
@@ -102,6 +109,15 @@ class PlaybackPrefs extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kSkipSilence, value);
+  }
+
+  Future<void> setSpokenBoostDb(double value) async {
+    final next = value.clamp(0.0, 6.0);
+    if (spokenBoostDb == next) return;
+    spokenBoostDb = next;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kSpokenBoost, next);
   }
 
   /// 'off', 'track' or 'album'. 'off' switches [replayGain] off; the mode is

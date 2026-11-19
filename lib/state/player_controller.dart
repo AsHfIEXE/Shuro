@@ -623,6 +623,16 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
 
   bool skipSilence = false;
 
+  /// Extra gain (dB, 0..6) applied to Audiobookshelf playback only — the
+  /// "Audiobook comfort" volume boost. Software gain on top of the content
+  /// volume, hard-clamped so a fat-fingered slider can never hurt ears.
+  double spokenBoostDb = 0.0;
+
+  /// Wired once from app.dart (to SpokenLibraryState.handleQueueEnded):
+  /// fires when the queue truly ends — last track finished, repeat off,
+  /// nothing appended. ABS up-next autoplay hangs off this seam.
+  void Function(Song song)? onQueueEnded;
+
   bool _fadingOut = false;
 
   /// Settings -> Playback / Audio hooks (wired in app.dart).
@@ -679,6 +689,11 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
       }
       if (headroomDb > 0) {
         volume *= pow(10.0, -headroomDb.clamp(0.0, 24.0) / 20.0).toDouble();
+      }
+      // Audiobook comfort boost: ABS-only, user-requested, hard-clamped by
+      // spokenBoostFactor itself.
+      if (song.id.startsWith('abs_') && spokenBoostDb > 0) {
+        volume *= spokenBoostFactor(spokenBoostDb);
       }
       _contentVolume = volume;
       _targetVolume = volume * _appVolume;
@@ -1191,6 +1206,7 @@ class PlayerController extends ChangeNotifier implements PlaybackEngine {
         await _audioPlayer.pause();
         await _audioPlayer.seek(Duration.zero);
         notifyListeners();
+        onQueueEnded?.call(_queue[_queueIndex]);
       }
       return;
     }
@@ -2084,3 +2100,9 @@ String formatSleepCountdown(Duration d) {
   }
   return '${safe.inMinutes}:$seconds';
 }
+
+/// Linear gain for the Audiobook comfort boost. Pure + unit-tested: 0 dB is
+/// unity, negative input is ignored, anything past +6 dB clamps at +6 dB
+/// (roughly a 2x multiple) so the slider can never weaponise the volume.
+double spokenBoostFactor(double db) =>
+    pow(10.0, db.clamp(0.0, 6.0) / 20.0).toDouble();

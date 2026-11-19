@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shuro/screens/settings/settings_screen.dart';
 import 'package:shuro/services/download_service.dart';
+import 'package:shuro/services/abs_download_service.dart';
 import 'package:shuro/state/app_state.dart';
 import 'package:shuro/state/player_controller.dart';
 import 'package:shuro/backend/subsonic_api.dart';
@@ -21,6 +22,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => PlayerController()),
           ChangeNotifierProvider(create: (_) => ServerSession()),
           ChangeNotifierProvider(create: (_) => DownloadService()),
+          ChangeNotifierProvider(create: (_) => AbsDownloadService()),
           ChangeNotifierProvider(create: (_) => PlaybackPrefs()),
           ChangeNotifierProvider(create: (_) => AppearanceSettings()),
           ChangeNotifierProvider(create: (_) => SpokenLibraryState()),

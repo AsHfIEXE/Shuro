@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show NetworkImage;
+import 'package:flutter/material.dart'
+    show Color, GlobalKey, NetworkImage, ScaffoldMessengerState;
 
 import '../backend/audiobookshelf_api.dart';
 import '../models/song.dart';
 import '../models/spoken_media.dart';
 import '../playback/event_log.dart';
 import '../services/app_persistence.dart';
+import '../services/abs_download_service.dart';
 import '../services/server_secret_store.dart';
 import '../services/stream_proxy.dart';
 import '../models/abs_stats.dart';
@@ -47,6 +48,276 @@ class SpokenLibraryState extends ChangeNotifier {
   List<String> _activeSongIds = const [];
   Duration Function()? _positionReader;
   String? Function()? _songIdReader;
+
+  // --- Roadmap: up-next autoplay, live sync, offline sessions ---------------
+  // All state surfaces stay behind this class; the NPV is still the only
+  // spoken UI, the sync banner and up-next card ride the app's snackbar.
+
+  /// Global snackbar host so playback events can raise cards from anywhere
+  /// (set on MaterialApp in main.dart).
+  static final GlobalKey<ScaffoldMessengerState> messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  static const _autoplayKey = 'abs_autoplay_v1';
+  static const _livesyncKey = 'abs_livesync_v1';
+
+  /// When an episode/book ends, offer (and after 5 s start) the next one.
+  bool autoplayNext = true;
+
+  /// Watch the server's own progress rows for remote writes and raise a
+  /// jump banner instead of silently yanking playback.
+  bool liveSyncEnabled = true;
+
+  int _syncTickCount = 0;
+  final Map<String, int> _lastLocalWriteMs = {};
+  Timer? _upNextTimer;
+
+  /// The pending "what plays next" offer, cleared on accept/dismiss.
+  UpNextOffer? pendingUpNext;
+
+  /// A remote device wrote newer progress for what we are playing.
+  RemoteNudge? syncNudge;
+
+  /// Exposed for the download actions (NPV cover badge).
+  AudiobookshelfApi? get apiOrNull => _api;
+
+  /// Wired once from app.dart: starts an item/episode through the normal
+  /// openSession + playSong + speed-restore path. Used by up-next autoplay
+  /// and sync jumps alike.
+  Future<void> Function(SpokenItem item, SpokenEpisode? episode)?
+      remotePlayRequest;
+
+  /// Wired once from app.dart: shows the up-next card on the global
+  /// messenger (UI lives outside this class on purpose).
+  void Function(UpNextOffer offer)? showUpNextCard;
+
+  /// Wired once from app.dart: shows the sync jump banner.
+  void Function(RemoteNudge nudge)? showSyncBanner;
+
+  /// Wired once from app.dart: persists a downloaded title's resume point
+  /// (delegates to AbsDownloadService).
+  Future<void> Function(String progressId, double seconds)?
+      offlineProgressSaver;
+
+  /// Wired once from app.dart: fired after a successful mark-played so the
+  /// download service can auto-remove the files when its setting asks.
+  void Function(SpokenItem item, SpokenEpisode? episode)? onItemMarkedPlayed;
+
+  Future<void> restoreRoadmapFlags() async {
+    try {
+      final store = await AppPersistence.load();
+      autoplayNext = store.getBool(_autoplayKey) ?? autoplayNext;
+      liveSyncEnabled = store.getBool(_livesyncKey) ?? liveSyncEnabled;
+    } catch (_) {}
+  }
+
+  Future<void> setAutoplayNext(bool value) async {
+    if (autoplayNext == value) return;
+    autoplayNext = value;
+    notifyListeners();
+    try {
+      final store = await AppPersistence.load();
+      await store.setBool(_autoplayKey, value);
+    } catch (_) {}
+  }
+
+  Future<void> setLiveSync(bool value) async {
+    if (liveSyncEnabled == value) return;
+    liveSyncEnabled = value;
+    notifyListeners();
+    try {
+      final store = await AppPersistence.load();
+      await store.setBool(_livesyncKey, value);
+    } catch (_) {}
+  }
+
+  /// Fired by PlayerController.onQueueEnded. Computes what should play
+  /// next and offers it; the card auto-accepts after five seconds unless
+  /// the user cancels. Books only continue within their series.
+  void handleQueueEnded(Song song) {
+    _upNextTimer?.cancel();
+    if (!autoplayNext || !song.id.startsWith('abs_')) return;
+    final found = resolveSong(song.id);
+    if (found == null) return;
+    final next = pickUpNext(
+      item: found.item,
+      episode: found.episode,
+      bookShelf: bookItems,
+      episodeDone: (e) => _episodeDone(found.item, e),
+      bookDone: isFinishedFor,
+    );
+    if (next == null) {
+      PlaybackEventLog.instance
+          .add('abs.upnext', {'id': song.id, 'next': 'none'});
+      return;
+    }
+    pendingUpNext = UpNextOffer(
+      item: next.$1,
+      episode: next.$2,
+      fromTitle: found.episode?.title ?? found.item.title,
+    );
+    notifyListeners();
+    showUpNextCard?.call(pendingUpNext!);
+    _upNextTimer = Timer(const Duration(seconds: 5), acceptUpNext);
+    PlaybackEventLog.instance.add('abs.upnext',
+        {'id': song.id, 'next': next.$2?.id ?? next.$1.id});
+  }
+
+  Future<void> acceptUpNext() async {
+    _upNextTimer?.cancel();
+    final offer = pendingUpNext;
+    pendingUpNext = null;
+    notifyListeners();
+    if (offer == null) return;
+    await remotePlayRequest?.call(offer.item, offer.episode);
+  }
+
+  void dismissUpNext() {
+    _upNextTimer?.cancel();
+    if (pendingUpNext == null) return;
+    pendingUpNext = null;
+    notifyListeners();
+  }
+
+  bool _episodeDone(SpokenItem item, SpokenEpisode e) {
+    final live = _liveProgress['${item.id}/${e.id}'] ?? e.progressSeconds;
+    return e.duration.inSeconds > 0 && live >= e.duration.inSeconds - 30;
+  }
+
+  /// Every few sync ticks: compare the server's own row for this progress.
+  /// A remote write NEWER than our last push and further than 45 s from our
+  /// position raises the banner; newest-wins stays automatic because the
+  /// next local tick overwrites the remote row either way.
+  Future<void> _checkRemoteProgress(
+      String progressId, double localSeconds) async {
+    final api = _api;
+    if (api == null || !liveSyncEnabled) return;
+    try {
+      final rows = await api.mediaProgresses();
+      final slash = progressId.indexOf('/');
+      final itemId = slash < 0 ? progressId : progressId.substring(0, slash);
+      final episodeId = slash < 0 ? null : progressId.substring(slash + 1);
+      Map<String, dynamic>? row;
+      for (final r in rows) {
+        if (r['libraryItemId'] == itemId &&
+            (r['episodeId'] ?? '') == (episodeId ?? '')) {
+          row = r;
+          break;
+        }
+      }
+      if (row == null) return;
+      final remote = (row['currentTime'] as num?)?.toDouble() ?? 0;
+      final lastUpdate = (row['lastUpdate'] as num?)?.toInt() ?? 0;
+      final ours = _lastLocalWriteMs[progressId] ?? 0;
+      final drift = (remote - localSeconds).abs();
+      if (lastUpdate <= ours + 2000 || drift <= 45) return;
+      final item = _itemById(itemId);
+      if (item == null) return;
+      SpokenEpisode? episode;
+      if (episodeId != null) {
+        for (final e in item.episodes) {
+          if (e.id == episodeId) episode = e;
+        }
+      }
+      final title = episode?.title ?? item.title;
+      if (syncNudge?.progressId == progressId) {
+        syncNudge!.remoteSeconds = remote;
+        if (syncNudge!.title != title) syncNudge!.title = title;
+      } else {
+        syncNudge = RemoteNudge(
+            progressId: progressId, remoteSeconds: remote, title: title);
+      }
+      notifyListeners();
+      showSyncBanner?.call(syncNudge!);
+      PlaybackEventLog.instance.add('abs.remote', {
+        'id': progressId,
+        'remote': remote.round(),
+        'drift': drift.round(),
+      });
+    } catch (_) {
+      // Offline or slow server: live sync is best-effort only.
+    }
+  }
+
+  SpokenItem? _itemById(String id) {
+    for (final item in [
+      ..._expandedShows.values,
+      ..._expandedBooks.values,
+      ...allItems
+    ]) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  /// Sync-icon tap when no banner is up: check the remote row right away.
+  Future<void> checkRemoteProgressNow() async {
+    final progressId = _activeProgressId;
+    final seconds = _currentActiveSeconds();
+    if (progressId == null || seconds == null) return;
+    await _checkRemoteProgress(progressId, seconds);
+  }
+
+  void dismissSyncNudge() {
+    if (syncNudge == null) return;
+    syncNudge = null;
+    notifyListeners();
+  }
+
+  /// Jump = re-open the session. The server's currentTime IS the remote
+  /// device's position, so openSession's own resume math lands on it —
+  /// including cross-track jumps inside multi-file books.
+  Future<void> jumpToSyncNudge() async {
+    final nudge = syncNudge;
+    dismissSyncNudge();
+    if (nudge == null) return;
+    final slash = nudge.progressId.indexOf('/');
+    final item = _itemById(slash < 0
+        ? nudge.progressId
+        : nudge.progressId.substring(0, slash));
+    if (item == null) return;
+    SpokenEpisode? episode;
+    if (slash >= 0) {
+      final episodeId = nudge.progressId.substring(slash + 1);
+      for (final e in item.episodes) {
+        if (e.id == episodeId) episode = e;
+      }
+    }
+    await remotePlayRequest?.call(item, episode);
+  }
+
+  /// A downloaded title playing WITHOUT a server session: the same active
+  /// bookkeeping minus the session id, so the 15 s tick PATCHes progress
+  /// whenever the server is reachable and saves it locally when not.
+  void beginLocalSession(SpokenLocalSession session,
+      {Duration Function()? positionReader,
+      String? Function()? songIdReader}) {
+    _activeSessionId = null;
+    _activeProgressId = session.progressId;
+    _activeDuration = session.durationSeconds;
+    _activeSongIds = session.songIds;
+    _activeStartOffsetById = session.startOffsetById;
+    _positionReader = positionReader ?? _positionReader;
+    _songIdReader = songIdReader ?? _songIdReader;
+    _liveProgress[session.progressId] =
+        session.resumeAt.inMilliseconds / 1000.0;
+    _startSyncTimer();
+    notifyListeners();
+    PlaybackEventLog.instance
+        .add('abs.session.local', {'id': session.progressId});
+  }
+
+  /// Same, for a QUEUED downloaded title (promoted by the sync tick).
+  void queueLocalSession(SpokenLocalSession session) {
+    _queuedSessions[session.songIds.first] = _QueuedAbsSession(
+      sessionId: '',
+      progressId: session.progressId,
+      durationSeconds: session.durationSeconds,
+      songIds: session.songIds,
+      startOffsetById: session.startOffsetById,
+    );
+    _startSyncTimer();
+  }
 
   /// Freshest known positions (progressId -> seconds), updated by the sync
   /// timer while a session plays. The library listing is a snapshot from
@@ -440,6 +711,7 @@ class SpokenLibraryState extends ChangeNotifier {
         forceFinished: true);
     _liveProgress[progressId] = total;
     if (episode == null) _serverFinished.add(item.id);
+    onItemMarkedPlayed?.call(item, episode);
     notifyListeners();
     PlaybackEventLog.instance.add('abs.mark', {'id': progressId});
   }
@@ -875,6 +1147,12 @@ class SpokenLibraryState extends ChangeNotifier {
     }
     _liveProgress[progressId] = seconds;
     notifyListeners();
+    // Downloaded/offline session: there is no server session to sync —
+    // persist the resume point locally so it survives a restart.
+    if (_activeSessionId == null) {
+      await offlineProgressSaver?.call(progressId, seconds);
+    }
+    final writeMs = DateTime.now().millisecondsSinceEpoch;
     try {
       await api.syncSession(sessionId,
           currentTime: seconds, duration: _activeDuration);
@@ -887,11 +1165,18 @@ class SpokenLibraryState extends ChangeNotifier {
             ? '0'
             : (seconds / _activeDuration).toStringAsFixed(2),
       });
+      _lastLocalWriteMs[progressId] = writeMs;
     } catch (e) {
       PlaybackEventLog.instance.add('abs.sync.fail', {
         'id': progressId,
         'err': e.toString().split('\n').first,
       });
+    }
+    // Cross-device watch: every 4th successful tick, compare the server's
+    // own progress row against ours.
+    _syncTickCount++;
+    if (_syncTickCount % 4 == 0) {
+      await _checkRemoteProgress(progressId, seconds);
     }
   }
 
@@ -914,6 +1199,7 @@ class SpokenLibraryState extends ChangeNotifier {
     _syncTimer = null;
     final api = _api;
     final sessionId = _activeSessionId;
+    final wasLocal = sessionId == null || sessionId.isEmpty;
     final progressId = _activeProgressId;
     final duration = _activeDuration;
     final seconds = _currentActiveSeconds() ??
@@ -926,6 +1212,10 @@ class SpokenLibraryState extends ChangeNotifier {
     _queuedSessions.clear();
     _positionReader = null;
     _songIdReader = null;
+    // Downloaded/offline: persist the resume point even with no server.
+    if (wasLocal && progressId != null && seconds != null && seconds > 0) {
+      await offlineProgressSaver?.call(progressId, seconds);
+    }
     if (api == null) return;
     if (progressId != null && seconds != null && seconds > 0) {
       _liveProgress[progressId] = seconds;
@@ -947,6 +1237,7 @@ class SpokenLibraryState extends ChangeNotifier {
   @override
   void dispose() {
     _syncTimer?.cancel();
+    _upNextTimer?.cancel();
     unawaited(closeActiveSession());
     super.dispose();
   }
@@ -986,4 +1277,83 @@ class SpokenPlaybackSession {
   final Duration resumeAt;
   final String sessionId;
   final String progressId;
+}
+
+/// The pending "what plays next" offer raised when an ABS queue ends.
+/// Pure data: the card UI and the auto-accept timer live in the state and
+/// the app shell, not here.
+class UpNextOffer {
+  const UpNextOffer({
+    required this.item,
+    required this.episode,
+    required this.fromTitle,
+  });
+  final SpokenItem item;
+  final SpokenEpisode? episode;
+  final String fromTitle;
+
+  String get title => episode?.title ?? item.title;
+}
+
+/// A remote device wrote newer progress for what this device is playing.
+/// Data only — the banner UI lives outside this class.
+class RemoteNudge {
+  RemoteNudge({
+    required this.progressId,
+    required this.remoteSeconds,
+    required this.title,
+  });
+  final String progressId;
+  double remoteSeconds;
+  String title;
+}
+
+/// The pure "what plays after this?" rule, split out of the state so it is
+/// unit-testable without an API, a player or a file system:
+///
+///  * Podcast → the next OLDER unfinished episode (publishedAt desc, which
+///    is the same order the episode list and "Episode X of Y" numbering
+///    use — "next" means "the one you would naturally listen to next").
+///  * Book → the next unfinished series mate in title order (series books
+///    are titled Book 1..N, so alphabetical is the reading order). A
+///    standalone book has no next.
+(SpokenItem, SpokenEpisode?)? pickUpNext({
+  required SpokenItem item,
+  SpokenEpisode? episode,
+  required List<SpokenItem> bookShelf,
+  required bool Function(SpokenEpisode episode) episodeDone,
+  required bool Function(SpokenItem item) bookDone,
+}) {
+  if (item.isBook) {
+    if (item.seriesNames.isEmpty) return null;
+    final mates = bookShelf
+        .where((b) =>
+            b.id != item.id &&
+            b.isBook &&
+            !bookDone(b) &&
+            b.seriesNames.any(item.seriesNames.contains))
+        .toList()
+          ..sort((a, b) =>
+              a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    if (mates.isEmpty) return null;
+    final anchor = item.title.toLowerCase();
+    for (final mate in mates) {
+      if (mate.title.toLowerCase().compareTo(anchor) > 0) return (mate, null);
+    }
+    return null;
+  }
+  final episodes = [...item.episodes]
+    ..sort((a, b) => (b.publishedAt ?? DateTime(0))
+        .compareTo(a.publishedAt ?? DateTime(0)));
+  if (episode == null) {
+    for (final e in episodes) {
+      if (!episodeDone(e)) return (item, e);
+    }
+    return null;
+  }
+  final idx = episodes.indexWhere((e) => e.id == episode.id);
+  for (var i = idx + 1; i < episodes.length; i++) {
+    if (!episodeDone(episodes[i])) return (item, episodes[i]);
+  }
+  return null;
 }
