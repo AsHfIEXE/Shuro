@@ -886,34 +886,42 @@ class _Transport extends StatelessWidget {
                 style:
                     absText(11, color: kVioletLight, w: FontWeight.w700, ls: 1.4)),
             const Spacer(),
-            OutputChip(height: 32),
-            const SizedBox(width: 10),
-            _GlassCircle(
-                icon: spoken.syncNudge != null
-                    ? Icons.sync_problem_rounded
-                    : (!spoken.liveSyncEnabled
-                        ? Icons.cloud_off_outlined
-                        : Icons.cloud_done_outlined),
-                tooltip: spoken.syncNudge != null
-                    ? 'Another device is ahead — jump?'
-                    : 'Cross-device sync',
-                onTap: () {
-                  if (spoken.syncNudge != null) {
-                    unawaited(spoken.jumpToSyncNudge());
-                  } else {
-                    unawaited(spoken.checkRemoteProgressNow());
-                  }
-                }),
-            const SizedBox(width: 10),
-            _GlassCircle(
-                icon: Icons.speaker_rounded,
-                tooltip: 'Audio information',
-                onTap: () => showAudioInfoSheet(context, w.song)),
-            const SizedBox(width: 10),
-            _GlassCircle(
-                icon: Icons.more_horiz_rounded,
-                tooltip: 'More options',
-                onTap: state._showMoreSheet),
+            // Right cluster per the board: sync, this computer, audio info,
+            // overflow last. FittedBox scales the cluster down instead of
+            // throwing overflow stripes on narrow panes.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                _GlassCircle(
+                    icon: spoken.syncNudge != null
+                        ? Icons.sync_problem_rounded
+                        : (!spoken.liveSyncEnabled
+                            ? Icons.cloud_off_outlined
+                            : Icons.cloud_done_outlined),
+                    tooltip: spoken.syncNudge != null
+                        ? 'Another device is ahead — jump?'
+                        : 'Cross-device sync',
+                    onTap: () {
+                      if (spoken.syncNudge != null) {
+                        unawaited(spoken.jumpToSyncNudge());
+                      } else {
+                        unawaited(spoken.checkRemoteProgressNow());
+                      }
+                    }),
+                const SizedBox(width: 8),
+                OutputChip(height: 32),
+                const SizedBox(width: 8),
+                _GlassCircle(
+                    icon: Icons.speaker_rounded,
+                    tooltip: 'Audio information',
+                    onTap: () => showAudioInfoSheet(context, w.song)),
+                const SizedBox(width: 8),
+                _GlassCircle(
+                    icon: Icons.more_horiz_rounded,
+                    tooltip: 'More options',
+                    onTap: state._showMoreSheet),
+              ]),
+            ),
           ]),
         ),
         SizedBox(height: wide ? 24 : 12),
@@ -943,8 +951,8 @@ class _Transport extends StatelessWidget {
             ),
           ),
           Positioned(
-            right: 10,
-            bottom: 10,
+            right: 8,
+            bottom: 8,
             child: _DownloadBadge(
                 done: dlDone,
                 progress: dlProgress,
@@ -1388,13 +1396,13 @@ class _DownloadBadge extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Container(
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           alignment: Alignment.center,
           child: downloading
               ? SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(
                       value: progress == 0 ? null : progress,
                       strokeWidth: 2,
@@ -1403,7 +1411,7 @@ class _DownloadBadge extends StatelessWidget {
               : Icon(done
                       ? Icons.check_circle_rounded
                       : Icons.download_rounded,
-                  size: 20,
+                  size: 18,
                   color: done ? const Color(0xFF34D399) : Colors.white),
         ),
       ),
