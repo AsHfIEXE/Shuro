@@ -88,10 +88,136 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
     _seekTo(t < Duration.zero ? Duration.zero : (t > _total ? _total : t));
   }
 
+  /// 1-based position of the current episode in the newest-first list.
+  int get _episodeNumber {
+    final e = widget.episode;
+    if (e == null) return 0;
+    final eps = [...widget.item.episodes]
+      ..sort((a, b) =>
+          (b.publishedAt ?? DateTime(0)).compareTo(a.publishedAt ?? DateTime(0)));
+    final i = eps.indexWhere((x) => x.id == e.id);
+    return i < 0 ? 0 : i + 1;
+  }
+
+  /// Speed picker as a sheet with a check — no blind cycling.
+  void _speedSheet(BuildContext context) {
+    final p = context.read<PlayerController>();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kRaisedColor,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final speed in _speeds)
+            ListTile(
+              dense: true,
+              title: Text(
+                  '${speed == speed.roundToDouble() ? speed.toStringAsFixed(0) : speed.toStringAsFixed(2)}×',
+                  style: absText(14)),
+              trailing: p.playbackSpeed == speed
+                  ? const Icon(Icons.check, color: kBrandColor)
+                  : null,
+              onTap: () {
+                p.playbackSpeed = speed;
+                p.applyPlaybackTweaksNow();
+                context.read<SpokenLibraryState>().saveSpeedFor(
+                    widget.episode == null
+                        ? widget.item.id
+                        : '${widget.item.id}/${widget.episode!.id}',
+                    speed);
+                Navigator.pop(sheetContext);
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
+  /// Sleep sheet: presets, end-of-chapter for books, turn-off when armed.
+  void _sleepSheet(BuildContext context) {
+    final p = context.read<PlayerController>();
+    final s = context.read<SpokenLibraryState>();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kRaisedColor,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_book && widget.item.chapters.isNotEmpty)
+            ListTile(
+              leading: const Icon(Icons.auto_stories_rounded, color: kNavText),
+              title: Text('End of chapter', style: absText(14)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                final pos = p.position;
+                final itemPos =
+                    (s.trackOffsetFor(widget.song.id) + pos.inSeconds).round();
+                final chIdx = widget.item.chapters
+                    .lastIndexWhere((c) => c.start <= itemPos);
+                final remaining = chIdx < 0
+                    ? 60
+                    : (widget.item.chapters[chIdx].end.round() - itemPos)
+                        .clamp(1, 360000);
+                p.startSleepTimer(Duration(seconds: remaining));
+              },
+            ),
+          for (final minutes in const [10, 20, 30, 45, 60])
+            ListTile(
+              leading: const Icon(Icons.bedtime_outlined, color: kNavText),
+              title: Text('$minutes minutes', style: absText(14)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                p.startSleepTimer(Duration(minutes: minutes));
+              },
+            ),
+          if (p.sleepUntil != null)
+            ListTile(
+              leading: const Icon(Icons.stop_circle_rounded, color: kNavText),
+              title: Text('Turn off sleep timer', style: absText(14)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                p.cancelSleepTimer();
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
+  /// Destructive: mark played lives behind a confirm, never a stray tap.
+  void _confirmMarkPlayed(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: kRaisedColor,
+        title: Text('Mark as played?', style: absText(16, w: FontWeight.w700)),
+        content: Text('Progress goes to 100% and it leaves Continue listening.',
+            style: absText(13, color: kMuted2)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: kBrandColor),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              final s = context.read<SpokenLibraryState>();
+              if (_book) {
+                s.markPlayed(widget.item);
+              } else {
+                s.markPlayed(widget.item, episode: widget.episode);
+              }
+            },
+            child: const Text('Mark played'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// The ⋯ menu: details, audio info, mark-played. Everything else already
   /// has a dedicated control on this screen.
   void _showMoreSheet() {
-    final s = context.read<SpokenLibraryState>();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: kRaisedColor,
@@ -133,11 +259,7 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
                 style: absText(14)),
             onTap: () {
               Navigator.pop(sheetContext);
-              if (_book) {
-                s.markPlayed(widget.item);
-              } else {
-                s.markPlayed(widget.item, episode: widget.episode);
-              }
+              _confirmMarkPlayed(context);
             },
           ),
         ]),
@@ -330,25 +452,113 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
       return [_Notes(_cleanNotes(notes))];
     }
     final s = context.watch<SpokenLibraryState>();
+    final coverUrl = context.read<SpokenLibraryState>().coverUrlFor(item);
     final eps = [...item.episodes]..sort((a, b) =>
         (b.publishedAt ?? DateTime(0)).compareTo(a.publishedAt ?? DateTime(0)));
-    String date(DateTime? d) => d == null ? '' : '${d.day}/${d.month}/${d.year}';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    String date(DateTime? d) =>
+        d == null ? '' : '${d.day} ${months[d.month - 1]} ${d.year}';
     return [
       for (final e in eps)
         Builder(builder: (_) {
           final prog = s.liveProgressSecondsFor(item, episode: e) ?? e.progressSeconds;
           final done = e.duration.inSeconds > 0 && prog >= e.duration.inSeconds - 30;
           final isCur = e.id == widget.episode!.id;
-          return _ListRow(
-            lead: '',
-            title: e.title,
-            subtitle: '${date(e.publishedAt)} · ${absClock(e.duration)}',
-            trail: done ? 'Played' : (prog > 0 ? '${absClock(e.duration - Duration(seconds: prog.round()))} left' : ''),
-            current: isCur,
-            dim: done && !isCur,
-            isNew: _isNew(e),
-            onTap: isCur ? null : () => AbsActions.play(context, item, episode: e),
-            onLongPress: () => AbsActions.play(context, item, episode: e, queue: true),
+          final frac = e.duration.inSeconds == 0
+              ? 0.0
+              : (prog / e.duration.inSeconds).clamp(0.0, 1.0).toDouble();
+          return Opacity(
+            opacity: done && !isCur ? 0.55 : 1,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: isCur ? null : () => AbsActions.play(context, item, episode: e),
+              onLongPress: () =>
+                  AbsActions.play(context, item, episode: e, queue: true),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(6, 8, 8, 8),
+                decoration: BoxDecoration(
+                  color: isCur
+                      ? kBrandColor.withValues(alpha: 0.16)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                      left: BorderSide(
+                          color: isCur ? kBrandColor : Colors.transparent,
+                          width: 3)),
+                ),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: coverUrl != null
+                              ? Image.network(coverUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      Container(color: kRaisedColor))
+                              : Container(color: kRaisedColor),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Row(children: [
+                            Flexible(
+                              child: Text(e.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: absText(14,
+                                      w: FontWeight.w600,
+                                      color:
+                                          isCur ? kVioletPale : kTextColor)),
+                            ),
+                            if (_isNew(e)) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                height: 18,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                    color:
+                                        kGreen.withValues(alpha: 0.16),
+                                    borderRadius:
+                                        BorderRadius.circular(999)),
+                                child: Text('NEW',
+                                    style: absText(10,
+                                        color: kGreenLight,
+                                        w: FontWeight.w700)),
+                              ),
+                            ],
+                          ]),
+                          const SizedBox(height: 2),
+                          Text(
+                              '${date(e.publishedAt)} · ${absClock(e.duration)}',
+                              style: absText(12,
+                                  color: kMuted2, tabular: true)),
+                          if (prog > 0 && !done) ...[
+                            const SizedBox(height: 6),
+                            AbsProgressBar(frac, height: 3),
+                          ],
+                        ]),
+                      ),
+                      const SizedBox(width: 12),
+                      if (isCur)
+                        Text(
+                            '${absClock(e.duration - Duration(seconds: prog.round()))} left',
+                            style: absText(12,
+                                color: kVioletPale, tabular: true))
+                      else
+                        Icon(Icons.play_circle_outline_rounded,
+                            size: 22, color: kMuted2),
+                    ]),
+              ),
+            ),
           );
         }),
     ];
@@ -486,6 +696,30 @@ class _Transport extends StatelessWidget {
   final Duration pos;
   final bool wide;
 
+  Widget _iconButton(
+      {required IconData icon,
+      required String tooltip,
+      required VoidCallback onTap}) =>
+      Semantics(
+        button: true,
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: Icon(icon, size: 20, color: kMuted2),
+              ),
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final w = state.widget;
@@ -497,12 +731,18 @@ class _Transport extends StatelessWidget {
     final shownPos = Duration(milliseconds: (shown * total.inMilliseconds).round());
 
     final book = state._book;
+    final coverUrl =
+        context.read<SpokenLibraryState>().coverUrlFor(w.item);
     final chIdx = w.item.chapters.lastIndexWhere((c) => c.start <= pos.inSeconds);
     final title = book ? w.item.title : w.episode!.title;
     final sub = book ? w.item.creator : w.item.title;
+    // Fixed numbering: "Episode 9 of 13" — the old "Episode · 13/9" read
+    // like an inverted fraction.
     final meta = book
-        ? (chIdx >= 0 ? 'Chapter ${chIdx + 1} of ${w.item.chapters.length} · ${w.item.chapters[chIdx].title}' : '')
-        : (w.episode!.publishedAt == null ? '' : 'Episode · ${w.episode!.publishedAt!.day}/${w.episode!.publishedAt!.month}');
+        ? (chIdx >= 0
+            ? 'Chapter ${chIdx + 1} of ${w.item.chapters.length} · ${w.item.chapters[chIdx].title}'
+            : '')
+        : 'Episode ${state._episodeNumber} of ${w.item.episodes.length}';
 
     final ticks = book && total.inSeconds > 0
         ? [for (final c in w.item.chapters) c.start / total.inSeconds]
@@ -520,53 +760,54 @@ class _Transport extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
-          height: 40,
+          height: 36,
           child: Row(children: [
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: w.onClose ?? () => Navigator.maybePop(context),
-                  child: const Icon(Icons.arrow_back_rounded,
-                      size: 24, color: kTextColor),
-                ),
-              ),
-            ),
-            Expanded(
-                child: Center(
-                    child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(book ? 'AUDIOBOOK' : 'PODCAST',
-                            style: absText(12,
-                                color: kVioletLight,
-                                w: FontWeight.w700,
-                                ls: 1.4))))),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              OutputChip(width: wide ? 148 : 128, height: wide ? 40 : 36),
-              const SizedBox(width: 8),
-              _GlassCircle(
-                  icon: Icons.speaker_rounded,
-                  tooltip: 'Audio information',
-                  onTap: () => showAudioInfoSheet(context, w.song)),
-              const SizedBox(width: 8),
-              _GlassCircle(
-                  icon: Icons.more_horiz_rounded,
-                  tooltip: 'More options',
-                  onTap: state._showMoreSheet),
-            ]),
+            _iconButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Back',
+                onTap: w.onClose ?? () => Navigator.maybePop(context)),
+            const SizedBox(width: 12),
+            Text(book ? 'AUDIOBOOK' : 'PODCAST',
+                style:
+                    absText(11, color: kVioletLight, w: FontWeight.w700, ls: 1.4)),
+            const Spacer(),
+            OutputChip(height: 32),
+            const SizedBox(width: 10),
+            _GlassCircle(
+                icon: Icons.speaker_rounded,
+                tooltip: 'Audio information',
+                onTap: () => showAudioInfoSheet(context, w.song)),
+            const SizedBox(width: 10),
+            _GlassCircle(
+                icon: Icons.more_horiz_rounded,
+                tooltip: 'More options',
+                onTap: state._showMoreSheet),
           ]),
         ),
         SizedBox(height: wide ? 24 : 12),
-        // Books are 2:3, shows square — honour the natural shape instead of
-        // cropping a portrait cover into a square tile.
-        AbsCover(w.item,
-            width: book ? size * 2 / 3 : size,
-            height: size,
-            radius: 16),
+        // Clean cover: a single rounded square with a shadow — no extra mat
+        // around the artwork's own frame.
+        Container(
+          width: book ? size * 2 / 3 : size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 40,
+                  offset: const Offset(0, 16)),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: coverUrl != null
+                ? Image.network(coverUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(color: kRaisedColor))
+                : Container(color: kRaisedColor),
+          ),
+        ),
         SizedBox(height: wide ? 28 : 18),
         Text(title,
             textAlign: TextAlign.center,
@@ -602,13 +843,16 @@ class _Transport extends StatelessWidget {
               seconds: 15, forward: false, onSkip: () => state._skip(pos, -15)),
           const SizedBox(width: 16),
           SizedBox(
-            width: 68, height: 68,
-            child: FilledButton(
-              onPressed: p.togglePlayPause,
-              style: FilledButton.styleFrom(
-                  backgroundColor: kBrandColor, shape: const CircleBorder(), padding: EdgeInsets.zero),
-              child: Icon(p.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 38, color: Colors.white),
+            width: 64, height: 64,
+            child: Material(
+              color: kBrandColor,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: p.togglePlayPause,
+                child: Icon(p.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    size: 32, color: Colors.white),
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -620,21 +864,20 @@ class _Transport extends StatelessWidget {
           _Pill(
             label: speedLabel,
             strong: true,
-            onTap: () {
-              final i = _SpokenNowPlayingState._speeds.indexOf(speed);
-              p.playbackSpeed = _SpokenNowPlayingState._speeds[(i + 1) % _SpokenNowPlayingState._speeds.length];
-              p.applyPlaybackTweaksNow();
-              context.read<SpokenLibraryState>().saveSpeedFor(
-                  w.episode == null ? w.item.id : '${w.item.id}/${w.episode!.id}', p.playbackSpeed);
-            },
+            onTap: () => state._speedSheet(context),
           ),
-          _SleepPill(p: p),
+          _Pill(
+            label: p.sleepUntil == null
+                ? 'Sleep'
+                : 'Sleep · ${(p.sleepUntil!.difference(DateTime.now())).inMinutes.abs() + 1} min',
+            icon: Icons.bedtime_outlined,
+            onTap: () => state._sleepSheet(context),
+          ),
           if (book)
             _Pill(
               label: 'Bookmark',
               icon: Icons.bookmark_border_rounded,
-              onTap: () async {
-                final s = context.read<SpokenLibraryState>();
+              onTap: () async {                final s = context.read<SpokenLibraryState>();
                 final messenger = ScaffoldMessenger.of(context);
                 try {
                   await s.addBookmark(w.item.id,
@@ -658,14 +901,6 @@ class _Transport extends StatelessWidget {
                         behavior: SnackBarBehavior.floating));
                 }
               },
-            )
-          else
-            _Pill(
-              label: 'Mark played',
-              icon: Icons.done_all_rounded,
-              onTap: () => context
-                  .read<SpokenLibraryState>()
-                  .markPlayed(w.item, episode: w.episode),
             ),
         ]),
           ]),
@@ -735,33 +970,6 @@ class _Pill extends StatelessWidget {
       );
 }
 
-class _SleepPill extends StatelessWidget {
-  const _SleepPill({required this.p});
-  final PlayerController p;
-  @override
-  Widget build(BuildContext context) {
-    final until = p.sleepUntil;
-    final left = until == null ? null : until.difference(DateTime.now());
-    return PopupMenuButton<int>(
-      tooltip: 'Sleep timer',
-      color: kRaisedColor,
-      onSelected: (m) => m == 0 ? p.cancelSleepTimer() : p.startSleepTimer(Duration(minutes: m)),
-      itemBuilder: (_) => [
-        for (final m in const [15, 30, 45, 60])
-          PopupMenuItem(value: m, child: Text('$m minutes', style: absText(14))),
-        if (until != null) PopupMenuItem(value: 0, child: Text('Turn off', style: absText(14))),
-      ],
-      child: IgnorePointer(
-        child: _Pill(
-          label: left == null || left.isNegative ? 'Sleep' : '${left.inMinutes + 1} min',
-          icon: Icons.bedtime_outlined,
-          onTap: () {},
-        ),
-      ),
-    );
-  }
-}
-
 class _Segmented extends StatelessWidget {
   const _Segmented({required this.labels, required this.value, required this.onChanged});
   final List<String> labels;
@@ -801,14 +1009,12 @@ class _ListRow extends StatelessWidget {
     this.subtitle,
     this.current = false,
     this.dim = false,
-    this.isNew = false,
     this.onTap,
-    this.onLongPress,
   });
   final String lead, title, trail;
   final String? subtitle;
-  final bool current, dim, isNew;
-  final VoidCallback? onTap, onLongPress;
+  final bool current, dim;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Opacity(
@@ -816,7 +1022,6 @@ class _ListRow extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
-          onLongPress: onLongPress,
           child: Container(
             constraints: BoxConstraints(minHeight: subtitle == null ? 48 : 60),
             padding: const EdgeInsets.fromLTRB(0, 6, 10, 6),
@@ -849,18 +1054,6 @@ class _ListRow extends StatelessWidget {
                           style: absText(14,
                               w: FontWeight.w600, color: current ? kVioletPale : kTextColor)),
                     ),
-                    if (isNew) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        height: 20,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                            color: kGreen.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(999)),
-                        child: Text('NEW', style: absText(11, color: kGreenLight, w: FontWeight.w700)),
-                      ),
-                    ],
                   ]),
                   if (subtitle != null)
                     Padding(
