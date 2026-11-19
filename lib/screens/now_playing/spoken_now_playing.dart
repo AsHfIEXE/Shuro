@@ -38,7 +38,7 @@ class SpokenNowPlaying extends StatefulWidget {
 }
 
 class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
-  static const _speeds = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
+  static const _speeds = [0.75, 0.8, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5];
   int _tab = 0;
   double? _drag; // fraction while the scrubber is held
 
@@ -60,15 +60,24 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
         context.read<SpokenLibraryState>().expandShow(widget.item);
       });
     }
+    refreshBookmarks();
   }
 
   bool get _book => widget.episode == null;
   // Show notes / description tabs dropped: server notes rendered broken
   // (raw HTML, empty bodies) and the chapter list already tells the story.
   List<String> get _tabs => _book
-      ? const ['Chapters', 'Series', 'Notes']
-      : const ['Episodes', 'Notes'];
+      ? const ['Chapters', 'Series', 'Bookmarks', 'Notes']
+      : const ['Episodes', 'Bookmarks', 'Notes'];
   Duration get _total => widget.episode?.duration ?? widget.item.duration;
+
+  Future<List<Map<String, dynamic>>>? _bookmarksFuture;
+
+  /// Reload the bookmark list (after an add or a delete).
+  void refreshBookmarks() {
+    _bookmarksFuture =
+        context.read<SpokenLibraryState>().bookmarksFor(widget.item.id);
+  }
 
   /// Seeks inside the current file when the target is in it; otherwise
   /// reopens the session at that point (multi-file books).
@@ -422,6 +431,19 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
         case 0:
           final cur = item.chapters.lastIndexWhere((c) => c.start <= pos.inSeconds);
           return [
+            if (_chapterIsIntro(cur))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _Pill(
+                    label: 'Skip intro',
+                    icon: Icons.fast_forward_rounded,
+                    strong: true,
+                    onTap: () => _skipIntro(cur),
+                  ),
+                ),
+              ),
             if (item.chapters.isEmpty)
               _Empty('This book has no chapters.')
             else
@@ -440,12 +462,15 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
         case 1:
           return _seriesList(context);
         case 2:
+          return [_bookmarksTab(context)];
+        case 3:
           return [_Notes(_cleanNotes(item.description))];
         default:
           return _moreBooks(context, shelf: false);
       }
     }
-    if (_tab == 1) {
+    if (_tab == 1) return [_bookmarksTab(context)];
+    if (_tab == 2) {
       final notes = widget.episode!.description.isNotEmpty
           ? widget.episode!.description
           : item.description;
@@ -562,6 +587,79 @@ class _SpokenNowPlayingState extends State<SpokenNowPlaying> {
           );
         }),
     ];
+  }
+
+  /// Bookmarks tab: time chip + note, tap to jump, trash icon to remove.
+  Widget _bookmarksTab(BuildContext context) {
+    final s = context.watch<SpokenLibraryState>();
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _bookmarksFuture,
+      builder: (context, snap) {
+        final marks = (snap.data ?? const <Map<String, dynamic>>[]).toList()
+          ..sort((x, y) => ((x['time'] as num?) ?? 0)
+              .compareTo((y['time'] as num?) ?? 0));
+        if (snap.connectionState != ConnectionState.done && marks.isEmpty) {
+          return const Center(
+              child: CircularProgressIndicator(color: kBrandColor));
+        }
+        if (marks.isEmpty) {
+          return const _Empty(
+              'No bookmarks yet. Use the Bookmark chip while listening.');
+        }
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final m in marks)
+                ListTile(
+                  dense: true,
+                  leading: Container(
+                    height: 24,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        color: kBrandColor.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                        absClock(Duration(
+                            seconds: ((m['time'] as num?) ?? 0).round())),
+                        style: absText(12, color: kVioletPale, tabular: true)),
+                  ),
+                  title: Text('${m['title'] ?? 'Bookmark'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: absText(14, w: FontWeight.w600)),
+                  trailing: IconButton(
+                    tooltip: 'Delete bookmark',
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        size: 20, color: kMuted2),
+                    onPressed: () async {
+                      await s.removeBookmark(widget.item.id,
+                          (m['time'] as num?)?.toDouble() ?? 0);
+                      refreshBookmarks();
+                    },
+                  ),
+                  onTap: () => _seekTo(Duration(
+                      seconds: ((m['time'] as num?) ?? 0).round())),
+                ),
+            ]);
+      },
+    );
+  }
+
+  /// Skip-intro: an intro/opening/recap/credits chapter gets a one-tap jump
+  /// to the next chapter.
+  static final _introRe =
+      RegExp(r'intro|opening|recap|credits', caseSensitive: false);
+  bool _chapterIsIntro(int idx) =>
+      idx >= 0 &&
+      idx < widget.item.chapters.length - 1 &&
+      _introRe.hasMatch(widget.item.chapters[idx].title);
+
+  void _skipIntro(int currentIdx) {
+    if (currentIdx + 1 < widget.item.chapters.length) {
+      _seekTo(Duration(
+          seconds: widget.item.chapters[currentIdx + 1].start.round()));
+    }
   }
 
   /// Other books by the same author, series mates first.
@@ -873,35 +971,37 @@ class _Transport extends StatelessWidget {
             icon: Icons.bedtime_outlined,
             onTap: () => state._sleepSheet(context),
           ),
-          if (book)
-            _Pill(
-              label: 'Bookmark',
-              icon: Icons.bookmark_border_rounded,
-              onTap: () async {                final s = context.read<SpokenLibraryState>();
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await s.addBookmark(w.item.id,
-                      time: pos.inSeconds.toDouble(),
-                      title:
-                          chIdx >= 0 ? w.item.chapters[chIdx].title : absClock(pos));
-                  messenger
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(
-                        content: Text('Bookmarked ${absClock(pos)}',
-                            style: absText(13)),
-                        backgroundColor: kRaisedColor,
-                        behavior: SnackBarBehavior.floating));
-                } on AudiobookshelfApiException catch (e) {
-                  messenger
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(
-                        content: Text('Bookmark failed — ${e.message}',
-                            style: absText(13)),
-                        backgroundColor: kRaisedColor,
-                        behavior: SnackBarBehavior.floating));
-                }
-              },
-            ),
+          _Pill(
+            label: 'Bookmark',
+            icon: Icons.bookmark_border_rounded,
+            onTap: () async {
+              final s = context.read<SpokenLibraryState>();
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await s.addBookmark(w.item.id,
+                    time: pos.inSeconds.toDouble(),
+                    title: chIdx >= 0
+                        ? w.item.chapters[chIdx].title
+                        : absClock(pos));
+                state.refreshBookmarks();
+                messenger
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(SnackBar(
+                      content: Text('Bookmarked ${absClock(pos)}',
+                          style: absText(13)),
+                      backgroundColor: kRaisedColor,
+                      behavior: SnackBarBehavior.floating));
+              } on AudiobookshelfApiException catch (e) {
+                messenger
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(SnackBar(
+                      content: Text('Bookmark failed — ${e.message}',
+                          style: absText(13)),
+                      backgroundColor: kRaisedColor,
+                      behavior: SnackBarBehavior.floating));
+              }
+            },
+          ),
         ]),
           ]),
         ),
